@@ -187,3 +187,14 @@ http://localhost:18080/connect?chargerId=A1
 Browser camera access requires a secure context. `localhost` is accepted for local
 development; a deployed application must use HTTPS. The scanner uses the native
 `BarcodeDetector` API when available and falls back to manual verification otherwise.
+
+## Deploying the dashboard to Vercel
+
+The root `vercel.json` explicitly builds the static files from `frontend/` into
+`dist/`. This prevents Vercel from treating the Python OCPP simulator as the web
+application. Import the repository in Vercel with the repository root selected and
+redeploy; no framework preset or custom build settings are required.
+
+Vercel hosts only the browser dashboard. The C++ API, PostgreSQL, Keycloak and OCPP
+simulator must run on a container-capable host. Until an API URL is configured, the
+deployed dashboard intentionally operates in demo mode.
