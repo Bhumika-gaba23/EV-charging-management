@@ -32,3 +32,5 @@ Thumbs.db
 
 # Unused Dev-C++ generated entrypoint (the project uses src/main.cpp)
 /main.cpp
+
+.vercel
