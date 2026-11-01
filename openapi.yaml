@@ -1,0 +1,18 @@
+openapi: 3.1.0
+info: {title: ChargeFlow API, version: 1.0.0, description: Portfolio EV charging platform API}
+servers: [{url: http://localhost:18080}]
+components:
+  securitySchemes: {oidc: {type: openIdConnect, openIdConnectUrl: http://localhost:8080/realms/chargeflow/.well-known/openid-configuration}}
+  schemas:
+    Error: {type: object, required: [requestId, code, message], properties: {requestId: {type: string}, code: {type: string}, message: {type: string}, fieldErrors: {type: object}}}
+    Session: {type: object, properties: {id: {type: string}, status: {type: string}, chargerId: {type: string}, currentSoc: {type: number}, targetSoc: {type: number}, powerKW: {type: number}, energyKWh: {type: number}, cost: {type: number}, solarPercent: {type: number}}}
+paths:
+  /api/health: {get: {summary: Liveness check, responses: {'200': {description: Healthy}}}}
+  /api/v1/stations: {get: {summary: List stations, responses: {'200': {description: Station collection}}}}
+  /api/v1/stations/{stationId}/chargers: {get: {summary: List station chargers, parameters: [{in: path, name: stationId, required: true, schema: {type: string}}], responses: {'200': {description: Charger collection}}}}
+  /api/v1/sessions: {post: {summary: Start charging, security: [{oidc: []}], parameters: [{in: header, name: Idempotency-Key, required: true, schema: {type: string}}], responses: {'201': {description: Session created}, '409': {description: Duplicate or incompatible request}}}}
+  /api/v1/sessions/{sessionId}: {get: {summary: Get session, security: [{oidc: []}], parameters: [{in: path, name: sessionId, required: true, schema: {type: string}}], responses: {'200': {description: Session}}}}
+  /api/v1/sessions/{sessionId}/stop: {post: {summary: Stop session, security: [{oidc: []}], parameters: [{in: path, name: sessionId, required: true, schema: {type: string}}, {in: header, name: Idempotency-Key, required: true, schema: {type: string}}], responses: {'200': {description: Session stopped}}}}
+  /api/v1/sessions/history: {get: {summary: Session history, security: [{oidc: []}], responses: {'200': {description: Session collection}}}}
+  /api/v1/tariffs/current: {get: {summary: Current tariff, responses: {'200': {description: Tariff}}}}
+  /api/v1/invoices/{invoiceId}: {get: {summary: Invoice, security: [{oidc: []}], parameters: [{in: path, name: invoiceId, required: true, schema: {type: string}}], responses: {'200': {description: Invoice}}}}

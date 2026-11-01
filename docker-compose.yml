@@ -1,0 +1,62 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: chargeflow
+      POSTGRES_USER: chargeflow
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+    secrets: [db_password]
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/migrations:/docker-entrypoint-initdb.d/migrations:ro
+      - ./database/seed:/docker-entrypoint-initdb.d/seed:ro
+      - ./database/init.sql:/docker-entrypoint-initdb.d/00-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U chargeflow -d chargeflow"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    command: start-dev --import-realm
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD_FILE: /run/secrets/keycloak_admin_password
+    secrets: [keycloak_admin_password]
+    volumes: ["./keycloak/chargeflow-realm.json:/opt/keycloak/data/import/chargeflow-realm.json:ro"]
+    ports: ["8080:8080"]
+  api:
+    build: {context: ., dockerfile: docker/api.Dockerfile}
+    environment:
+      CHARGEFLOW_DATABASE_URL: postgresql://chargeflow@postgres:5432/chargeflow
+      CHARGEFLOW_OIDC_ISSUER: http://keycloak:8080/realms/chargeflow
+      CHARGEFLOW_LOG_FORMAT: json
+      CHARGEFLOW_FRONTEND_DIR: /app/frontend
+    secrets: [db_password]
+    depends_on:
+      postgres: {condition: service_healthy}
+      keycloak: {condition: service_started}
+    ports: ["18080:18080"]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:18080/api/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+  ocpp-simulator:
+    build: {context: ocpp-simulator}
+    environment:
+      OCPP_CSMS_URL: ws://api:18080/ocpp
+      OCPP_CHARGER_COUNT: 4
+    depends_on: {api: {condition: service_healthy}}
+  web:
+    image: nginx:1.27-alpine
+    volumes:
+      - ./frontend:/usr/share/nginx/html:ro
+      - ./docker/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on: [api]
+    ports: ["8088:80"]
+
+secrets:
+  db_password: {file: ./secrets/db_password.txt}
+  keycloak_admin_password: {file: ./secrets/keycloak_admin_password.txt}
+volumes: {postgres_data: {}}

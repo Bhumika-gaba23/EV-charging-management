@@ -1,0 +1,33 @@
+# Build products
+build*/
+*.exe
+*.dll
+*.o
+*.obj
+
+# Local secrets
+secrets/*.txt
+!secrets/*.example
+.env
+.env.*
+
+# Flutter and Python caches
+.dart_tool/
+.flutter-plugins*
+mobile/build/
+__pycache__/
+*.pyc
+
+# Generated artifacts and temporary files
+tmp/
+output/
+*.log
+
+# Editors and operating system files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Unused Dev-C++ generated entrypoint (the project uses src/main.cpp)
+/main.cpp
