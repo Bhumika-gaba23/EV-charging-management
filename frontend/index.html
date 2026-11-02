@@ -12,6 +12,8 @@
   <link rel="stylesheet" href="styles.css">
   <link rel="stylesheet" href="theme.css">
   <link rel="stylesheet" href="portal.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="stations.css">
 </head>
 <body>
   <div class="noise"></div>
@@ -19,21 +21,26 @@
     <div class="landing-orbit orbit-one"></div><div class="landing-orbit orbit-two"></div>
     <div class="landing-content">
       <div class="landing-brand"><span>V</span><strong>VOLTWAY</strong><small>CHARGE INTAKE</small></div>
-      <p class="landing-step">STEP 01 / VEHICLE PROFILE</p>
-      <h1 id="vehicleQuestion">What are you<br><em>charging today?</em></h1>
-      <p class="landing-intro">Choose your electric vehicle type. We will configure capacity, connector, and charging recommendations for it.</p>
+      <p class="landing-step">WELCOME / CHOOSE YOUR EXPERIENCE</p>
+      <h1 id="vehicleQuestion">How will you use<br><em>VoltWay today?</em></h1>
+      <p class="landing-intro">Drivers can find and start a charge. Station teams can open the operations console.</p>
+      <div class="mode-entry" role="group" aria-label="Choose how to use VoltWay">
+        <button class="mode-entry-card active" id="driverEntry" type="button"><span>DRIVER</span><strong>Charge my vehicle</strong><small>Find a compatible charger, see the price and start charging.</small></button>
+        <button class="mode-entry-card" id="operatorEntry" type="button"><span>OPERATOR</span><strong>Manage this station</strong><small>Monitor bays, queues, energy and safety controls.</small></button>
+      </div>
+      <p class="vehicle-prompt">Select your vehicle to continue</p>
       <div class="vehicle-choices">
         <button class="vehicle-choice" type="button" data-vehicle="car">
-          <span class="choice-index">01</span><div class="vehicle-visual car-visual" role="img" aria-label="Electric car rotating through front, left, and right views"><span class="vehicle-slide front-view active"></span><span class="vehicle-slide left-view"></span><span class="vehicle-slide right-view"></span><span class="view-label">FRONT / 01</span><span class="slide-dots" aria-hidden="true"><i class="active"></i><i></i><i></i></span></div>
-          <div><strong>EV Car</strong><small>20-150 kWh / AC + DC</small></div><span class="choice-arrow">ENTER</span>
+          <span class="choice-index">01</span><div class="vehicle-visual car-visual" role="img" aria-label="Electric car facing right"><span class="vehicle-slide front-view"></span><span class="vehicle-slide left-view"></span><span class="vehicle-slide right-view active"></span><span class="view-label">RIGHT / 03</span><span class="slide-dots" aria-hidden="true"><i></i><i></i><i class="active"></i></span></div>
+          <div><strong>EV Car</strong><small>20-150 kWh / AC + DC</small></div><span class="choice-arrow">SELECT</span>
         </button>
         <button class="vehicle-choice" type="button" data-vehicle="scooter">
-          <span class="choice-index">02</span><div class="vehicle-visual scooter-visual" role="img" aria-label="Electric scooter rotating through front, left, and right views"><span class="vehicle-slide front-view active"></span><span class="vehicle-slide left-view"></span><span class="vehicle-slide right-view"></span><span class="view-label">FRONT / 01</span><span class="slide-dots" aria-hidden="true"><i class="active"></i><i></i><i></i></span></div>
-          <div><strong>EV Scooter</strong><small>1-8 kWh / Standard AC</small></div><span class="choice-arrow">ENTER</span>
+          <span class="choice-index">02</span><div class="vehicle-visual scooter-visual" role="img" aria-label="Electric scooter facing right"><span class="vehicle-slide front-view"></span><span class="vehicle-slide left-view"></span><span class="vehicle-slide right-view active"></span><span class="view-label">RIGHT / 03</span><span class="slide-dots" aria-hidden="true"><i></i><i></i><i class="active"></i></span></div>
+          <div><strong>EV Scooter</strong><small>1-8 kWh / Standard AC</small></div><span class="choice-arrow">SELECT</span>
         </button>
         <button class="vehicle-choice" type="button" data-vehicle="bike">
-          <span class="choice-index">03</span><div class="vehicle-visual bike-visual" role="img" aria-label="Electric motorcycle rotating through front, left, and right views"><span class="vehicle-slide front-view active"></span><span class="vehicle-slide left-view"></span><span class="vehicle-slide right-view"></span><span class="view-label">FRONT / 01</span><span class="slide-dots" aria-hidden="true"><i class="active"></i><i></i><i></i></span></div>
-          <div><strong>EV Bike</strong><small>2-15 kWh / Standard AC</small></div><span class="choice-arrow">ENTER</span>
+          <span class="choice-index">03</span><div class="vehicle-visual bike-visual" role="img" aria-label="Electric motorcycle facing right"><span class="vehicle-slide front-view"></span><span class="vehicle-slide left-view"></span><span class="vehicle-slide right-view active"></span><span class="view-label">RIGHT / 03</span><span class="slide-dots" aria-hidden="true"><i></i><i></i><i class="active"></i></span></div>
+          <div><strong>EV Bike</strong><small>2-15 kWh / Standard AC</small></div><span class="choice-arrow">SELECT</span>
         </button>
       </div>
       <p class="landing-footnote"><span></span> C++ charging engine ready</p>
@@ -42,15 +49,19 @@
   <aside class="sidebar">
     <a class="brand" href="#overview" aria-label="VoltWay home">
       <span class="brand-mark">V</span>
-      <span>VOLTWAY<small>CONTROL GRID</small></span>
+      <span>VOLTWAY<small id="brandModeLabel">DRIVER CHARGE</small></span>
     </a>
     <nav aria-label="Dashboard navigation">
-      <button class="nav-item active" data-target="overview"><span>01</span>Overview</button>
-      <button class="nav-item" data-target="schedule"><span>02</span>Schedule</button>
-      <button class="nav-item" data-target="queue"><span>03</span>Smart queue</button>
-      <button class="nav-item" data-target="energy"><span>04</span>Solar energy</button>
-      <button class="nav-item" data-target="emergency"><span>05</span>Emergency</button>
+      <button class="nav-item driver-only active" data-target="charge"><span>01</span>Find charger</button>
+      <button class="nav-item driver-only" data-target="session"><span>02</span>My session</button>
+      <button class="nav-item driver-only" data-target="history"><span>03</span>History & help</button>
+      <button class="nav-item operator-only active" data-target="overview"><span>01</span>Station overview</button>
+      <button class="nav-item operator-only" data-target="schedule"><span>02</span>Plan charge</button>
+      <button class="nav-item operator-only" data-target="queue"><span>03</span>Waiting queue</button>
+      <button class="nav-item operator-only" data-target="energy"><span>04</span>Energy usage</button>
+      <button class="nav-item operator-only" data-target="emergency"><span>05</span>Emergency</button>
     </nav>
+    <button id="switchMode" class="switch-mode" type="button">SWITCH USER MODE</button>
     <button id="themeToggle" class="theme-toggle" type="button" aria-label="Switch to light mode" aria-pressed="true">
       <span class="theme-icon">DARK</span><span class="theme-label">APPEARANCE</span><i aria-hidden="true"></i>
     </button>
@@ -88,7 +99,49 @@
       <button id="dismissBanner" aria-label="Dismiss emergency alert">DISMISS</button>
     </div>
 
-    <section id="overview" class="panel active-panel">
+    <section id="charge" class="panel driver-panel active-panel">
+      <section class="station-explorer" aria-labelledby="stationMapTitle">
+        <div class="explorer-heading"><div><p class="eyebrow">EXPLORE INDIA</p><h1 id="stationMapTitle">Your next <em>charge.</em></h1></div><button id="locateStations" class="primary-button" type="button">◎ NEAR ME</button></div>
+        <form id="stationSearchForm" class="station-search" role="search"><label for="stationSearch">Search stations, city or operator</label><div><input id="stationSearch" type="search" placeholder="Try Bengaluru, Delhi, Tata Power…" autocomplete="off"><button type="submit" class="secondary-button">SEARCH</button><button id="resetStationMap" type="button" class="secondary-button">ALL INDIA</button></div></form>
+        <div class="station-filters"><label>State / UT<select id="stationState"><option value="all">All states</option></select></label><label>Connector<select id="stationConnector"><option value="all">All connectors</option><option value="ccs">CCS</option><option value="type2">Type 2</option><option value="chademo">CHAdeMO</option><option value="bharat">Bharat / other</option></select></label><label>Access<select id="stationAccess"><option value="all">All listed</option><option value="public">Public access</option></select></label><span id="stationCount" role="status">Loading stations…</span></div>
+        <p id="locationStatus" class="location-status" role="status">Use Near me to sort stations by distance. Location stays in this browser.</p>
+        <div class="station-map-layout"><div class="station-map-card"><div class="mini-map-header"><span><i></i> INDIA NETWORK</span><button id="expandStationMap" type="button" aria-expanded="false">EXPAND ↗</button></div><div id="indiaStationMap" aria-label="Map of charging stations across India"></div><div class="mini-map-footer"><label><input type="checkbox" id="stationsInView"> Search this map area</label><span>Tap a pin for details</span></div><div id="stationDetail" hidden></div></div></div>
+        <p class="station-data-note" id="stationDataNote">Public directory · Live bay availability and prices are not verified. Coverage may be incomplete.</p>
+      </section>
+      <details class="local-demo"><summary>Explore the demo charging bays</summary>
+      <div class="driver-hero">
+        <div><p class="eyebrow">GREENROUTE CENTRAL / 1.2 KM AWAY</p><h1>Find your <em>charger.</em></h1><button id="getDirections" class="secondary-button" type="button">DIRECTIONS · 4 MIN →</button></div>
+        <div class="journey-steps" aria-label="Charging steps"><span class="active">1 <b>Choose</b></span><span>2 <b>Connect</b></span><span>3 <b>Charge</b></span><span>4 <b>Pay</b></span></div>
+      </div>
+      <div class="driver-summary" aria-label="Station summary">
+        <div><small>AVAILABLE NOW</small><strong>2 bays</strong></div><div><small>FROM</small><strong>₹16/kWh</strong></div><div><small>FASTEST</small><strong>120 kW</strong></div><div><small>EST. WAIT</small><strong>No wait</strong></div>
+      </div>
+      <div class="charger-toolbar"><div><p class="eyebrow">COMPATIBLE CHARGERS</p><h2>Choose your charging bay</h2></div><label>Connector <select id="driverConnector"><option value="all">All compatible</option><option>CCS2</option><option>Type 2</option><option>CHAdeMO</option></select></label></div>
+      <div class="charger-grid" id="chargerGrid">
+        <article class="charger-card available" data-connector="CCS2"><div class="charger-card-top"><span class="bay-id">A1</span><span class="status-pill">AVAILABLE</span></div><div class="charger-icon" aria-hidden="true">↯</div><h3>Ultra-fast DC</h3><p>CCS2 · 120 kW</p><dl><div><dt>Price</dt><dd>₹18/kWh</dd></div><div><dt>Est. to 80%</dt><dd>26 min</dd></div><div><dt>Distance</dt><dd>40 m</dd></div></dl><button class="primary-button start-charge" data-bay="A1" data-power="120" data-price="18">START AT A1 <span>→</span></button></article>
+        <article class="charger-card charging" data-connector="CCS2"><div class="charger-card-top"><span class="bay-id">A2</span><span class="status-pill">CHARGING</span></div><div class="charger-icon" aria-hidden="true">↯</div><h3>Fast DC</h3><p>CCS2 · 60 kW</p><dl><div><dt>Price</dt><dd>₹18/kWh</dd></div><div><dt>Available in</dt><dd>18 min</dd></div><div><dt>Queue</dt><dd>1 vehicle</dd></div></dl><button class="secondary-button join-queue" data-bay="A2">JOIN QUEUE</button></article>
+        <article class="charger-card available" data-connector="Type 2"><div class="charger-card-top"><span class="bay-id">B1</span><span class="status-pill">AVAILABLE</span></div><div class="charger-icon" aria-hidden="true">⌁</div><h3>Standard AC</h3><p>Type 2 · 22 kW</p><dl><div><dt>Price</dt><dd>₹16/kWh</dd></div><div><dt>Est. to 80%</dt><dd>1 hr 42 min</dd></div><div><dt>Distance</dt><dd>65 m</dd></div></dl><button class="primary-button start-charge" data-bay="B1" data-power="22" data-price="16">START AT B1 <span>→</span></button></article>
+        <article class="charger-card faulted" data-connector="CHAdeMO"><div class="charger-card-top"><span class="bay-id">B2</span><span class="status-pill">FAULTED</span></div><div class="charger-icon" aria-hidden="true">!</div><h3>Fast DC</h3><p>CHAdeMO · 50 kW</p><dl><div><dt>Status</dt><dd>Service notified</dd></div><div><dt>Alternative</dt><dd>A1</dd></div><div><dt>Updated</dt><dd>2 min ago</dd></div></dl><button class="secondary-button report-fault" data-bay="B2">REPORT ISSUE</button></article>
+      </div>
+      </details>
+    </section>
+
+    <section id="session" class="panel driver-panel">
+      <div class="section-heading"><p class="eyebrow">LIVE CHARGING</p><h2>My charging session</h2><p>Track energy, time and cost. We will notify you when your target is nearly reached.</p></div>
+      <div class="session-empty" id="sessionEmpty"><span>↯</span><h2>No active session</h2><p>Choose an available charger or scan its QR code to begin.</p><button class="primary-button go-find" type="button">FIND A CHARGER <span>→</span></button></div>
+      <div class="active-session" id="activeSession" hidden>
+        <article class="session-progress"><div class="session-ring"><strong id="liveSoc">24%</strong><span>BATTERY</span></div><div><p class="eyebrow">CHARGING AT <span id="sessionBay">A1</span></p><h2><span id="sessionPower">120</span> kW fast charge</h2><p><span class="live-dot"></span> Connected and charging safely</p></div></article>
+        <div class="session-stats"><div><small>TIME REMAINING</small><strong id="sessionTime">26 min</strong></div><div><small>ENERGY DELIVERED</small><strong id="sessionEnergy">8.4 kWh</strong></div><div><small>CURRENT COST</small><strong id="sessionCost">₹151</strong></div><div><small>TARGET</small><strong>80%</strong></div></div>
+        <div class="session-actions"><button id="notifyToggle" class="secondary-button" type="button">NOTIFY ME AT 75%</button><button id="stopCharge" class="danger-outline" type="button">STOP CHARGING</button></div>
+      </div>
+    </section>
+
+    <section id="history" class="panel driver-panel">
+      <div class="section-heading"><p class="eyebrow">YOUR VOLTWAY ACCOUNT</p><h2>History & support</h2><p>Review past sessions, download invoices, or get help with a charger.</p></div>
+      <div class="history-layout"><article class="card"><div class="card-heading"><div><p class="eyebrow">RECENT SESSIONS</p><h2>Charging history</h2></div><span class="tag">3 SESSIONS</span></div><div class="history-row"><div><strong>28 Oct 2026 · A1</strong><small>GreenRoute Central · 31.2 kWh</small></div><b>₹562</b><button class="text-button invoice-button">INVOICE ↓</button></div><div class="history-row"><div><strong>19 Oct 2026 · B1</strong><small>GreenRoute Central · 18.6 kWh</small></div><b>₹298</b><button class="text-button invoice-button">INVOICE ↓</button></div><div class="history-row"><div><strong>04 Oct 2026 · A2</strong><small>MG Road Hub · 26.4 kWh</small></div><b>₹475</b><button class="text-button invoice-button">INVOICE ↓</button></div></article><article class="card support-card"><p class="eyebrow">NEED HELP?</p><h2>We’re here.</h2><p>Report a charger problem or contact the station team.</p><button id="supportIssue" class="primary-button" type="button">REPORT CHARGER ISSUE <span>→</span></button><button id="callSupport" class="secondary-button" type="button">CALL SUPPORT · 1800 123 8658</button><small>Station assistance available 24/7</small></article></div>
+    </section>
+
+    <section id="overview" class="panel operator-panel">
       <div class="metric-grid">
         <article class="metric hero-metric">
           <p>ACTIVE POWER</p><strong><span id="activePower">82.4</span><small> kW</small></strong>
@@ -102,7 +155,7 @@
 
       <div class="overview-grid">
         <article class="card session-card">
-          <div class="card-heading"><div><p class="eyebrow">LIVE SESSIONS</p><h2>Charging floor</h2></div><span class="tag">4 SLOTS</span></div>
+          <div class="card-heading"><div><p class="eyebrow">LIVE SESSIONS</p><h2>Charging bays</h2></div><span class="tag">4 BAYS</span></div>
           <div class="slot-list">
             <div class="slot-row"><span class="slot-number">A1</span><div class="vehicle"><strong>KA 01 EV 1001</strong><small>DC · CCS2</small></div><div class="charge-bar"><i style="width:72%"></i></div><strong>72%</strong><span class="source solar">SOLAR</span></div>
             <div class="slot-row"><span class="slot-number">A2</span><div class="vehicle"><strong>KA 05 MX 2077</strong><small>DC · CCS2</small></div><div class="charge-bar"><i style="width:44%"></i></div><strong>44%</strong><span class="source grid">GRID</span></div>
@@ -119,7 +172,7 @@
     </section>
 
     <section id="schedule" class="panel">
-      <div class="section-heading"><p class="eyebrow">DEADLINE + BUDGET CONTROL</p><h2>Plan a charging session</h2><p>Tell us when you leave and what you can spend. The system calculates the safest power profile.</p></div>
+      <div class="section-heading"><p class="eyebrow">TIME + BUDGET</p><h2>Plan a charge</h2><p>Enter the departure time and budget to calculate a safe charging plan.</p></div>
       <div class="form-layout">
         <form id="planForm" class="card control-form">
           <label>Battery capacity <span><output id="capacityOut">60</output> kWh</span><input id="capacity" type="range" min="20" max="150" value="60"></label>
@@ -139,7 +192,7 @@
     </section>
 
     <section id="queue" class="panel">
-      <div class="section-heading"><p class="eyebrow">FAIR PRIORITY ENGINE</p><h2>Smart waiting queue</h2><p>Urgency, low battery, arrival time, and fairness determine each position.</p></div>
+      <div class="section-heading"><p class="eyebrow">LIVE BAY DEMAND</p><h2>Waiting queue</h2><p>Queue order considers urgency, battery level, arrival time and fairness.</p></div>
       <div class="queue-layout">
         <article class="card queue-card"><div class="card-heading"><h2>Live order</h2><button class="text-button" id="serveNext">Serve next →</button></div><div id="queueList" class="queue-list"></div></article>
         <form id="queueForm" class="card mini-form"><p class="eyebrow">NEW ARRIVAL</p><h2>Add vehicle</h2><label>Registration<input id="qReg" required placeholder="KA 01 EV 0001"></label><label>Battery SoC (%)<input id="qSoc" required type="number" min="1" max="100" value="20"></label><label>Urgency<select id="qUrgency"><option value="normal">Normal</option><option value="urgent">Urgent travel</option><option value="emergency">Emergency</option></select></label><button class="primary-button" type="submit">ADD TO QUEUE <span>+</span></button></form>
@@ -147,7 +200,7 @@
     </section>
 
     <section id="energy" class="panel">
-      <div class="section-heading"><p class="eyebrow">RENEWABLE DISPATCH</p><h2>Solar power studio</h2><p>Simulate sunlight and see how generation changes grid dependency.</p></div>
+      <div class="section-heading"><p class="eyebrow">RENEWABLE DISPATCH</p><h2>Energy usage</h2><p>Monitor solar generation, battery storage and grid dependency.</p></div>
       <div class="energy-layout">
         <article class="sun-visual"><div class="sun"></div><div class="horizon"></div><p>LIVE ARRAY OUTPUT</p><strong><span id="solarOutput">54.4</span> kW</strong></article>
         <article class="card solar-control"><label>Sunlight intensity <span><output id="sunOut">68</output>%</span><input id="sunRange" type="range" min="0" max="100" value="68"></label><div class="energy-stat"><span>Battery storage</span><strong id="storageValue">136.0 kWh</strong><div class="storage-bar"><i id="storageBar" style="width:68%"></i></div></div><div class="energy-stat"><span>Grid dependency</span><strong id="gridValue">34%</strong></div><button id="storeEnergy" class="primary-button">SIMULATE 1 HOUR <span>☀</span></button></article>
@@ -180,8 +233,14 @@
     </div>
   </div>
 
+  <div id="actionModal" class="action-modal" role="dialog" aria-modal="true" aria-labelledby="actionTitle" aria-hidden="true">
+    <div class="action-shell"><button id="closeAction" class="modal-close" type="button" aria-label="Close">×</button><p class="eyebrow">CONFIRM CHARGING</p><h2 id="actionTitle">Start at bay A1?</h2><p id="actionCopy">Connect your vehicle before starting. You will only pay for the energy delivered.</p><div class="payment-choice"><span>PAYMENT</span><strong>UPI •••• 2841</strong><button id="changePayment" type="button">CHANGE</button></div><dl class="confirm-details"><div><dt>Connector</dt><dd id="confirmConnector">CCS2</dd></div><div><dt>Maximum power</dt><dd id="confirmPower">120 kW</dd></div><div><dt>Energy price</dt><dd id="confirmPrice">₹18/kWh</dd></div></dl><label class="confirm-check"><input id="connectedCheck" type="checkbox"> My vehicle is connected securely</label><button id="confirmStart" class="primary-button" type="button" disabled>AUTHORIZE & START <span>→</span></button></div>
+  </div>
+
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
   <script src="api-client.js"></script>
   <script src="portal.js"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="stations.js"></script>
 </body>
 </html>

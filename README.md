@@ -198,3 +198,47 @@ redeploy; no framework preset or custom build settings are required.
 Vercel hosts only the browser dashboard. The C++ API, PostgreSQL, Keycloak and OCPP
 simulator must run on a container-capable host. Until an API URL is configured, the
 deployed dashboard intentionally operates in demo mode.
+
+## India charging station map
+
+The driver page includes a Leaflet/OpenStreetMap map and an India-wide public
+directory in `frontend/data/india-stations.json`. This is an ODbL snapshot of
+OpenStreetMap charging-station listings, not a complete or live inventory. The UI
+shows the snapshot date and attribution. Unlisted connector, price, phone and
+opening-hours data remain unknown; live bay availability is not inferred.
+
+Refresh the snapshot deliberately (requires Node 24 and network access), then
+redeploy the frontend:
+
+```powershell
+node scripts/refresh-stations.mjs
+```
+
+The script queries the India administrative area via public Overpass once per
+refresh, validates the result and preserves existing data on errors. It does not
+send every visitor to Overpass. Leaflet assets come from unpkg and map tiles from
+OpenStreetMap; production traffic must follow their service policies or use a
+dedicated tile provider. Both station-list and map load failures have UI states.
+
+Near me asks for browser location permission only on click. Coordinates are held
+in memory, used for straight-line nearest-listing sorting and map centering, and
+are not saved. Map tile requests reflect the viewed area. Directions opens Google
+Maps with the destination coordinates. City shortcuts search nearby listings;
+other queries match station metadata. The public-access filter includes only
+listings explicitly tagged for public/permissive access.
+
+`scripts/test-station-map.cjs` uses Playwright (available on NODE_PATH or installed
+locally) and Chrome against a frontend server on port 4173 to check search,
+location sorting, station details, directions, empty states and mobile overflow.
+
+State search supports all 36 states/UTs, dropdown counts and typed state names.
+Station state labels are derived from coordinate containment in district polygons
+from https://github.com/udit-001/india-maps-data (no polygons are bundled in the
+browser). Refresh those labels after updating station data:
+
+```powershell
+node scripts/enrich-station-states.mjs
+```
+
+Only listings in the directory are counted. A zero count means no matching
+directory entries, not an absence of physical charging stations in that state.

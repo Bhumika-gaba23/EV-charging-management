@@ -17,22 +17,6 @@ function setTheme(theme) {
 setTheme(document.documentElement.dataset.theme);
 themeToggle.addEventListener("click", () => setTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark"));
 
-const viewNames = ["FRONT / 01", "LEFT / 02", "RIGHT / 03"];
-$$('.vehicle-visual').forEach((visual, visualIndex) => {
-  const slides = [...visual.querySelectorAll('.vehicle-slide')];
-  const dots = [...visual.querySelectorAll('.slide-dots i')];
-  const label = visual.querySelector('.view-label');
-  let activeView = 0;
-
-  setInterval(() => {
-    if (visual.closest('.vehicle-choice').matches(':hover, :focus-visible')) return;
-    activeView = (activeView + 1) % slides.length;
-    slides.forEach((slide, index) => slide.classList.toggle('active', index === activeView));
-    dots.forEach((dot, index) => dot.classList.toggle('active', index === activeView));
-    label.textContent = viewNames[activeView];
-  }, 2800 + visualIndex * 320);
-});
-
 const vehicleProfiles = {
   car: { label:"EV CAR", min:20, max:150, capacity:60, connector:"CCS2" },
   bike: { label:"EV BIKE", min:2, max:15, capacity:7, connector:"Type 2" },
@@ -51,10 +35,24 @@ function applyVehicleType(type, closeLanding = true) {
   document.body.dataset.vehicle = type;
   localStorage.setItem("chargeflow-vehicle", type);
   if (closeLanding) {
+    setAppMode("driver");
     $("#vehicleLanding").classList.add("hidden");
     document.body.classList.remove("onboarding-open");
     toast(`${profile.label} profile loaded.`);
   }
+}
+
+function setAppMode(mode) {
+  const nextMode = mode === "operator" ? "operator" : "driver";
+  document.body.dataset.mode = nextMode;
+  localStorage.setItem("voltway-mode", nextMode);
+  $("#brandModeLabel").textContent = nextMode === "driver" ? "DRIVER CHARGE" : "CONTROL GRID";
+  $(".command-kicker").textContent = nextMode === "driver" ? "VOLTWAY / DRIVER" : "VOLTWAY / OPERATIONS";
+  $(".operator-profile strong").textContent = nextMode === "driver" ? "EV Driver" : "Station Operator";
+  $(".operator-profile small").textContent = nextMode === "driver" ? "PERSONAL ACCOUNT" : "CONTROL LEVEL 2";
+  $(".operator-profile>span").textContent = nextMode === "driver" ? "DR" : "OP";
+  const target = nextMode === "driver" ? "charge" : "overview";
+  document.querySelector(`.nav-item[data-target="${target}"]`).click();
 }
 
 const savedVehicle = localStorage.getItem("chargeflow-vehicle");
@@ -63,6 +61,21 @@ if (savedVehicle && vehicleProfiles[savedVehicle]) {
 }
 document.body.classList.add("onboarding-open");
 $$('.vehicle-choice').forEach(choice => choice.addEventListener('click', () => applyVehicleType(choice.dataset.vehicle)));
+$("#driverEntry").addEventListener("click", () => {
+  $("#driverEntry").classList.add("active");
+  $("#operatorEntry").classList.remove("active");
+  $(".vehicle-prompt").scrollIntoView({ behavior:"smooth", block:"center" });
+});
+$("#operatorEntry").addEventListener("click", () => {
+  setAppMode("operator");
+  $("#vehicleLanding").classList.add("hidden");
+  document.body.classList.remove("onboarding-open");
+  toast("Operator console ready.");
+});
+$("#switchMode").addEventListener("click", () => {
+  $("#vehicleLanding").classList.remove("hidden");
+  document.body.classList.add("onboarding-open");
+});
 $("#vehicleTypeButton").addEventListener("click", () => {
   $("#vehicleLanding").classList.remove("hidden");
   document.body.classList.add("onboarding-open");
@@ -161,10 +174,83 @@ $$('.nav-item').forEach(button => button.addEventListener('click', () => {
   $$('.panel').forEach(panel => panel.classList.remove('active-panel'));
   button.classList.add('active');
   $(`#${button.dataset.target}`).classList.add('active-panel');
-  const titles = { overview:"Station overview", schedule:"Charging planner", queue:"Smart waiting queue", energy:"Solar energy studio", emergency:"Emergency control" };
-  $("#currentViewTitle").textContent = titles[button.dataset.target] || "Operations center";
+  const titles = { charge:"Find a charger", session:"My charging session", history:"History & support", overview:"Station overview", schedule:"Plan a charge", queue:"Waiting queue", energy:"Energy usage", emergency:"Emergency control" };
+  $("#currentViewTitle").textContent = titles[button.dataset.target] || "VoltWay";
   window.scrollTo({ top:0, behavior:'smooth' });
 }));
+
+let pendingCharge = null;
+const actionModal = $("#actionModal");
+
+function openChargeConfirmation(button) {
+  const card = button.closest(".charger-card");
+  pendingCharge = { bay:button.dataset.bay, power:button.dataset.power, price:button.dataset.price, connector:card.dataset.connector };
+  $("#actionTitle").textContent = `Start at bay ${pendingCharge.bay}?`;
+  $("#confirmConnector").textContent = pendingCharge.connector;
+  $("#confirmPower").textContent = `${pendingCharge.power} kW`;
+  $("#confirmPrice").textContent = `₹${pendingCharge.price}/kWh`;
+  $("#connectedCheck").checked = false;
+  $("#confirmStart").disabled = true;
+  actionModal.classList.add("open");
+  actionModal.setAttribute("aria-hidden", "false");
+  $("#connectedCheck").focus();
+}
+
+function closeActionModal() {
+  actionModal.classList.remove("open");
+  actionModal.setAttribute("aria-hidden", "true");
+}
+
+$$('.start-charge').forEach(button => button.addEventListener('click', () => openChargeConfirmation(button)));
+$("#connectedCheck").addEventListener("change", event => { $("#confirmStart").disabled = !event.target.checked; });
+$("#closeAction").addEventListener("click", closeActionModal);
+actionModal.addEventListener("click", event => { if (event.target === actionModal) closeActionModal(); });
+$("#confirmStart").addEventListener("click", () => {
+  if (!pendingCharge || !$("#connectedCheck").checked) return;
+  $("#sessionBay").textContent = pendingCharge.bay;
+  $("#sessionPower").textContent = pendingCharge.power;
+  $("#sessionEmpty").hidden = true;
+  $("#activeSession").hidden = false;
+  localStorage.setItem("voltway-active-session", JSON.stringify(pendingCharge));
+  closeActionModal();
+  document.querySelector('.nav-item[data-target="session"]').click();
+  toast(`Charging started at ${pendingCharge.bay}. Payment authorized successfully.`);
+});
+$("#changePayment").addEventListener("click", () => toast("Payment methods: UPI •••• 2841 is selected."));
+$("#driverConnector").addEventListener("change", event => {
+  $$(".charger-card").forEach(card => { card.hidden = event.target.value !== "all" && card.dataset.connector !== event.target.value; });
+});
+$$('.join-queue').forEach(button => button.addEventListener('click', () => {
+  button.textContent = "QUEUE POSITION 1";
+  button.disabled = true;
+  toast(`Added to the ${button.dataset.bay} queue. Estimated wait: 18 minutes.`);
+}));
+$$('.report-fault').forEach(button => button.addEventListener('click', () => toast(`Issue for ${button.dataset.bay} has been sent to the station team.`)));
+$$('.go-find').forEach(button => button.addEventListener('click', () => document.querySelector('.nav-item[data-target="charge"]').click()));
+$("#notifyToggle").addEventListener("click", event => { event.currentTarget.textContent = "NOTIFICATION SET FOR 75% ✓"; toast("We will notify you when your battery reaches 75%."); });
+$("#stopCharge").addEventListener("click", () => {
+  if (!window.confirm("Stop charging now? Your final amount will be calculated and charged to the selected payment method.")) return;
+  $("#activeSession").hidden = true;
+  $("#sessionEmpty").hidden = false;
+  localStorage.removeItem("voltway-active-session");
+  toast("Charging stopped. Final invoice: ₹151.");
+});
+$$('.invoice-button').forEach(button => button.addEventListener('click', () => toast("Invoice prepared for download.")));
+$("#supportIssue").addEventListener("click", () => toast("Support request opened. The station team will respond shortly."));
+$("#callSupport").addEventListener("click", () => toast("Support number: 1800 123 8658"));
+$("#getDirections").addEventListener("click", () => toast("Directions ready: GreenRoute Central is 1.2 km away."));
+$(".operator-profile").addEventListener("click", () => toast(document.body.dataset.mode === "driver" ? "Signed in · Saved vehicle and UPI payment active." : "Operator account · Control level 2."));
+
+try {
+  const active = JSON.parse(localStorage.getItem("voltway-active-session"));
+  if (active?.bay) {
+    pendingCharge = active;
+    $("#sessionBay").textContent = active.bay;
+    $("#sessionPower").textContent = active.power;
+    $("#sessionEmpty").hidden = true;
+    $("#activeSession").hidden = false;
+  }
+} catch { localStorage.removeItem("voltway-active-session"); }
 
 $("#notificationButton").addEventListener("click", event => {
   event.currentTarget.classList.remove("header-notice");
