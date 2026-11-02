@@ -17,6 +17,22 @@ function setTheme(theme) {
 setTheme(document.documentElement.dataset.theme);
 themeToggle.addEventListener("click", () => setTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark"));
 
+const viewNames = ["FRONT / 01", "LEFT / 02", "RIGHT / 03"];
+$$('.vehicle-visual').forEach((visual, visualIndex) => {
+  const slides = [...visual.querySelectorAll('.vehicle-slide')];
+  const dots = [...visual.querySelectorAll('.slide-dots i')];
+  const label = visual.querySelector('.view-label');
+  let activeView = 0;
+
+  setInterval(() => {
+    if (visual.closest('.vehicle-choice').matches(':hover, :focus-visible')) return;
+    activeView = (activeView + 1) % slides.length;
+    slides.forEach((slide, index) => slide.classList.toggle('active', index === activeView));
+    dots.forEach((dot, index) => dot.classList.toggle('active', index === activeView));
+    label.textContent = viewNames[activeView];
+  }, 2800 + visualIndex * 320);
+});
+
 const vehicleProfiles = {
   car: { label:"EV CAR", min:20, max:150, capacity:60, connector:"CCS2" },
   bike: { label:"EV BIKE", min:2, max:15, capacity:7, connector:"Type 2" },

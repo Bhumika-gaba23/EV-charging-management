@@ -330,10 +330,14 @@ body.onboarding-open { overflow:hidden; }
 .vehicle-choice:hover,.vehicle-choice:focus-visible { transform:translateY(-6px);border-color:rgba(217,220,224,.48);background:#222;box-shadow:0 24px 55px rgba(0,0,0,.28);outline:none; }
 .vehicle-choice:hover::after { transform:scale(1.25);border-color:rgba(217,220,224,.22); }
 .choice-index { color:var(--silver-dark);font:9px var(--mono); }.vehicle-choice>div:last-of-type { grid-column:1/3;align-self:end; }.vehicle-choice strong { display:block;font-size:18px; }.vehicle-choice small { display:block;margin-top:5px;color:var(--silver-dark);font:8px var(--mono);letter-spacing:.05em; }.choice-arrow { position:absolute;right:18px;bottom:21px;color:var(--silver-bright);font:8px var(--mono);letter-spacing:.1em;opacity:0;transform:translateX(-8px);transition:.3s; }.vehicle-choice:hover .choice-arrow { opacity:1;transform:none; }
-.vehicle-visual { position:relative;grid-column:2;align-self:center;width:100%;height:150px;margin:auto;background-repeat:no-repeat;background-size:contain;background-position:center;filter:drop-shadow(0 15px 13px rgba(0,0,0,.38));transform:scale(1);transition:transform .35s cubic-bezier(.2,.75,.25,1),filter .35s ease; }
-.car-visual { background-image:url("assets/paper-car-chrome.png"); }
-.scooter-visual { background-image:url("assets/paper-scooter-chrome.png"); }
-.bike-visual { background-image:url("assets/paper-bike-chrome.png"); }
+.vehicle-visual { position:relative;grid-column:2;align-self:center;width:100%;height:150px;margin:auto;filter:drop-shadow(0 15px 13px rgba(0,0,0,.38));transform:scale(1);transition:transform .35s cubic-bezier(.2,.75,.25,1),filter .35s ease; }
+.vehicle-slide { position:absolute;inset:0;background-repeat:no-repeat;background-size:contain;background-position:center;opacity:0;transform:translateX(8px) scale(.97);transition:opacity .65s ease,transform .65s cubic-bezier(.2,.75,.25,1); }
+.vehicle-slide.active { opacity:1;transform:none; }
+.car-visual .front-view { background-image:url("assets/paper-car-front-chrome.png"); }.car-visual .left-view { background-image:url("assets/paper-car-left-chrome.png"); }.car-visual .right-view { background-image:url("assets/paper-car-chrome.png"); }
+.scooter-visual .front-view { background-image:url("assets/paper-scooter-front-chrome.png"); }.scooter-visual .left-view { background-image:url("assets/paper-scooter-left-chrome.png"); }.scooter-visual .right-view { background-image:url("assets/paper-scooter-chrome.png"); }
+.bike-visual .front-view { background-image:url("assets/paper-bike-front-chrome.png"); }.bike-visual .left-view { background-image:url("assets/paper-bike-left-chrome.png"); }.bike-visual .right-view { background-image:url("assets/paper-bike-chrome.png"); }
+.view-label { position:absolute;left:0;bottom:-3px;color:var(--silver-dark);font:7px var(--mono);letter-spacing:.1em; }
+.slide-dots { position:absolute;right:0;bottom:0;display:flex;gap:4px; }.slide-dots i{display:block;width:11px;height:2px;background:#555;transition:width .35s ease,background .35s ease}.slide-dots i.active{width:20px;background:var(--silver-bright)}
 .vehicle-choice:hover .vehicle-visual { transform:scale(1.045) translateY(-3px);filter:drop-shadow(0 19px 16px rgba(0,0,0,.46)); }
 .landing-footnote { margin:24px 0 0;color:#6f716a;font:8px var(--mono);letter-spacing:.08em; }.landing-footnote span{display:inline-block;width:6px;height:6px;margin-right:8px;border-radius:50%;background:var(--green);box-shadow:0 0 10px var(--green); }
 .landing-orbit { position:absolute;border:1px solid rgba(217,220,224,.07);border-radius:50%;pointer-events:none; }.orbit-one{width:480px;height:480px;right:-240px;top:-220px}.orbit-two{width:260px;height:260px;left:-140px;bottom:-120px}
