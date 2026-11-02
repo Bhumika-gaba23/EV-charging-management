@@ -1,10 +1,11 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="light">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="VoltWay EV charging operations dashboard">
   <title>VoltWay — EV Charging Control</title>
+  <script>document.documentElement.dataset.theme=localStorage.getItem('chargeflow-theme')||'dark';</script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -23,16 +24,16 @@
       <p class="landing-intro">Choose your electric vehicle type. We will configure capacity, connector, and charging recommendations for it.</p>
       <div class="vehicle-choices">
         <button class="vehicle-choice" type="button" data-vehicle="car">
-          <span class="choice-index">01</span><div class="vehicle-visual car-visual"><i></i><i></i><b></b></div>
+          <span class="choice-index">01</span><div class="vehicle-visual car-visual" role="img" aria-label="Layered paper-cut electric car"></div>
           <div><strong>EV Car</strong><small>20-150 kWh / AC + DC</small></div><span class="choice-arrow">ENTER</span>
         </button>
-        <button class="vehicle-choice" type="button" data-vehicle="bike">
-          <span class="choice-index">02</span><div class="vehicle-visual bike-visual"><i></i><i></i><b></b></div>
-          <div><strong>EV Bike</strong><small>2-15 kWh / Standard AC</small></div><span class="choice-arrow">ENTER</span>
-        </button>
         <button class="vehicle-choice" type="button" data-vehicle="scooter">
-          <span class="choice-index">03</span><div class="vehicle-visual scooter-visual"><i></i><i></i><b></b></div>
+          <span class="choice-index">02</span><div class="vehicle-visual scooter-visual" role="img" aria-label="Layered paper-cut electric scooter"></div>
           <div><strong>EV Scooter</strong><small>1-8 kWh / Standard AC</small></div><span class="choice-arrow">ENTER</span>
+        </button>
+        <button class="vehicle-choice" type="button" data-vehicle="bike">
+          <span class="choice-index">03</span><div class="vehicle-visual bike-visual" role="img" aria-label="Layered paper-cut electric motorcycle"></div>
+          <div><strong>EV Bike</strong><small>2-15 kWh / Standard AC</small></div><span class="choice-arrow">ENTER</span>
         </button>
       </div>
       <p class="landing-footnote"><span></span> C++ charging engine ready</p>
@@ -50,6 +51,9 @@
       <button class="nav-item" data-target="energy"><span>04</span>Solar energy</button>
       <button class="nav-item" data-target="emergency"><span>05</span>Emergency</button>
     </nav>
+    <button id="themeToggle" class="theme-toggle" type="button" aria-label="Switch to light mode" aria-pressed="true">
+      <span class="theme-icon">DARK</span><span class="theme-label">APPEARANCE</span><i aria-hidden="true"></i>
+    </button>
     <div class="station-card">
       <span class="pulse"></span>
       <div><small>STATION ONLINE</small><strong>GreenRoute Central</strong></div>

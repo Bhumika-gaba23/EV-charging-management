@@ -3,7 +3,19 @@ const $$ = selector => [...document.querySelectorAll(selector)];
 const api = window.chargeFlowApi;
 let apiOnline = false;
 
-localStorage.removeItem("chargeflow-theme");
+const themeToggle = $("#themeToggle");
+
+function setTheme(theme) {
+  const nextTheme = theme === "light" ? "light" : "dark";
+  document.documentElement.dataset.theme = nextTheme;
+  localStorage.setItem("chargeflow-theme", nextTheme);
+  themeToggle.setAttribute("aria-pressed", String(nextTheme === "dark"));
+  themeToggle.setAttribute("aria-label", `Switch to ${nextTheme === "dark" ? "light" : "dark"} mode`);
+  themeToggle.querySelector(".theme-icon").textContent = nextTheme.toUpperCase();
+}
+
+setTheme(document.documentElement.dataset.theme);
+themeToggle.addEventListener("click", () => setTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark"));
 
 const vehicleProfiles = {
   car: { label:"EV CAR", min:20, max:150, capacity:60, connector:"CCS2" },
