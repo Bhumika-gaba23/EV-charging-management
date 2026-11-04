@@ -1,6 +1,7 @@
 const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
 const api = window.chargeFlowApi;
+const escapeHTML = value => String(value).replace(/[&<>"']/g, char => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[char]));
 let apiOnline = false;
 
 const themeToggle = $("#themeToggle");
@@ -20,7 +21,8 @@ themeToggle.addEventListener("click", () => setTheme(document.documentElement.da
 const vehicleProfiles = {
   car: { label:"EV CAR", min:20, max:150, capacity:60, connector:"CCS2" },
   bike: { label:"EV BIKE", min:2, max:15, capacity:7, connector:"Type 2" },
-  scooter: { label:"EV SCOOTER", min:1, max:8, capacity:4, connector:"Type 2" }
+  scooter: { label:"EV SCOOTER", min:1, max:8, capacity:4, connector:"Type 2" },
+  cargo: { label:"CARGO EV", min:8, max:30, capacity:20, connector:"Type 2" }
 };
 
 function applyVehicleType(type, closeLanding = true) {
@@ -45,7 +47,7 @@ const savedVehicle = localStorage.getItem("chargeflow-vehicle");
 if (savedVehicle && vehicleProfiles[savedVehicle]) {
   applyVehicleType(savedVehicle, false);
 }
-document.body.classList.add("onboarding-open");
+applyVehicleType(savedVehicle && vehicleProfiles[savedVehicle] ? savedVehicle : "car");
 $$('.vehicle-choice').forEach(choice => choice.addEventListener('click', () => applyVehicleType(choice.dataset.vehicle)));
 $("#vehicleTypeButton").addEventListener("click", () => {
   $("#vehicleLanding").classList.remove("hidden");
@@ -76,6 +78,7 @@ function toast(message) {
 
 function setApiStatus(online) {
   apiOnline = online;
+  document.body.dataset.engine = online ? "cpp" : "browser";
   let status = $(".api-status");
   if (!status) {
     status = document.createElement("span");
@@ -83,10 +86,10 @@ function setApiStatus(online) {
     $(".station-card div").append(status);
   }
   status.classList.toggle("online", online);
-  status.textContent = online ? "C++ API CONNECTED" : "DEMO MODE";
+  status.textContent = online ? "C++ engine connected" : "Browser simulation";
   const headerState = $(".header-system-state");
   headerState.classList.toggle("online", online);
-  $("#headerApiStatus").textContent = online ? "C++ API ONLINE" : "DEMO MODE";
+  $("#headerApiStatus").textContent = online ? "C++ connected" : "Browser demo";
 }
 
 function updateClock() {
@@ -97,6 +100,9 @@ function updateClock() {
 }
 
 function renderSlots(slots) {
+  fallback.slots = slots;
+  const occupied = slots.filter(slot => slot.status !== "available").length;
+  $("#occupiedCount").innerHTML = `${String(occupied).padStart(2,"0")}<small> / ${String(slots.length).padStart(2,"0")}</small>`;
   const host = $(".slot-list");
   host.innerHTML = slots.map(slot => {
     const available = slot.status === "available";
@@ -115,10 +121,12 @@ function renderQueue(items) {
   fallback.queue = items;
   $("#queueList").innerHTML = items.map(item => `<div class="queue-item">
     <span class="queue-rank">${String(item.rank).padStart(2,"0")}</span>
-    <div><strong>${item.registration}</strong><small>${item.id} / PRIORITY ${Math.round(item.priority)}</small></div>
+    <div><strong>${escapeHTML(item.registration)}</strong><small>${escapeHTML(item.id)} / PRIORITY ${Math.round(item.priority)}</small></div>
     <span>${item.soc}% SoC</span>
     <span class="priority ${item.emergency || item.soc < 20 ? "high" : ""}">${item.emergency ? "EMERGENCY" : item.soc < 20 ? "URGENT" : "NORMAL"}</span>
   </div>`).join("");
+  if (!items.length) $("#queueList").innerHTML = '<p class="queue-empty">No vehicles waiting. Add an arrival to begin.</p>';
+  $("#serveNext").disabled = !items.length;
   $("#queueCount").textContent = String(items.length).padStart(2,"0");
 }
 
@@ -147,16 +155,24 @@ $$('.nav-item').forEach(button => button.addEventListener('click', () => {
   $(`#${button.dataset.target}`).classList.add('active-panel');
   const titles = { overview:"Station overview", schedule:"Charging planner", queue:"Smart waiting queue", energy:"Solar energy studio", emergency:"Emergency control" };
   $("#currentViewTitle").textContent = titles[button.dataset.target] || "Operations center";
-  window.scrollTo({ top:0, behavior:'smooth' });
+  $$('.nav-item').forEach(item => item.setAttribute("aria-current",item === button ? "page" : "false"));
+  history.replaceState(null,"",`#${button.dataset.target}`);
+  window.scrollTo({ top:0, behavior:matchMedia("(prefers-reduced-motion:reduce)").matches ? "instant" : "smooth" });
 }));
 
 $("#notificationButton").addEventListener("click", event => {
   event.currentTarget.classList.remove("header-notice");
   void event.currentTarget.offsetWidth;
   event.currentTarget.classList.add("header-notice");
-  toast("2 notices: Solar output is above target. Slot B2 is available.");
+  const free = fallback.slots.filter(slot => slot.status === "available").length;
+  toast(`${free} slot${free === 1 ? " is" : "s are"} available. ${fallback.queue.length} vehicle${fallback.queue.length === 1 ? "" : "s"} waiting.`);
 });
 
+$(".operator-profile").addEventListener("click", () => {
+  $("#operatorConnection").textContent = apiOnline ? "Calculations are connected to the C++ engine. Station telemetry is simulated." : "The C++ backend is unavailable on this host. Browser simulation is active; results are demonstration values.";
+  $("#operatorInfo").showModal();
+});
+$("#closeOperatorInfo").addEventListener("click", () => $("#operatorInfo").close());
 let scannerStream = null;
 let scannerFrameRequest = null;
 let barcodeDetector = null;
@@ -336,12 +352,15 @@ $("#emergencyForm").addEventListener("submit",async event=>{
   const registration=$("#eReg").value.toUpperCase();
   try {
     const data=apiOnline?await api.emergency({registration,soc:+$("#eSoc").value,reason:$("#eReason").value}):{vehicle:registration,chargerId:"A1",pausedVehicle:"KA 01 EV 1001",compensationCredit:50,message:"Emergency override applied."};
-    $("#emergencyResult").innerHTML=`<span class="protocol-icon">OK</span><div><p class="eyebrow emergency-copy">OVERRIDE AUTHORIZED</p><h2>${data.vehicle} assigned to ${data.chargerId}</h2><p>${data.pausedVehicle} is paused safely, retains first queue position, and receives an INR ${data.compensationCredit} fairness credit.</p></div>`;
+    $("#emergencyResult").innerHTML=`<span class="protocol-icon">OK</span><div><p class="eyebrow emergency-copy">OVERRIDE AUTHORIZED</p><h2>${escapeHTML(data.vehicle)} assigned to ${escapeHTML(data.chargerId)}</h2><p>${escapeHTML(data.pausedVehicle)} is paused safely, retains first queue position, and receives an INR ${data.compensationCredit} fairness credit.</p></div>`;
     $("#bannerMessage").textContent=`${data.vehicle} assigned to ${data.chargerId}. ${data.pausedVehicle} paused with fairness protection.`; $("#emergencyBanner").classList.add("active"); toast(data.message);
   } catch(error){toast(error.message);}
 });
 $("#dismissBanner").addEventListener("click",()=>$("#emergencyBanner").classList.remove("active"));
 
-updateClock(); setInterval(updateClock,1000); previewSolar();
+const initialPanel = location.hash.slice(1);
+const initialButton = document.querySelector(`.nav-item[data-target="${["overview","schedule","queue","energy","emergency"].includes(initialPanel) ? initialPanel : "overview"}"]`);
+initialButton?.click();
+updateClock(); setInterval(()=>{if(!document.hidden)updateClock();},1000); previewSolar();
 Promise.all([api.health(),api.station(),api.queue()]).then(([_,station,queue])=>{setApiStatus(true);renderSlots(station.slots);renderQueue(queue.items);}).catch(()=>{setApiStatus(false);renderSlots(fallback.slots);renderQueue(fallback.queue);});
-setInterval(()=>{ if(apiOnline){refreshStation();refreshQueue();} },10000);
+setInterval(()=>{ if(!document.hidden){refreshStation();if(apiOnline)refreshQueue();} },10000);

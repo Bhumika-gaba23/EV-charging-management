@@ -1,0 +1,23 @@
+{
+  "name": "pluggo-browser-checks",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node browser.mjs",
+    "test:logic": "node --test demo.test.mjs discovery.test.mjs",
+    "test:discovery": "node discovery-browser.mjs",
+    "test:polish": "node polish-browser.mjs",
+    "test:wallet": "node wallet-browser.mjs",
+    "test:layout": "node reference-layout-browser.mjs",
+    "test:home": "node home-widgets-browser.mjs",
+    "test:backend": "node backend-browser.mjs",
+    "test:performance": "node performance-browser.mjs",
+    "test:glass": "node clear-glass-browser.mjs",
+    "test:menu": "node vehicle-menu-browser.mjs",
+    "test:summary": "node --test session-summary.test.mjs && node session-summary-browser.mjs",
+    "test:dashboard": "node dashboard-browser.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.64.1"
+  }
+}

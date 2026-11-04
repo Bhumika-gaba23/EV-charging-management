@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Pluggo EV charging operations dashboard">
+  <title>Pluggo — EV Charging Control</title>
+  <script>document.documentElement.dataset.theme=localStorage.getItem('chargeflow-theme')||'dark';</script>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="theme.css">
+  <link rel="stylesheet" href="portal.css">
+  <link rel="stylesheet" href="dashboard.css?v=20261104-webglass1">
+  <link rel="icon" href="assets/pluggo.svg" type="image/svg+xml">
+</head>
+<body>
+  <div class="noise"></div>
+  <section id="vehicleLanding" class="vehicle-landing" aria-labelledby="vehicleQuestion">
+    <div class="landing-orbit orbit-one"></div><div class="landing-orbit orbit-two"></div>
+    <div class="landing-content">
+      <div class="landing-brand"><span><img src="assets/pluggo.svg" alt=""></span><strong>pluggo.</strong><small>VEHICLE PROFILES</small></div>
+      <p class="landing-step">CHARGING PROFILE</p>
+      <h1 id="vehicleQuestion">Choose your vehicle.</h1>
+      <p class="landing-intro">Select a demonstration profile for the charging planner. You can adjust its battery and connector settings.</p>
+      <div class="vehicle-choices">
+        <button class="vehicle-choice" type="button" data-vehicle="car">
+          <span class="choice-index">01</span><div class="vehicle-visual car-visual"><img src="assets/models/car-poster.png" alt="White electric car"></div>
+          <div><strong>EV Car</strong><small>20-150 kWh / AC + DC</small></div><span class="choice-arrow">ENTER</span>
+        </button>
+        <button class="vehicle-choice" type="button" data-vehicle="scooter">
+          <span class="choice-index">02</span><div class="vehicle-visual scooter-visual"><img src="assets/models/scooter-poster.png" alt="White electric scooter"></div>
+          <div><strong>EV Scooter</strong><small>1-8 kWh / Standard AC</small></div><span class="choice-arrow">ENTER</span>
+        </button>
+        <button class="vehicle-choice" type="button" data-vehicle="bike">
+          <span class="choice-index">03</span><div class="vehicle-visual bike-visual"><img src="assets/models/bike-poster.png" alt="White electric motorcycle"></div>
+          <div><strong>EV Bike</strong><small>2-15 kWh / Standard AC</small></div><span class="choice-arrow">ENTER</span>
+        </button>
+        <button class="vehicle-choice" type="button" data-vehicle="cargo"><span class="choice-index">04</span><div class="vehicle-visual"><img src="assets/models/cargo-poster.png" alt="Enclosed electric cargo three-wheeler"></div><div><strong>Cargo three-wheeler</strong><small>8–30 kWh / simulated AC profile</small></div><span class="choice-arrow">SELECT</span></button>
+      </div>
+      <p class="landing-footnote"><span></span> Fictional profiles · simulated charging</p>
+    </div>
+  </section>
+  <aside class="sidebar">
+    <a class="brand" href="#overview" aria-label="Pluggo home">
+      <span class="brand-mark"><img src="assets/pluggo.svg" alt=""></span>
+      <span>pluggo.<small>CHARGING OPERATIONS</small></span>
+    </a>
+    <nav aria-label="Dashboard navigation">
+      <button class="nav-item active" data-target="overview"><span>01</span>Overview</button>
+      <button class="nav-item" data-target="schedule"><span>02</span>Schedule</button>
+      <button class="nav-item" data-target="queue"><span>03</span>Smart queue</button>
+      <button class="nav-item" data-target="energy"><span>04</span>Solar energy</button>
+      <button class="nav-item" data-target="emergency"><span>05</span>Emergency</button>
+    </nav>
+    <button id="themeToggle" class="theme-toggle" type="button" aria-label="Switch to light mode" aria-pressed="true">
+      <span class="theme-icon">DARK</span><span class="theme-label">APPEARANCE</span><i aria-hidden="true"></i>
+    </button>
+    <div class="station-card">
+      <span class="pulse"></span>
+      <div><small>STATION PROFILE</small><strong>GreenRoute Central</strong></div>
+      <span class="station-code">BLR—01</span>
+    </div>
+  </aside>
+
+  <main>
+    <header class="command-header">
+      <div class="command-context">
+        <span class="command-kicker">CHARGING OPERATIONS</span>
+        <div><h2 id="currentViewTitle">Station overview</h2><span class="header-location">GreenRoute Central / BLR-01</span></div>
+      </div>
+      <div class="header-actions">
+        <button id="openScanner" class="scan-charger-button" type="button"><i aria-hidden="true"></i><span><small>QUICK ACTION</small><strong>SCAN CHARGER</strong></span></button>
+        <button id="vehicleTypeButton" class="vehicle-type-button" type="button"><small>VEHICLE</small><strong id="selectedVehicleLabel">EV CAR</strong></button>
+        <div class="header-system-state" title="Shows whether calculations use the C++ engine or browser demonstration"><i></i><span><small>NETWORK STATUS</small><strong id="headerApiStatus">CONNECTING</strong></span></div>
+        <div class="header-time"><small>LOCAL TIME</small><strong id="headerClock">--:--</strong></div>
+        <button id="notificationButton" class="icon-button" type="button" aria-label="View station notifications"><span>2</span><i aria-hidden="true"></i></button>
+        <button class="operator-profile" type="button" aria-label="Open operator profile"><span>OP</span><div><strong>Station operator</strong><small>DEMONSTRATION</small></div></button>
+      </div>
+    </header>
+
+    <header class="topbar">
+      <div><p class="eyebrow">STATION ACTIVITY / <span id="today"></span></p><h1>Charge smarter.<br><em>Move cleaner.</em></h1></div>
+      <div class="live-clock"><span>LOCAL TIME</span><strong id="clock">--:--:--</strong></div>
+    </header>
+
+    <div id="emergencyBanner" class="emergency-banner" role="alert" aria-live="assertive">
+      <span class="alert-beacon">!</span>
+      <div><small>PRIORITY OVERRIDE ACTIVE</small><strong id="bannerMessage">Emergency vehicle assigned to a charging slot</strong></div>
+      <button id="dismissBanner" aria-label="Dismiss emergency alert">DISMISS</button>
+    </div>
+
+    <section id="overview" class="panel active-panel">
+      <div class="metric-grid">
+        <article class="metric hero-metric">
+          <p>ACTIVE POWER</p><strong><span id="activePower">82.4</span><small> kW</small></strong>
+          <div class="power-wave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+          <span class="trend">Demonstration station load</span>
+        </article>
+        <article class="metric"><p>CHARGING</p><strong id="occupiedCount">03<small> / 04</small></strong><span>slots occupied</span></article>
+        <article class="metric solar-metric"><p>SOLAR SHARE</p><strong id="solarShare">68<small>%</small></strong><span>56.1 kW renewable</span></article>
+        <article class="metric"><p>QUEUE</p><strong id="queueCount">03</strong><span>vehicles waiting</span></article>
+      </div>
+
+      <div class="overview-grid">
+        <article class="card session-card">
+          <div class="card-heading"><div><p class="eyebrow">CHARGING FLOOR</p><h2>Charging floor</h2></div><span class="tag">4 SLOTS</span></div>
+          <div class="slot-list">
+            <div class="slot-row"><span class="slot-number">A1</span><div class="vehicle"><strong>KA 01 EV 1001</strong><small>DC · CCS2</small></div><div class="charge-bar"><i style="width:72%"></i></div><strong>72%</strong><span class="source solar">SOLAR</span></div>
+            <div class="slot-row"><span class="slot-number">A2</span><div class="vehicle"><strong>KA 05 MX 2077</strong><small>DC · CCS2</small></div><div class="charge-bar"><i style="width:44%"></i></div><strong>44%</strong><span class="source grid">GRID</span></div>
+            <div class="slot-row"><span class="slot-number">B1</span><div class="vehicle"><strong>KA 03 AT 9012</strong><small>AC · TYPE 2</small></div><div class="charge-bar"><i style="width:89%"></i></div><strong>89%</strong><span class="source solar">SOLAR</span></div>
+            <div class="slot-row muted"><span class="slot-number">B2</span><div class="vehicle"><strong>AVAILABLE</strong><small>DC · CHAdeMO</small></div><div class="charge-bar"><i style="width:0"></i></div><strong>—</strong><span class="source ready">READY</span></div>
+          </div>
+        </article>
+        <article class="card impact-card">
+          <p class="eyebrow">SIMULATED IMPACT</p><h2>Cleaner by design.</h2>
+          <div class="impact-number">148.6<small> kg</small></div><p>CO₂ emissions avoided</p>
+          <div class="ring"><div><strong>74%</strong><span>solar goal</span></div></div>
+        </article>
+      </div>
+    </section>
+
+    <section id="schedule" class="panel">
+      <div class="section-heading"><p class="eyebrow">DEADLINE + BUDGET CONTROL</p><h2>Plan a charging session</h2><p>Tell us when you leave and what you can spend. The system calculates the safest power profile.</p></div>
+      <div class="form-layout">
+        <form id="planForm" class="card control-form">
+          <label>Battery capacity <span><output id="capacityOut">60</output> kWh</span><input id="capacity" type="range" min="20" max="150" value="60"></label>
+          <label>Current state of charge <span><output id="socOut">24</output>%</span><input id="soc" type="range" min="1" max="99" value="24"></label>
+          <label>Target charge <span><output id="targetOut">80</output>%</span><input id="target" type="range" min="10" max="100" value="80"></label>
+          <div class="field-row"><label>Hours until departure<input id="hours" type="number" required min="0.25" step="0.25" value="2"></label><label>Budget (₹)<input id="budget" type="number" required min="0" value="700"></label></div>
+          <div class="field-row"><label>Tariff (₹/kWh)<input id="tariff" type="number" required min="1" value="18"></label><label>Connector<select id="connector"><option>CCS2</option><option>Type 2</option><option>CHAdeMO</option></select></label></div>
+          <button class="primary-button" type="submit">CALCULATE CHARGING PLAN <span>↗</span></button>
+        </form>
+        <article class="card result-card" id="planResult">
+          <p class="eyebrow">RECOMMENDED PROFILE</p><div class="result-status"><span class="pulse"></span><strong>READY TO CALCULATE</strong></div>
+          <div class="result-main"><span>Required power</span><strong>—<small> kW</small></strong></div>
+          <dl><div><dt>Energy required</dt><dd>—</dd></div><div><dt>Estimated cost</dt><dd>—</dd></div><div><dt>Selected slot</dt><dd>—</dd></div><div><dt>Completion</dt><dd>—</dd></div></dl>
+          <p class="result-note">Adjust the controls and calculate your plan.</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="queue" class="panel">
+      <div class="section-heading"><p class="eyebrow">FAIR PRIORITY ENGINE</p><h2>Smart waiting queue</h2><p>Urgency, low battery, arrival time, and fairness determine each position.</p></div>
+      <div class="queue-layout">
+        <article class="card queue-card"><div class="card-heading"><h2>Live order</h2><button class="text-button" id="serveNext">Serve next →</button></div><div id="queueList" class="queue-list"></div></article>
+        <form id="queueForm" class="card mini-form"><p class="eyebrow">NEW ARRIVAL</p><h2>Add vehicle</h2><label>Registration<input id="qReg" required placeholder="KA 01 EV 0001"></label><label>Battery SoC (%)<input id="qSoc" required type="number" required min="1" max="100" value="20"></label><label>Urgency<select id="qUrgency"><option value="normal">Normal</option><option value="urgent">Urgent travel</option><option value="emergency">Emergency</option></select></label><button class="primary-button" type="submit">ADD TO QUEUE <span>+</span></button></form>
+      </div>
+    </section>
+
+    <section id="energy" class="panel">
+      <div class="section-heading"><p class="eyebrow">RENEWABLE DISPATCH</p><h2>Solar power studio</h2><p>Simulate sunlight and see how generation changes grid dependency.</p></div>
+      <div class="energy-layout">
+        <article class="sun-visual"><div class="sun"></div><div class="horizon"></div><p>SIMULATED ARRAY OUTPUT</p><strong><span id="solarOutput">54.4</span> kW</strong></article>
+        <article class="card solar-control"><label>Sunlight intensity <span><output id="sunOut">68</output>%</span><input id="sunRange" type="range" min="0" max="100" value="68"></label><div class="energy-stat"><span>Battery storage</span><strong id="storageValue">136.0 kWh</strong><div class="storage-bar"><i id="storageBar" style="width:68%"></i></div></div><div class="energy-stat"><span>Grid dependency</span><strong id="gridValue">34%</strong></div><button id="storeEnergy" class="primary-button">SIMULATE 1 HOUR <span>☀</span></button></article>
+      </div>
+    </section>
+
+    <section id="emergency" class="panel">
+      <div class="section-heading"><p class="eyebrow emergency-copy">CRITICAL ACCESS PROTOCOL</p><h2>Fair emergency priority</h2><p>Urgent vehicles receive immediate access while interrupted drivers keep their queue position and receive compensation.</p></div>
+      <div class="emergency-layout">
+        <form id="emergencyForm" class="card mini-form emergency-form"><label>Emergency vehicle<input id="eReg" required placeholder="AMB EV 01"></label><label>Current SoC (%)<input id="eSoc" type="number" required min="1" max="100" value="7"></label><label>Reason<select id="eReason"><option>Medical response</option><option>Public safety</option><option>Critical travel</option></select></label><button class="danger-button" type="submit">REQUEST PRIORITY OVERRIDE</button></form>
+        <article class="card protocol-card" id="emergencyResult"><span class="protocol-icon">!</span><div><p class="eyebrow">PROTOCOL STANDBY</p><h2>No active emergency</h2><p>The system will choose a compatible non-emergency session, pause it safely, and issue a ₹50 fairness credit.</p></div></article>
+      </div>
+    </section>
+  </main>
+
+  <div id="scannerModal" class="scanner-modal" role="dialog" aria-modal="true" aria-labelledby="scannerTitle" aria-hidden="true">
+    <div class="scanner-shell">
+      <div class="scanner-heading"><div><p class="eyebrow">CHARGER IDENTIFICATION</p><h2 id="scannerTitle">Scan station QR</h2></div><button id="closeScanner" type="button" aria-label="Close charger scanner">CLOSE</button></div>
+      <div class="scanner-viewport">
+        <video id="scannerVideo" playsinline muted></video>
+        <div class="scanner-frame"><i></i><i></i><i></i><i></i><span></span></div>
+        <div id="scannerStandby" class="scanner-standby"><strong>CAMERA STANDBY</strong><small>Start the camera and align the charger QR code inside the frame.</small></div>
+      </div>
+      <p id="scannerStatus" class="scanner-status" aria-live="polite"><span></span> Ready to scan charger IDs such as A1, A2, B1, or B2.</p>
+      <button id="startScanner" class="primary-button scanner-start" type="button">START CAMERA <span>SCAN</span></button>
+      <div class="manual-divider"><span>OR ENTER THE CHARGER CODE</span></div>
+      <form id="manualChargerForm" class="manual-charger-form"><input id="manualChargerId" autocomplete="off" maxlength="24" placeholder="Example: A1" aria-label="Charger ID"><button type="submit">VERIFY CHARGER</button></form>
+      <article id="scannerResult" class="scanner-result" hidden></article>
+      <p class="scanner-privacy">Camera frames stay on this device and are used only to recognize the QR code.</p>
+    </div>
+  </div>
+
+  <footer class="dashboard-footer"><span>Pluggo · EV charging management</span><span>Simulation data · no physical charger connected</span><a href="assets/models/CREDITS.md" target="_blank" rel="noopener">Model credits ↗</a></footer>
+  <dialog id="operatorInfo" class="operator-info"><div><h2>Station operator</h2><button type="button" id="closeOperatorInfo" aria-label="Close operator details">×</button></div><p>This project dashboard demonstrates scheduling, budget control, priority queues, solar allocation and emergency handling.</p><p id="operatorConnection"></p><p>Production operator authentication is future work.</p></dialog>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script src="api-client.js?v=20261104-webglass1"></script>
+  <script src="portal.js?v=20261104-webglass1"></script>
+</body>
+</html>
