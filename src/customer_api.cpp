@@ -2,6 +2,7 @@
 #include <sqlite3.h>
 #include <algorithm>
 #include <chrono>
+#include <cstdint>
 #include <cmath>
 #include <cstdlib>
 #include <filesystem>
@@ -21,7 +22,7 @@ namespace {
 using Json = crow::json::wvalue;
 using Input = crow::json::rvalue;
 using Row = std::vector<std::string>;
-long long nowMs() { return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count(); }
+std::int64_t nowMs() { return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count(); }
 std::string env(const char* key, std::string fallback) { const auto value=std::getenv(key);return value?value:std::move(fallback); }
 std::string randomId() { std::random_device rd; const char* digits="0123456789abcdef";std::string value;for(int i=0;i<32;++i)value+=digits[rd()&15];return value; }
 struct ApiError : std::runtime_error { int status;ApiError(int code,const std::string& message):runtime_error(message),status(code){} };
@@ -29,7 +30,7 @@ std::string string(const Input& value,const char* key,std::string fallback="") {
 double number(const Input& value,const char* key,double fallback) {if(!value.has(key))return fallback;if(value[key].t()!=crow::json::type::Number)throw ApiError(400,std::string(key)+" must be numeric");const double n=value[key].d();if(!std::isfinite(n))throw ApiError(400,"Numbers must be finite");return n;}
 struct Session {
  std::string id,owner,station,connector,vehicle,key,request,reason;
- long long started=0,ended=0;double target=80,budget=300,power=0,energy=0,capacity=40,rate=18,limit=0;bool settled=false;
+ std::int64_t started=0,ended=0;double target=80,budget=300,power=0,energy=0,capacity=40,rate=18,limit=0;bool settled=false;
  Json json() const {Json j;j["id"]=id;j["station"]=station;j["connector"]=connector;j["vehicle"]=vehicle;j["started"]=started;j["ended"]=ended?Json(ended):Json(nullptr);j["target"]=target;j["budget"]=budget;j["power"]=power;j["energy"]=energy;j["capacity"]=capacity;j["rate"]=rate;j["cost"]=energy*rate;j["limit"]=limit;j["currentSoc"]=25+100*energy/capacity;j["settled"]=settled;j["reason"]=reason;j["backendOwned"]=true;if(settled){j["receipt"]["id"]="INV-"+id;j["receipt"]["amountCollected"]=0;j["receipt"]["currency"]="INR";}return j;}
 };
 class Store {
@@ -42,11 +43,11 @@ class Store {
   while((rc=sqlite3_step(raw))==SQLITE_ROW){Row row;for(int i=0;i<sqlite3_column_count(raw);++i){const auto text=sqlite3_column_text(raw,i);row.emplace_back(text?reinterpret_cast<const char*>(text):"");}rows.push_back(std::move(row));}
   if(rc!=SQLITE_DONE)throw std::runtime_error(sqlite3_errmsg(db));return rows;
  }
- Session fromRow(const Row& row) {const auto j=crow::json::load(row[3]);Session s;s.id=row[0];s.owner=row[1];s.key=row[2];s.request=row[4];s.station=string(j,"station");s.connector=string(j,"connector");s.vehicle=string(j,"vehicle");s.started=static_cast<long long>(j["started"].d());s.ended=j["ended"].t()==crow::json::type::Null?0:static_cast<long long>(j["ended"].d());s.target=j["target"].d();s.budget=j["budget"].d();s.power=j["power"].d();s.energy=j["energy"].d();s.capacity=j["capacity"].d();s.rate=j["rate"].d();s.limit=j["limit"].d();s.settled=j["settled"].b();s.reason=string(j,"reason");return s;}
+ Session fromRow(const Row& row) {const auto j=crow::json::load(row[3]);Session s;s.id=row[0];s.owner=row[1];s.key=row[2];s.request=row[4];s.station=string(j,"station");s.connector=string(j,"connector");s.vehicle=string(j,"vehicle");s.started=static_cast<std::int64_t>(j["started"].d());s.ended=j["ended"].t()==crow::json::type::Null?0:static_cast<std::int64_t>(j["ended"].d());s.target=j["target"].d();s.budget=j["budget"].d();s.power=j["power"].d();s.energy=j["energy"].d();s.capacity=j["capacity"].d();s.rate=j["rate"].d();s.limit=j["limit"].d();s.settled=j["settled"].b();s.reason=string(j,"reason");return s;}
  std::vector<Session> sessions(const std::string& owner="") {std::vector<Session> values;auto rows=query("SELECT id,owner,idem,payload,request FROM customer_sessions"+(owner.empty()?std::string():" WHERE owner=?")+" ORDER BY started DESC",owner.empty()?Row{}:Row{owner});for(const auto& row:rows)values.push_back(fromRow(row));return values;}
  void persist(const Session& s) {query("INSERT INTO customer_sessions(id,owner,idem,request,connector,started,ended,settled,payload) VALUES(?,?,?,?,?,?,NULLIF(?,''),?,?) ON CONFLICT(id) DO UPDATE SET ended=excluded.ended,settled=excluded.settled,payload=excluded.payload",{s.id,s.owner,s.key,s.request,s.connector,std::to_string(s.started),s.ended?std::to_string(s.ended):"",s.settled?"1":"0",s.json().dump()});}
- void advance() {if(mode!="clock")return;for(auto s:sessions()){if(s.ended)continue;const double elapsed=std::max(0LL,nowMs()-s.started)/1000.;s.energy=std::min(s.limit,elapsed*s.power*speed/3600.);complete(s);persist(s);}}
- void complete(Session& s) {if(s.energy+1e-9<s.limit)return;s.energy=s.limit;if(!s.ended)s.ended=mode=="clock"?s.started+static_cast<long long>(s.limit/s.power*3600000./speed):nowMs();s.reason=s.budget/s.rate<=((s.target-25)/100*s.capacity)?"Budget limit reached":"Charge target reached";}
+ void advance() {if(mode!="clock")return;for(auto s:sessions()){if(s.ended)continue;const double elapsed=std::max<std::int64_t>(0,nowMs()-s.started)/1000.;s.energy=std::min(s.limit,elapsed*s.power*speed/3600.);complete(s);persist(s);}}
+ void complete(Session& s) {if(s.energy+1e-9<s.limit)return;s.energy=s.limit;if(!s.ended)s.ended=mode=="clock"?s.started+static_cast<std::int64_t>(s.limit/s.power*3600000./speed):nowMs();s.reason=s.budget/s.rate<=((s.target-25)/100*s.capacity)?"Budget limit reached":"Charge target reached";}
  const Input& profile(const std::string& id) {if(!catalog["vehicles"].has(id))throw ApiError(400,"Unknown vehicle profile");return catalog["vehicles"][id];}
  bool busy(const std::string& id) {return !query("SELECT id FROM customer_sessions WHERE connector=? AND ended IS NULL",{id}).empty();}
  struct Connector {std::string station,id,type;double power,rate;bool enabled;};
@@ -54,7 +55,7 @@ class Store {
  bool compatible(const Input& vehicle,const std::string& type) {for(const auto& c:vehicle["connectors"])if(std::string(c.s())==type)return true;return false;}
  bool simulatorOnline() const {return nowMs()-lastSimulator<15000;}
 public:
- std::mutex mutex;std::string mode,key;double speed;long long lastSimulator=0;
+ std::mutex mutex;std::string mode,key;double speed;std::int64_t lastSimulator=0;
  Store():mode(env("CHARGEFLOW_SIMULATION_MODE","clock")),key(env("CHARGEFLOW_SIMULATOR_KEY","local-simulator-key")),speed(std::stod(env("CHARGEFLOW_SIMULATION_SPEED","60"))) {
   if((mode!="clock"&&mode!="meter")||!std::isfinite(speed)||speed<=0||speed>600)throw std::runtime_error("Invalid simulation configuration");
   std::ifstream input(env("CHARGEFLOW_CATALOG_FILE",EV_CATALOG_FILE));std::ostringstream content;content<<input.rdbuf();catalog=crow::json::load(content.str());if(!catalog||!catalog.has("stations")||!catalog.has("vehicles"))throw std::runtime_error("Cannot load customer catalog");
