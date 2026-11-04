@@ -14,6 +14,7 @@ import androidx.webkit.WebViewAssetLoader;
 
 /** Android test shell for the exact repository frontend. No JavaScript/native bridge. */
 public class MainActivity extends Activity {
+    private static final String HOSTED = "https://pluggo-customer-demo.onrender.com/#home";
     private static final String LOCAL = "https://appassets.androidplatform.net/index.html?demo=1#home";
     private WebView web;
     private String startUrl;
@@ -23,7 +24,13 @@ public class MainActivity extends Activity {
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
-        startUrl = withPerformanceProfile(getPreferences(MODE_PRIVATE).getString("startUrl", LOCAL));
+        String savedUrl = getPreferences(MODE_PRIVATE).getString("startUrl", HOSTED);
+        // Earlier test builds defaulted to offline; switch that default once on upgrade.
+        if (getPreferences(MODE_PRIVATE).getInt("hostedDefaultVersion", 0) < 7) {
+            if ("appassets.androidplatform.net".equals(Uri.parse(savedUrl).getHost())) savedUrl = HOSTED;
+            getPreferences(MODE_PRIVATE).edit().putInt("hostedDefaultVersion", 7).putString("startUrl", savedUrl).apply();
+        }
+        startUrl = withPerformanceProfile(savedUrl);
         web = new WebView(this);
         web.setBackgroundColor(Color.rgb(11,11,11));
         web.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, true);
@@ -121,9 +128,9 @@ public class MainActivity extends Activity {
     private void connection() {
         EditText address = new EditText(this);
         address.setSingleLine(true);
-        address.setHint("https://your-pluggo-site.example");
+        address.setHint(HOSTED);
         address.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_URI);
-        String previous=getPreferences(MODE_PRIVATE).getString("serverUrl","");
+        String previous=getPreferences(MODE_PRIVATE).getString("serverUrl",HOSTED);
         address.setText(previous);
         AlertDialog dialog=new AlertDialog.Builder(this).setTitle("Connect Pluggo")
             .setMessage("Enter your hosted app URL or the computer's Wi-Fi address. Offline preview uses simulated data stored on this phone.")

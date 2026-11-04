@@ -28,17 +28,22 @@ The previous operator dashboard remains at `/operator.html`.
 
 ## Android test APK and hosting package
 
+[Download the latest Android APK](https://github.com/Bhumika-gaba23/EV-charging-management/releases/latest/download/pluggo-phone-test.apk)
+— version 1.6-render-connected (Android 8.0+).
+[Release notes and SHA-256 checksum](https://github.com/Bhumika-gaba23/EV-charging-management/releases/tag/v1.6.0).
+
+
 The latest customer website UI includes clear 20px glass, a pill navbar, sharper
 uncapped 3D previews and an enclosed electric cargo three-wheeler. It can be built
 as an Android test APK with
 `sh deployment/build-apk.sh`. The generated package is
-`deployment/apk/pluggo-phone-test.apk`; it opens in an explicit offline preview and
-can connect to a hosted server using its Android Back → Connection settings menu.
+`deployment/apk/pluggo-phone-test.apk`; it opens the Render-hosted customer app by
+default. Android Back → Connection settings also offers an offline preview.
 The older Flutter app remains separately available under `mobile/`.
 
 [Deployment instructions](deployment/README.md) cover APK installation and a
-Docker/Render package preserving the C++ backend. That hosting package is prepared,
-not deployed; creating a Render service requires your account connection. The selected default
+Docker/Render package preserving the C++ backend. The C++ backend is deployed at
+https://pluggo-customer-demo.onrender.com. The selected default
 is free demo hosting with an ephemeral SQLite database; saved data can reset.
 
 ## Live operations website

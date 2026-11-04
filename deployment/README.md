@@ -1,3 +1,16 @@
+## Latest downloadable APK — 4 November 2026
+
+[Download APK](https://github.com/Bhumika-gaba23/EV-charging-management/releases/latest/download/pluggo-phone-test.apk)
+| [Release and checksum](https://github.com/Bhumika-gaba23/EV-charging-management/releases/tag/v1.6.0)
+
+Version 1.6-render-connected, version code 7, Android 8.0+. It opens
+https://pluggo-customer-demo.onrender.com by default. Existing offline-default
+installations migrate once to this hosted app; custom server URLs remain saved.
+Offline preview remains selectable in Android Back → Connection settings and
+contains the current frontend. This is a test-signed sideload APK, not a Play Store
+release. Build, release lint, APK signature verification and bundled-file matching
+passed; physical-phone testing remains pending. Historical build notes follow.
+
 # Pluggo phone build and hosting
 
 ## Android APK — latest website UI
