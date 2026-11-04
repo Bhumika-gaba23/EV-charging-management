@@ -1,5 +1,17 @@
 # Existing Vercel operations website
 
+## Active hosting — 4 November 2026
+
+- Operations dashboard: https://oops-omega.vercel.app
+- C++ backend and customer website: https://pluggo-customer-demo.onrender.com
+- Vercel production now forwards operator API requests to Render using the existing
+  server-side gateway key. It no longer depends on the Mac or temporary tunnel.
+- `/api/health`, `/api/ready`, customer bootstrap and authenticated station access
+  passed against Render. Free hosting remains ephemeral and can sleep when idle.
+- Production deployment: `dpl_5VYno3kwNYUnKxLpV7rh1w3YFpN9`.
+- The APK has not been rebuilt. Earlier deployment notes below are historical.
+
+
 This deploys the Pluggo operations dashboard to the existing Vercel `oops` project,
 whose public URL is https://oops-omega.vercel.app. It preserves the customer app
 in the repository; the operations website uses frontend/operator.html as its root.
