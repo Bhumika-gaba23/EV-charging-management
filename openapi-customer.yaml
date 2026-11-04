@@ -1,0 +1,605 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Pluggo customer API",
+    "version": "1.0.0",
+    "description": "Local customer demo: durable SQLite state and visitor-cookie identity. Separate from the legacy /api/v1 prototype."
+  },
+  "servers": [
+    {
+      "url": "http://127.0.0.1:4173"
+    }
+  ],
+  "security": [
+    {
+      "visitorCookie": []
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "visitorCookie": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "pluggo_guest"
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "required": [
+          "ok",
+          "error"
+        ],
+        "properties": {
+          "ok": {
+            "const": false
+          },
+          "error": {
+            "type": "string"
+          }
+        }
+      },
+      "Snapshot": {
+        "type": "object",
+        "required": [
+          "ok",
+          "state",
+          "catalog",
+          "backend"
+        ],
+        "properties": {
+          "ok": {
+            "const": true
+          },
+          "state": {
+            "type": "object",
+            "properties": {
+              "vehicle": {
+                "type": "string"
+              },
+              "saved": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "sessions": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "catalog": {
+            "type": "object"
+          },
+          "backend": {
+            "type": "object",
+            "properties": {
+              "storage": {
+                "const": "sqlite"
+              },
+              "simulationMode": {
+                "enum": [
+                  "clock",
+                  "meter"
+                ]
+              },
+              "simulationSpeed": {
+                "type": "number"
+              },
+              "simulatorConnected": {
+                "type": "boolean"
+              },
+              "serverTime": {
+                "type": "integer"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/api/customer/bootstrap": {
+      "get": {
+        "summary": "Create or restore visitor snapshot",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Snapshot"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "401": {
+            "description": "Missing or invalid visitor cookie"
+          },
+          "403": {
+            "description": "Origin or mutation header rejected"
+          },
+          "409": {
+            "description": "Unavailable/incompatible connector, unsettled session, active checkout, offline simulator or conflicting idempotency key"
+          },
+          "500": {
+            "description": "Storage failure"
+          }
+        },
+        "security": []
+      }
+    },
+    "/api/customer/state": {
+      "get": {
+        "summary": "Get visitor snapshot",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Snapshot"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "401": {
+            "description": "Missing or invalid visitor cookie"
+          },
+          "403": {
+            "description": "Origin or mutation header rejected"
+          },
+          "409": {
+            "description": "Unavailable/incompatible connector, unsettled session, active checkout, offline simulator or conflicting idempotency key"
+          },
+          "500": {
+            "description": "Storage failure"
+          }
+        }
+      }
+    },
+    "/api/customer/preferences": {
+      "put": {
+        "summary": "Save vehicle and station preferences",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Snapshot"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "401": {
+            "description": "Missing or invalid visitor cookie"
+          },
+          "403": {
+            "description": "Origin or mutation header rejected"
+          },
+          "409": {
+            "description": "Unavailable/incompatible connector, unsettled session, active checkout, offline simulator or conflicting idempotency key"
+          },
+          "500": {
+            "description": "Storage failure"
+          }
+        },
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Pluggo-Request",
+            "required": true,
+            "schema": {
+              "const": "1"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "vehicle": {
+                    "enum": [
+                      "car",
+                      "scooter",
+                      "bike",
+                      "cargo"
+                    ]
+                  },
+                  "saved": {
+                    "type": "array",
+                    "maxItems": 20,
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "vehicle",
+                  "saved"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/customer/verify": {
+      "post": {
+        "summary": "Validate compatible available connector",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "const": true
+                    },
+                    "connector": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "401": {
+            "description": "Missing or invalid visitor cookie"
+          },
+          "403": {
+            "description": "Origin or mutation header rejected"
+          },
+          "409": {
+            "description": "Unavailable/incompatible connector, unsettled session, active checkout, offline simulator or conflicting idempotency key"
+          },
+          "500": {
+            "description": "Storage failure"
+          }
+        },
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Pluggo-Request",
+            "required": true,
+            "schema": {
+              "const": "1"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "station": {
+                    "type": "string"
+                  },
+                  "connector": {
+                    "type": "string"
+                  },
+                  "vehicle": {
+                    "enum": [
+                      "car",
+                      "scooter",
+                      "bike",
+                      "cargo"
+                    ]
+                  }
+                },
+                "required": [
+                  "station",
+                  "connector",
+                  "vehicle"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/customer/sessions": {
+      "post": {
+        "summary": "Start one simulated session",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Snapshot"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "401": {
+            "description": "Missing or invalid visitor cookie"
+          },
+          "403": {
+            "description": "Origin or mutation header rejected"
+          },
+          "409": {
+            "description": "Unavailable/incompatible connector, unsettled session, active checkout, offline simulator or conflicting idempotency key"
+          },
+          "500": {
+            "description": "Storage failure"
+          }
+        },
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Pluggo-Request",
+            "required": true,
+            "schema": {
+              "const": "1"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "description": "Persist per start attempt; replay returns the original session, conflicting payload returns 409."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "station": {
+                    "type": "string"
+                  },
+                  "connector": {
+                    "type": "string"
+                  },
+                  "vehicle": {
+                    "enum": [
+                      "car",
+                      "scooter",
+                      "bike",
+                      "cargo"
+                    ]
+                  },
+                  "target": {
+                    "type": "number",
+                    "minimum": 30,
+                    "maximum": 100,
+                    "default": 80
+                  },
+                  "budget": {
+                    "type": "number",
+                    "minimum": 50,
+                    "maximum": 1000,
+                    "default": 300
+                  }
+                },
+                "required": [
+                  "station",
+                  "connector",
+                  "vehicle"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/customer/sessions/{id}/stop": {
+      "post": {
+        "summary": "Stop your session",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Snapshot"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "401": {
+            "description": "Missing or invalid visitor cookie"
+          },
+          "403": {
+            "description": "Origin or mutation header rejected"
+          },
+          "409": {
+            "description": "Unavailable/incompatible connector, unsettled session, active checkout, offline simulator or conflicting idempotency key"
+          },
+          "500": {
+            "description": "Storage failure"
+          },
+          "404": {
+            "description": "Session not owned by visitor or absent"
+          }
+        },
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Pluggo-Request",
+            "required": true,
+            "schema": {
+              "const": "1"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {},
+                "required": []
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/customer/sessions/{id}/checkout": {
+      "post": {
+        "summary": "Settle ended session collecting zero money",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Snapshot"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "401": {
+            "description": "Missing or invalid visitor cookie"
+          },
+          "403": {
+            "description": "Origin or mutation header rejected"
+          },
+          "409": {
+            "description": "Unavailable/incompatible connector, unsettled session, active checkout, offline simulator or conflicting idempotency key"
+          },
+          "500": {
+            "description": "Storage failure"
+          },
+          "404": {
+            "description": "Session not owned by visitor or absent"
+          }
+        },
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Pluggo-Request",
+            "required": true,
+            "schema": {
+              "const": "1"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {},
+                "required": []
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/customer/reset": {
+      "post": {
+        "summary": "Delete current visitor history and reset preferences",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Snapshot"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "401": {
+            "description": "Missing or invalid visitor cookie"
+          },
+          "403": {
+            "description": "Origin or mutation header rejected"
+          },
+          "409": {
+            "description": "Unavailable/incompatible connector, unsettled session, active checkout, offline simulator or conflicting idempotency key"
+          },
+          "500": {
+            "description": "Storage failure"
+          }
+        },
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Pluggo-Request",
+            "required": true,
+            "schema": {
+              "const": "1"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {},
+                "required": []
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,4 +1,5 @@
 #include "ev_system.hpp"
+#include "customer_api.hpp"
 #include <crow.h>
 
 #include <algorithm>
@@ -182,6 +183,7 @@ crow::json::wvalue sessionJson(const AppSession& session) {
 
 int main() {
     crow::SimpleApp app;
+    pluggo::registerCustomerApi(app);
 
     CROW_WEBSOCKET_ROUTE(app, "/ocpp")
         .onopen([](crow::websocket::connection& connection) {
@@ -209,9 +211,55 @@ int main() {
     CROW_ROUTE(app, "/")([] { return fileResponse("index.html", "text/html; charset=utf-8"); });
     CROW_ROUTE(app, "/styles.css")([] { return fileResponse("styles.css", "text/css; charset=utf-8"); });
     CROW_ROUTE(app, "/theme.css")([] { return fileResponse("theme.css", "text/css; charset=utf-8"); });
+    CROW_ROUTE(app, "/dashboard.css")([] { return fileResponse("dashboard.css", "text/css; charset=utf-8"); });
     CROW_ROUTE(app, "/portal.css")([] { return fileResponse("portal.css", "text/css; charset=utf-8"); });
     CROW_ROUTE(app, "/api-client.js")([] { return fileResponse("api-client.js", "text/javascript; charset=utf-8"); });
     CROW_ROUTE(app, "/portal.js")([] { return fileResponse("portal.js", "text/javascript; charset=utf-8"); });
+    CROW_ROUTE(app, "/operator.html")([] { return fileResponse("operator.html", "text/html; charset=utf-8"); });
+    CROW_ROUTE(app, "/chargeflow.css")([] { return fileResponse("chargeflow.css", "text/css; charset=utf-8"); });
+    CROW_ROUTE(app, "/reference-layout.css")([] { return fileResponse("reference-layout.css", "text/css; charset=utf-8"); });
+    CROW_ROUTE(app, "/wallet.css")([] { return fileResponse("wallet.css", "text/css; charset=utf-8"); });
+    CROW_ROUTE(app, "/cargo-model.js")([] { return fileResponse("cargo-model.js", "text/javascript; charset=utf-8"); });
+    CROW_ROUTE(app, "/performance-profile.js")([] { return fileResponse("performance-profile.js", "text/javascript; charset=utf-8"); });
+    CROW_ROUTE(app, "/session-summary.js")([] { return fileResponse("session-summary.js", "text/javascript; charset=utf-8"); });
+    CROW_ROUTE(app, "/customer-api.js")([] { return fileResponse("customer-api.js", "text/javascript; charset=utf-8"); });
+    CROW_ROUTE(app, "/chargeflow.js")([] { return fileResponse("chargeflow.js", "text/javascript; charset=utf-8"); });
+    CROW_ROUTE(app, "/google-stations.js")([] { return fileResponse("google-stations.js", "text/javascript; charset=utf-8"); });
+    CROW_ROUTE(app, "/demo-data.js")([] { return fileResponse("demo-data.js", "text/javascript; charset=utf-8"); });
+    CROW_ROUTE(app, "/vehicle-scene.js")([] { return fileResponse("vehicle-scene.js", "text/javascript; charset=utf-8"); });
+
+    // Only known presentation assets are exposed; never resolve arbitrary paths.
+    const auto presentationAsset = [](const std::string& relative) {
+        const std::vector<std::string> allowed{
+            "assets/chargeflow.svg", "assets/pluggo.svg", "assets/fonts/montserrat-variable.ttf",
+            "assets/models/car.glb", "assets/models/scooter.glb", "assets/models/bike.glb",
+            "assets/models/car-poster.png", "assets/models/scooter-poster.png",
+            "assets/models/bike-poster.png",
+            "assets/paper-car-silver.png", "assets/paper-scooter-silver.png",
+            "assets/paper-bike-silver.png", "assets/paper-car-chrome.png",
+            "assets/paper-scooter-chrome.png", "assets/paper-bike-chrome.png",
+            "assets/paper-cut-vehicles.png", "vendor/three.module.min.js",
+            "vendor/three.core.min.js", "vendor/OrbitControls.js",
+            "vendor/leaflet.js", "vendor/leaflet.css",
+            "vendor/RoomEnvironment.js", "vendor/GLTFLoader.js",
+            "vendor/utils/BufferGeometryUtils.js"
+        };
+        if (std::find(allowed.begin(), allowed.end(), relative) == allowed.end())
+            return crow::response(404, "Frontend asset not found");
+        const auto extension = relative.substr(relative.find_last_of('.') + 1);
+        const std::string type = extension == "css" ? "text/css; charset=utf-8"
+            : extension == "js" ? "text/javascript; charset=utf-8"
+            : extension == "svg" ? "image/svg+xml"
+            : extension == "ttf" ? "font/ttf"
+            : extension == "glb" ? "model/gltf-binary" : "image/png";
+        return fileResponse(relative, type);
+    };
+    CROW_ROUTE(app, "/assets/<path>")([presentationAsset](const std::string& path) {
+        return presentationAsset("assets/" + path);
+    });
+    CROW_ROUTE(app, "/vendor/<path>")([presentationAsset](const std::string& path) {
+        return presentationAsset("vendor/" + path);
+    });
 
     CROW_ROUTE(app, "/api/health")([] {
         crow::json::wvalue result;
@@ -545,7 +593,7 @@ int main() {
         return jsonResponse(std::move(result));
     });
 
-    CROW_ROUTE(app, "/api/ready")([] { crow::json::wvalue r; r["ok"]=true; r["database"]="configured"; r["identityProvider"]="configured"; return jsonResponse(std::move(r)); });
+    CROW_ROUTE(app, "/api/ready")([] { return pluggo::customerReadiness(); });
     CROW_ROUTE(app, "/metrics")([] { crow::response r(200, "# HELP chargeflow_up Service availability\n# TYPE chargeflow_up gauge\nchargeflow_up 1\n# HELP chargeflow_active_sessions Active sessions\n# TYPE chargeflow_active_sessions gauge\nchargeflow_active_sessions " + std::to_string(appSessions.size()) + "\n"); r.set_header("Content-Type","text/plain; version=0.0.4"); return r; });
     CROW_ROUTE(app, "/api/v1/stations")([] { crow::json::wvalue::list items; crow::json::wvalue s; s["id"]="STN-01";s["name"]="GreenRoute Central";s["location"]="BLR-01";s["online"]=true;items.push_back(std::move(s));crow::json::wvalue r;r["ok"]=true;r["items"]=std::move(items);return jsonResponse(std::move(r)); });
     CROW_ROUTE(app, "/api/v1/stations/<string>/chargers")([](const std::string& stationId) { if(stationId!="STN-01")return errorResponse("Station not found",404);crow::json::wvalue::list items;for(const auto& c:chargers){crow::json::wvalue x;x["id"]=c.id();x["connector"]=toString(c.connector());x["maximumPowerKW"]=c.maxPowerKW();x["source"]=toString(c.powerSource());x["available"]=c.isAvailable();items.push_back(std::move(x));}crow::json::wvalue r;r["ok"]=true;r["items"]=std::move(items);return jsonResponse(std::move(r)); });
@@ -556,5 +604,7 @@ int main() {
     CROW_ROUTE(app, "/api/v1/sessions").methods(crow::HTTPMethod::POST)([](const crow::request& request){if(!authorized(request))return unauthorized();const auto body=crow::json::load(request.body);if(!body)return errorResponse("Invalid JSON body");const std::string key=request.get_header_value("Idempotency-Key");if(key.empty())return errorResponse("Idempotency-Key header is required",400);std::lock_guard<std::mutex> lock(stateMutex);const std::string vehicleId=text(body,"vehicleId");auto vehicle=std::find_if(vehicleProfiles.begin(),vehicleProfiles.end(),[&](const auto& x){return x.id==vehicleId;});if(vehicle==vehicleProfiles.end())return errorResponse("Vehicle profile not found",404);for(const auto& s:appSessions)if(s.idempotencyKey==key){auto r=sessionJson(s);r["ok"]=true;r["idempotentReplay"]=true;return jsonResponse(std::move(r),200);}Vehicle dv{vehicle->registration,vehicle->batteryCapacityKWh,vehicle->currentSoc,.17,vehicle->connector,vehicle->maxChargeRateKW};const double target=number(body,"targetSoc",80);const auto plan=TimeBoundScheduler::createPlan(dv,chargers,target,std::max(.25,number(body,"availableHours",2)));AppSession s;s.id="SES-"+std::to_string(200+nextSession++);s.userId="USR-101";s.vehicleId=vehicleId;s.chargerId=plan.chargerId;s.currentSoc=vehicle->currentSoc;s.targetSoc=target;s.powerKW=plan.assignedPowerKW;s.maximumBudget=number(body,"maximumBudget",1000);s.departureTime=text(body,"departureTime");s.idempotencyKey=key;appSessions.push_back(s);auto r=sessionJson(appSessions.back());r["ok"]=true;r["deadlineFeasible"]=plan.deadlineFeasible;return jsonResponse(std::move(r),201);});
 
     std::cout << "ChargeFlow web portal: http://localhost:18080\n";
-    app.port(18080).multithreaded().run();
+    const char* port = std::getenv("CHARGEFLOW_PORT");
+    const char* bind = std::getenv("CHARGEFLOW_BIND_ADDRESS");
+    app.bindaddr(bind ? bind : "127.0.0.1").port(port ? std::stoi(port) : 18080).multithreaded().run();
 }

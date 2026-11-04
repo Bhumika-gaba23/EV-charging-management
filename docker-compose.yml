@@ -32,6 +32,9 @@ services:
       CHARGEFLOW_OIDC_ISSUER: http://keycloak:8080/realms/chargeflow
       CHARGEFLOW_LOG_FORMAT: json
       CHARGEFLOW_FRONTEND_DIR: /app/frontend
+      CHARGEFLOW_SIMULATION_MODE: meter
+      CHARGEFLOW_CUSTOMER_DB: /data/pluggo.sqlite3
+    volumes: ["customer_data:/data"]
     secrets: [db_password]
     depends_on:
       postgres: {condition: service_healthy}
@@ -45,8 +48,7 @@ services:
   ocpp-simulator:
     build: {context: ocpp-simulator}
     environment:
-      OCPP_CSMS_URL: ws://api:18080/ocpp
-      OCPP_CHARGER_COUNT: 4
+      PLUGGO_CUSTOMER_API: http://api:18080
     depends_on: {api: {condition: service_healthy}}
   web:
     image: nginx:1.27-alpine
@@ -59,4 +61,4 @@ services:
 secrets:
   db_password: {file: ./secrets/db_password.txt}
   keycloak_admin_password: {file: ./secrets/keycloak_admin_password.txt}
-volumes: {postgres_data: {}}
+volumes: {postgres_data: {}, customer_data: {}}

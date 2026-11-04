@@ -42,14 +42,16 @@ if(EV_BUILD_WEB_API)
     )
     FetchContent_MakeAvailable(Crow)
 
-    add_executable(ev_web_api src/api_server.cpp src/ev_system.cpp)
+    find_package(SQLite3 REQUIRED)
+    add_executable(ev_web_api src/api_server.cpp src/customer_api.cpp src/ev_system.cpp)
     target_include_directories(ev_web_api PRIVATE include)
-    target_link_libraries(ev_web_api PRIVATE Crow::Crow)
+    target_link_libraries(ev_web_api PRIVATE Crow::Crow SQLite::SQLite3)
     if(WIN32)
         target_link_libraries(ev_web_api PRIVATE ws2_32 mswsock)
     endif()
     target_compile_definitions(ev_web_api PRIVATE
         EV_FRONTEND_DIR="${CMAKE_SOURCE_DIR}/frontend"
+        EV_CATALOG_FILE="${CMAKE_SOURCE_DIR}/database/seed/customer_catalog.json"
     )
 endif()
 
