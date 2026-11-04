@@ -12,7 +12,8 @@ import urllib.request
 port=int(os.getenv('PORT','10000'))
 if not 1024<=port<=65535 or port==18080:raise SystemExit('PORT must be 1024–65535 and different from the private API port 18080')
 root=Path(__file__).resolve().parent
-gateway_key=os.getenv('PLUGGO_GATEWAY_KEY') or secrets.token_hex(32)
+# Clipboard copies can include a trailing newline; normalize before validation.
+gateway_key=os.getenv('PLUGGO_GATEWAY_KEY', '').strip() or secrets.token_hex(32)
 if not re.fullmatch(r'[A-Za-z0-9_+/=\-]{32,128}',gateway_key):raise SystemExit('PLUGGO_GATEWAY_KEY must be a 32–128 character URL-safe/hex/base64 token')
 config=(root/'nginx.conf.template').read_text().replace('__PORT__',str(port)).replace('__GATEWAY_KEY__',gateway_key)
 config_path=Path('/tmp/pluggo-nginx.conf');config_path.write_text(config);config_path.chmod(0o600)

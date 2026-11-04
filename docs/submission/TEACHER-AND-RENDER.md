@@ -50,7 +50,7 @@ no separate npm/Python build or start command is needed in Render.
    by Vercel. From the repository on this Mac, copy it without displaying it:
 
    ```sh
-   pbcopy < secrets/operator_gateway_key.txt
+   tr -d '\r\n' < secrets/operator_gateway_key.txt | pbcopy
    ```
 
    Paste into Render's environment-variable field, never a report or Git commit.
