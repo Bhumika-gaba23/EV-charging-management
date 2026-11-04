@@ -46,6 +46,14 @@ Docker/Render package preserving the C++ backend. The C++ backend is deployed at
 https://pluggo-customer-demo.onrender.com. The selected default
 is free demo hosting with an ephemeral SQLite database; saved data can reset.
 
+## Shared phone and dashboard demonstration
+
+Customer charging sessions now appear in the operator Overview, using the same
+C++/SQLite data and simulator meter readings. Connector occupancy, battery level,
+energy and estimated cost refresh every three seconds; stopping charging releases
+the connector and keeps the finished session visible. Use the hosted app, not
+its offline preview. See [demonstration steps](docs/submission/SHARED-CHARGING-DEMO.md).
+
 ## Live operations website
 
 The existing Vercel operations dashboard is published at

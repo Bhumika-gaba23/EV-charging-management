@@ -333,3 +333,8 @@ html[data-theme] .nav-item {transition:background-color .25s var(--d-ease),box-s
 html[data-theme] .customer-session-row {display:flex;flex-direction:column;gap:7px;padding:18px 0;border-bottom:1px solid var(--d-line);font-size:13px;}
 html[data-theme] .customer-session-row small,html[data-theme] .session-sync-note {color:var(--d-muted);font-size:11px;line-height:1.6;}
 html[data-theme] .customer-session-row span {font-size:12px;}
+html[data-theme] .slot-row .vehicle small {display:block;line-height:1.6;}
+html[data-theme] .slot-row .slot-number {white-space:nowrap;font-size:9px;}
+html[data-theme] .customer-sessions-card {align-self:start;}
+html[data-theme] .session-card .slot-list {max-height:560px;overflow-y:auto;scrollbar-width:thin;}
+html[data-theme] .slot-row .source {font-size:8px;}
