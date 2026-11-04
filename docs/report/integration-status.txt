@@ -1,0 +1,1 @@
+Passed during report preparation using the existing local C++ API build: persistence, isolation, request validation, idempotency, connector races, target caps, receipt replay and authenticated simulator metering.
