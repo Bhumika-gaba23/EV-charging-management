@@ -3,6 +3,53 @@
 A modular console demonstration of range safety, deadline-based charging,
 budget caps, dynamic queuing, solar/grid allocation, and emergency overrides.
 
+## Pluggo customer web app
+
+Pluggo is the main customer browser app. Home widgets, station availability,
+vehicle preferences, charging sessions and demo receipts use the C++ API with
+persistent SQLite storage. A separate WebSocket simulator supplies charging updates.
+
+```sh
+python3 -m pip install -r ocpp-simulator/requirements.txt
+python3 tools/run-local.py --build
+```
+
+Open **http://127.0.0.1:4173/#home**. This starts the frontend proxy, API and simulator
+together. The build needs a C++17 compiler, SQLite development headers and Git;
+CMake is optional on macOS. Data is saved under ignored `data/pluggo.sqlite3`.
+See [backend setup and API guide](docs/customer-backend.md) for tests, ports and
+limitations, and [frontend/README.md](frontend/README.md) for the customer journey.
+
+Google Places search still requires your own browser key. No key is needed for
+the fictional demo stations or simulated charging. Checkout collects ₹0.
+`?demo=1` explicitly selects the standalone browser-only UI preview. Static Vercel
+hosting supports that preview; server mode needs an API/proxy deployment.
+The previous operator dashboard remains at `/operator.html`.
+
+## Android test APK and hosting package
+
+The latest customer website UI includes clear 20px glass, a pill navbar, sharper
+uncapped 3D previews and an enclosed electric cargo three-wheeler. It can be built
+as an Android test APK with
+`sh deployment/build-apk.sh`. The generated package is
+`deployment/apk/pluggo-phone-test.apk`; it opens in an explicit offline preview and
+can connect to a hosted server using its Android Back → Connection settings menu.
+The older Flutter app remains separately available under `mobile/`.
+
+[Deployment instructions](deployment/README.md) cover APK installation and a
+Docker/Render package preserving the C++ backend. That hosting package is prepared,
+not deployed; creating a Render service requires your account connection. The selected default
+is free demo hosting with an ephemeral SQLite database; saved data can reset.
+
+## Live operations website
+
+The existing Vercel operations dashboard is published at
+**https://oops-omega.vercel.app** with Pluggo styling and a same-origin gateway to
+the C++ engine. The current backend link is temporary and depends on this Mac
+remaining awake and online. See [deployment details](deployment/vercel-dashboard/README.md).
+The hosted dashboard uses the legacy domain demonstration APIs; customer app
+history and totals remain separate under `/api/customer`.
+
 ## Portfolio platform quick start
 
 The repository now includes a PostgreSQL schema, Keycloak realm, Flutter customer
@@ -25,8 +72,8 @@ docker compose up --build
    `http://localhost:8080`, and the API at `http://localhost:18080`.
 
 Demo identities are `driver` and `operator`; change the seeded passwords before
-sharing a deployment. The API currently keeps runtime sessions in memory while the
-database schema and container are ready for the repository migration. The checked-in
+sharing a deployment. The customer `/api/customer` routes use SQLite. Legacy operator `/api/v1` routes
+still keep prototype sessions in memory; PostgreSQL is not the customer store. The checked-in
 Keycloak realm and OIDC client are integration scaffolding; JWT validation must replace
 the development bearer token before public deployment.
 
@@ -38,6 +85,12 @@ flutter pub get
 flutter test
 flutter run
 ```
+
+The Android app now includes a standalone black and silver college demo for New
+Delhi: car/scooter/bike profiles, compatible station discovery, optional Google
+Maps and QR scanning, accelerated charging, budget limits and a ₹0 demo checkout.
+It needs no running backend or payment account. See [mobile/README.md](mobile/README.md)
+for Android setup, optional Maps configuration, APK builds and a presentation walkthrough.
 
 ## Build
 

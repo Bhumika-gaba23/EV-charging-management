@@ -1,0 +1,19 @@
+# Free demonstration template, not deployed. SQLite is ephemeral: data can be lost.
+# Select deployment/render-demo.yaml as the Blueprint path in Render.
+services:
+  - type: web
+    name: pluggo-customer-demo
+    runtime: docker
+    plan: free
+    numInstances: 1
+    dockerfilePath: ./deployment/Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/ready
+    autoDeployTrigger: off
+    envVars:
+      - key: CHARGEFLOW_CUSTOMER_DB
+        value: /tmp/pluggo/pluggo.sqlite3
+      - key: CHARGEFLOW_COOKIE_SECURE
+        value: "1"
+      - key: PLUGGO_GATEWAY_KEY
+        sync: false

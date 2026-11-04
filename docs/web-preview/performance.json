@@ -1,0 +1,95 @@
+{
+  "hardware": "Chrome on Apple M2, ANGLE Metal",
+  "note": "Measured after loading; mobile viewport uses the desktop GPU, not a physical Android device. Frame rate depends on hardware.",
+  "samples": [
+    {
+      "viewport": "1440×1000, DPR 1",
+      "targetFps": 60,
+      "fps": 60,
+      "frameTimeP95": 16.8,
+      "drawCalls": 17,
+      "triangles": 118922,
+      "pixelRatio": 1,
+      "vehicle": "car",
+      "ready": true,
+      "running": true,
+      "bounds": [
+        4.800000000000001,
+        1.4350240974614399,
+        2.123491858899869
+      ],
+      "cameraDistance": 6.301015929642481,
+      "motionEnabled": true,
+      "manualVisible": true,
+      "intersecting": true,
+      "documentHidden": false
+    },
+    {
+      "viewport": "1440×1000, DPR 1",
+      "targetFps": 60,
+      "fps": 60,
+      "frameTimeP95": 16.7,
+      "drawCalls": 14,
+      "triangles": 85416,
+      "pixelRatio": 1,
+      "vehicle": "scooter",
+      "ready": true,
+      "running": true,
+      "bounds": [
+        3.4000000000000004,
+        2.094813621340728,
+        1.4599129578834664
+      ],
+      "cameraDistance": 5.4,
+      "motionEnabled": true,
+      "manualVisible": true,
+      "intersecting": true,
+      "documentHidden": false
+    },
+    {
+      "viewport": "1440×1000, DPR 1",
+      "targetFps": 60,
+      "fps": 60,
+      "frameTimeP95": 16.7,
+      "drawCalls": 2,
+      "triangles": 66342,
+      "pixelRatio": 1,
+      "vehicle": "bike",
+      "ready": true,
+      "running": true,
+      "bounds": [
+        3.9,
+        1.8104034394025803,
+        0.9973333552479744
+      ],
+      "cameraDistance": 5.4,
+      "motionEnabled": true,
+      "manualVisible": true,
+      "intersecting": true,
+      "documentHidden": false
+    },
+    {
+      "viewport": "390×844, DPR 1, desktop GPU",
+      "targetFps": 60,
+      "fps": 60,
+      "frameTimeP95": 16.8,
+      "drawCalls": 17,
+      "triangles": 118922,
+      "pixelRatio": 1,
+      "vehicle": "car",
+      "ready": true,
+      "running": true,
+      "bounds": [
+        4.800000000000001,
+        1.4350240974614399,
+        2.123491858899869
+      ],
+      "cameraDistance": 9.827991807032172,
+      "motionEnabled": true,
+      "manualVisible": true,
+      "intersecting": true,
+      "documentHidden": false
+    }
+  ],
+  "errors": []
+}

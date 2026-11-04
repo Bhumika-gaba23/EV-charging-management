@@ -1,0 +1,23 @@
+# Hosting template, not yet deployed. This configuration uses a paid persistent disk.
+# Select deployment/render-persistent.yaml as the Blueprint path in Render.
+services:
+  - type: web
+    name: pluggo-customer
+    runtime: docker
+    plan: starter
+    numInstances: 1
+    dockerfilePath: ./deployment/Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/ready
+    autoDeployTrigger: off
+    envVars:
+      - key: CHARGEFLOW_CUSTOMER_DB
+        value: /data/pluggo.sqlite3
+      - key: CHARGEFLOW_COOKIE_SECURE
+        value: "1"
+      - key: PLUGGO_GATEWAY_KEY
+        sync: false
+    disk:
+      name: pluggo-customer-data
+      mountPath: /data
+      sizeGB: 1

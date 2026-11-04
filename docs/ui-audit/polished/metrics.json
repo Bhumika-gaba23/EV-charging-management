@@ -1,0 +1,58 @@
+[
+  {
+    "device": "desktop",
+    "route": "home",
+    "overflow": false,
+    "smallText": 0,
+    "errors": []
+  },
+  {
+    "device": "desktop",
+    "route": "stations",
+    "overflow": false,
+    "smallText": 0,
+    "errors": []
+  },
+  {
+    "device": "desktop",
+    "route": "sessions",
+    "overflow": false,
+    "smallText": 0,
+    "errors": []
+  },
+  {
+    "device": "desktop",
+    "route": "garage",
+    "overflow": false,
+    "smallText": 0,
+    "errors": []
+  },
+  {
+    "device": "phone",
+    "route": "home",
+    "overflow": false,
+    "smallText": 0,
+    "errors": []
+  },
+  {
+    "device": "phone",
+    "route": "stations",
+    "overflow": false,
+    "smallText": 1,
+    "errors": []
+  },
+  {
+    "device": "phone",
+    "route": "sessions",
+    "overflow": false,
+    "smallText": 1,
+    "errors": []
+  },
+  {
+    "device": "phone",
+    "route": "garage",
+    "overflow": false,
+    "smallText": 1,
+    "errors": []
+  }
+]
