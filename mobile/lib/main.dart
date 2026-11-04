@@ -1,15 +1,31 @@
 import 'package:flutter/material.dart';
-import 'package:mobile_scanner/mobile_scanner.dart';
-import 'core/api_client.dart';
+import 'package:provider/provider.dart';
+import 'demo/demo_store.dart';
+import 'screens/home.dart';
+import 'theme.dart';
 
-void main()=>runApp(const ChargeFlowApp());
-class ChargeFlowApp extends StatelessWidget { const ChargeFlowApp({super.key}); @override Widget build(BuildContext c)=>MaterialApp(debugShowCheckedModeBanner:false,title:'ChargeFlow',theme:ThemeData(colorScheme:ColorScheme.fromSeed(seedColor:const Color(0xff1f5c43),surface:const Color(0xfffffdf7)),useMaterial3:true),home:const VehicleGate()); }
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final store = DemoStore();
+  await store.restore();
+  runApp(ChargeFlowApp(store: store));
+}
 
-class VehicleGate extends StatelessWidget { const VehicleGate({super.key}); @override Widget build(BuildContext context)=>Scaffold(body:SafeArea(child:Padding(padding:const EdgeInsets.all(24),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[const Spacer(),const Text('CHARGEFLOW',style:TextStyle(letterSpacing:3,fontWeight:FontWeight.w800)),const SizedBox(height:24),Text('What are you\ncharging today?',style:Theme.of(context).textTheme.displaySmall?.copyWith(fontWeight:FontWeight.w700,color:const Color(0xff173d2d))),const SizedBox(height:28),for(final v in ['EV Car','EV Bike','EV Scooter']) Padding(padding:const EdgeInsets.only(bottom:12),child:ListTile(tileColor:const Color(0xffeef1e7),shape:RoundedRectangleBorder(borderRadius:BorderRadius.circular(14)),title:Text(v,style:const TextStyle(fontWeight:FontWeight.w700)),subtitle:Text(v=='EV Car'?'20-150 kWh / AC + DC':v=='EV Bike'?'2-15 kWh / Standard AC':'1-8 kWh / Standard AC'),trailing:const Icon(Icons.arrow_forward),onTap:()=>Navigator.pushReplacement(context,MaterialPageRoute(builder:(_)=>HomeScreen(vehicleType:v))))),const Spacer()]))) ); }
+class ChargeFlowApp extends StatelessWidget {
+  const ChargeFlowApp({super.key, this.store});
+  final DemoStore? store;
 
-class HomeScreen extends StatefulWidget { const HomeScreen({super.key,required this.vehicleType}); final String vehicleType; @override State<HomeScreen> createState()=>_HomeScreenState(); }
-class _HomeScreenState extends State<HomeScreen>{ final api=ApiClient('http://10.0.2.2:18080'); int index=0; @override void initState(){super.initState();api.initialize();} @override Widget build(BuildContext context){final pages=[Dashboard(type:widget.vehicleType),const SessionsPage(),const ProfilePage()];return Scaffold(appBar:AppBar(title:const Text('ChargeFlow'),actions:[IconButton(icon:const Icon(Icons.qr_code_scanner),onPressed:()=>Navigator.push(context,MaterialPageRoute(builder:(_)=>ChargerScanner(api:api))))]),body:pages[index],bottomNavigationBar:NavigationBar(selectedIndex:index,onDestinationSelected:(v)=>setState(()=>index=v),destinations:const [NavigationDestination(icon:Icon(Icons.ev_station),label:'Charge'),NavigationDestination(icon:Icon(Icons.bolt),label:'Sessions'),NavigationDestination(icon:Icon(Icons.person),label:'Profile')]));}}
-class Dashboard extends StatelessWidget{const Dashboard({super.key,required this.type});final String type;@override Widget build(BuildContext c)=>ListView(padding:const EdgeInsets.all(20),children:[Text(type,style:Theme.of(c).textTheme.labelLarge),const SizedBox(height:8),Text('Ready to charge?',style:Theme.of(c).textTheme.headlineMedium?.copyWith(fontWeight:FontWeight.w700)),const SizedBox(height:18),Card(child:Padding(padding:const EdgeInsets.all(20),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[const Text('NEXT STEP',style:TextStyle(letterSpacing:2)),const SizedBox(height:12),const Text('Scan the QR code on a charger to view connector, power and availability.'),const SizedBox(height:16),FilledButton.icon(onPressed:()=>Navigator.push(c,MaterialPageRoute(builder:(_)=>ChargerScanner(api:ApiClient('http://10.0.2.2:18080')))),icon:const Icon(Icons.qr_code_scanner),label:const Text('Scan charger'))]))]);}
-class ChargerScanner extends StatelessWidget{const ChargerScanner({super.key,required this.api});final ApiClient api;String id(String raw){final u=Uri.tryParse(raw);return (u?.queryParameters['chargerId']??(u?.pathSegments.isNotEmpty==true?u!.pathSegments.last:raw.replaceFirst(RegExp('^CHARGEFLOW:',caseSensitive:false),''))).toUpperCase();}@override Widget build(BuildContext c)=>Scaffold(appBar:AppBar(title:const Text('Scan charger')),body:MobileScanner(onDetect:(capture)async{final raw=capture.barcodes.firstOrNull?.rawValue;if(raw==null)return;final chargerId=id(raw);try{final data=await api.charger(chargerId);if(c.mounted){Navigator.pop(c);showDialog(context:c,builder:(_)=>AlertDialog(title:Text('Charger ${data['id']}'),content:Text('${data['connector']} / ${data['maximumPowerKW']} kW / ${data['source']}'),actions:[TextButton(onPressed:()=>Navigator.pop(c),child:const Text('Continue'))]));}}catch(_){}}));}
-class SessionsPage extends StatelessWidget{const SessionsPage({super.key});@override Widget build(BuildContext c)=>const Center(child:Text('Live and historical sessions')) ;}
-class ProfilePage extends StatelessWidget{const ProfilePage({super.key});@override Widget build(BuildContext c)=>const Center(child:Text('Vehicles, budget and emergency preferences'));}
+  @override
+  Widget build(BuildContext context) {
+    final app = MaterialApp(
+      debugShowCheckedModeBanner: false,
+      title: 'ChargeFlow',
+      theme: chargeFlowTheme,
+      home: const HomeScreen(),
+    );
+    if (store != null) {
+      return ChangeNotifierProvider.value(value: store!, child: app);
+    }
+    return ChangeNotifierProvider(create: (_) => DemoStore(), child: app);
+  }
+}

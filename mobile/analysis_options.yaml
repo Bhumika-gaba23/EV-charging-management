@@ -1,2 +1,6 @@
+analyzer:
+  exclude:
+    - build/**
+    - android/**
 include: package:flutter_lints/flutter.yaml
 linter: {rules: {prefer_final_locals: true, use_build_context_synchronously: true}}
