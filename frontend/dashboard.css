@@ -329,3 +329,7 @@ html[data-theme="light"] :is(.scanner-shell,.operator-info) {background:linear-g
 html[data-theme] :is(input[type=number],input[type=text],input:not([type]),select) {background:var(--d-field);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-color:var(--d-line);}
 html[data-theme] .nav-item {transition:background-color .25s var(--d-ease),box-shadow .25s var(--d-ease),color .25s ease;}
 @media(prefers-reduced-motion:reduce) {html[data-theme] .nav-item {transition:none;}}
+
+html[data-theme] .customer-session-row {display:flex;flex-direction:column;gap:7px;padding:18px 0;border-bottom:1px solid var(--d-line);font-size:13px;}
+html[data-theme] .customer-session-row small,html[data-theme] .session-sync-note {color:var(--d-muted);font-size:11px;line-height:1.6;}
+html[data-theme] .customer-session-row span {font-size:12px;}

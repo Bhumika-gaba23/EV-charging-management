@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="styles.css">
   <link rel="stylesheet" href="theme.css">
   <link rel="stylesheet" href="portal.css">
-  <link rel="stylesheet" href="dashboard.css?v=20261104-webglass1">
+  <link rel="stylesheet" href="dashboard.css?v=20261104-sharedsessions">
   <link rel="icon" href="assets/pluggo.svg" type="image/svg+xml">
 </head>
 <body>
@@ -56,8 +56,8 @@
     </button>
     <div class="station-card">
       <span class="pulse"></span>
-      <div><small>STATION PROFILE</small><strong>GreenRoute Central</strong></div>
-      <span class="station-code">BLR—01</span>
+      <div><small>STATION PROFILE</small><strong>Customer charging network</strong></div>
+      <span class="station-code">SIMULATED</span>
     </div>
   </aside>
 
@@ -65,7 +65,7 @@
     <header class="command-header">
       <div class="command-context">
         <span class="command-kicker">CHARGING OPERATIONS</span>
-        <div><h2 id="currentViewTitle">Station overview</h2><span class="header-location">GreenRoute Central / BLR-01</span></div>
+        <div><h2 id="currentViewTitle">Station overview</h2><span class="header-location">Customer charging network / Shared sessions</span></div>
       </div>
       <div class="header-actions">
         <button id="openScanner" class="scan-charger-button" type="button"><i aria-hidden="true"></i><span><small>QUICK ACTION</small><strong>SCAN CHARGER</strong></span></button>
@@ -93,28 +93,19 @@
         <article class="metric hero-metric">
           <p>ACTIVE POWER</p><strong><span id="activePower">82.4</span><small> kW</small></strong>
           <div class="power-wave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
-          <span class="trend">Demonstration station load</span>
+          <span class="trend">Active customer sessions</span>
         </article>
         <article class="metric"><p>CHARGING</p><strong id="occupiedCount">03<small> / 04</small></strong><span>slots occupied</span></article>
-        <article class="metric solar-metric"><p>SOLAR SHARE</p><strong id="solarShare">68<small>%</small></strong><span>56.1 kW renewable</span></article>
-        <article class="metric"><p>QUEUE</p><strong id="queueCount">03</strong><span>vehicles waiting</span></article>
+        <article class="metric"><p>ENERGY DELIVERED</p><strong><span id="energyDelivered">0.00</span><small> kWh</small></strong><span>Customer simulation sessions</span></article>
+        <article class="metric"><p>ESTIMATED SPEND</p><strong><small>₹ </small><span id="estimatedSpend">0.00</span></strong><span>Simulation estimate · no payment</span></article>
       </div>
 
       <div class="overview-grid">
         <article class="card session-card">
-          <div class="card-heading"><div><p class="eyebrow">CHARGING FLOOR</p><h2>Charging floor</h2></div><span class="tag">4 SLOTS</span></div>
-          <div class="slot-list">
-            <div class="slot-row"><span class="slot-number">A1</span><div class="vehicle"><strong>KA 01 EV 1001</strong><small>DC · CCS2</small></div><div class="charge-bar"><i style="width:72%"></i></div><strong>72%</strong><span class="source solar">SOLAR</span></div>
-            <div class="slot-row"><span class="slot-number">A2</span><div class="vehicle"><strong>KA 05 MX 2077</strong><small>DC · CCS2</small></div><div class="charge-bar"><i style="width:44%"></i></div><strong>44%</strong><span class="source grid">GRID</span></div>
-            <div class="slot-row"><span class="slot-number">B1</span><div class="vehicle"><strong>KA 03 AT 9012</strong><small>AC · TYPE 2</small></div><div class="charge-bar"><i style="width:89%"></i></div><strong>89%</strong><span class="source solar">SOLAR</span></div>
-            <div class="slot-row muted"><span class="slot-number">B2</span><div class="vehicle"><strong>AVAILABLE</strong><small>DC · CHAdeMO</small></div><div class="charge-bar"><i style="width:0"></i></div><strong>—</strong><span class="source ready">READY</span></div>
-          </div>
+          <div class="card-heading"><div><p class="eyebrow">CHARGING FLOOR</p><h2>Charging floor</h2></div><span class="tag">CUSTOMER CONNECTORS</span></div>
+          <div class="slot-list"><p class="queue-empty">Loading shared customer connectors…</p></div>
         </article>
-        <article class="card impact-card">
-          <p class="eyebrow">SIMULATED IMPACT</p><h2>Cleaner by design.</h2>
-          <div class="impact-number">148.6<small> kg</small></div><p>CO₂ emissions avoided</p>
-          <div class="ring"><div><strong>74%</strong><span>solar goal</span></div></div>
-        </article>
+        <article class="card customer-sessions-card"><p class="eyebrow">SHARED WITH THE PHONE APP</p><h2>Recent charging sessions</h2><p class="session-sync-note">Updates every 3 seconds · simulated meter readings</p><div id="customerSessionList" aria-live="polite"></div></article>
       </div>
     </section>
 
@@ -183,7 +174,7 @@
   <footer class="dashboard-footer"><span>Pluggo · EV charging management</span><span>Simulation data · no physical charger connected</span><a href="assets/models/CREDITS.md" target="_blank" rel="noopener">Model credits ↗</a></footer>
   <dialog id="operatorInfo" class="operator-info"><div><h2>Station operator</h2><button type="button" id="closeOperatorInfo" aria-label="Close operator details">×</button></div><p>This project dashboard demonstrates scheduling, budget control, priority queues, solar allocation and emergency handling.</p><p id="operatorConnection"></p><p>Production operator authentication is future work.</p></dialog>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script src="api-client.js?v=20261104-webglass1"></script>
-  <script src="portal.js?v=20261104-webglass1"></script>
+  <script src="api-client.js?v=20261104-sharedsessions"></script>
+  <script src="portal.js?v=20261104-sharedsessions"></script>
 </body>
 </html>

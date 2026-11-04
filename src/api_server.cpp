@@ -268,30 +268,7 @@ int main() {
         return jsonResponse(std::move(result));
     });
 
-    CROW_ROUTE(app, "/api/station")([] {
-        crow::json::wvalue::list slots;
-        const char* statuses[] = {"occupied", "occupied", "occupied", "available"};
-        const int levels[] = {72, 44, 89, 0};
-        const char* vehicles[] = {"KA 01 EV 1001", "KA 05 MX 2077", "KA 03 AT 9012", ""};
-        for (std::size_t i = 0; i < chargers.size(); ++i) {
-            crow::json::wvalue slot;
-            slot["id"] = chargers[i].id();
-            slot["status"] = statuses[i];
-            slot["vehicle"] = vehicles[i];
-            slot["soc"] = levels[i];
-            slot["powerKW"] = chargers[i].maxPowerKW();
-            slot["connector"] = toString(chargers[i].connector());
-            slot["source"] = toString(chargers[i].powerSource());
-            slots.push_back(std::move(slot));
-        }
-        crow::json::wvalue result;
-        result["ok"] = true;
-        result["activePowerKW"] = 82.4;
-        result["solarShare"] = 68;
-        result["carbonOffsetKg"] = 148.6;
-        result["slots"] = std::move(slots);
-        return jsonResponse(std::move(result));
-    });
+    CROW_ROUTE(app, "/api/station")([] { return pluggo::customerOperatorStation(); });
 
     CROW_ROUTE(app, "/api/plan").methods(crow::HTTPMethod::POST)([](const crow::request& request) {
         try {

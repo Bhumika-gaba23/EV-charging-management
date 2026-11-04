@@ -85,11 +85,21 @@ def main():
             assert m.call('state')[1]['backend']['simulatorConnected']
             result=m.call('sessions','POST',value,'meter-session')[1];mid=result['sessionId'];time.sleep(2.2)
             measured=m.call('state')[1]['state']['sessions'][0];assert measured['energy']>0 and measured['energy']<=2
+            with urllib.request.urlopen('http://127.0.0.1:18082/api/station') as response: overview=json.load(response)
+            slot=next(x for x in overview['slots'] if x['id']=='CP-01')
+            assert slot['status']=='occupied' and slot['energyKWh']>0 and slot['estimatedCost']>0
+            assert overview['dataSource']=='customer-sessions' and overview['activePowerKW']==50
+            assert overview['recentSessions'][0]['id']==mid and 'owner' not in overview['recentSessions'][0]
             auth={'X-Charger-Key':'integration-test-key'}
             m.call('simulator/meter','POST',{'sessionId':mid,'connector':'CP-01','energyKWh':0},extra=auth)
             assert m.call('state')[1]['state']['sessions'][0]['energy']>=measured['energy']
             m.call('simulator/meter','POST',{'sessionId':mid,'connector':'CP-01','energyKWh':999,'cost':-1,'currentSoc':150},extra=auth)
             measured=m.call('state')[1]['state']['sessions'][0];assert measured['ended'] and measured['cost']==36 and measured['currentSoc']==30
+            with urllib.request.urlopen('http://127.0.0.1:18082/api/station') as response: overview=json.load(response)
+            assert next(x for x in overview['slots'] if x['id']=='CP-01')['status']=='available'
+            assert overview['activePowerKW']==0 and overview['recentSessions'][0]['ended']
+            assert overview['recentSessions'][0]['cost']==36
+            print('PASS: shared operator overview reflects customer session, meter readings, completion and connector release.')
             print('PASS: real C++ API, SQLite restart persistence, guest isolation, CSRF/origin checks, server validation, idempotency, connector races, target cap, receipt replay, and authenticated WebSocket simulator metering.')
         finally:
             stop(sim);stop(meter_server);stop(server)

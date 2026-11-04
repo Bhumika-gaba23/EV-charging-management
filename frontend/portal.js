@@ -101,20 +101,26 @@ function updateClock() {
 
 function renderSlots(slots) {
   fallback.slots = slots;
-  const occupied = slots.filter(slot => slot.status !== "available").length;
+  const occupied = slots.filter(slot => slot.status === "occupied").length;
   $("#occupiedCount").innerHTML = `${String(occupied).padStart(2,"0")}<small> / ${String(slots.length).padStart(2,"0")}</small>`;
-  const host = $(".slot-list");
-  host.innerHTML = slots.map(slot => {
-    const available = slot.status === "available";
-    const solar = String(slot.source).toLowerCase().includes("solar");
-    return `<div class="slot-row ${available ? "muted" : ""}" style="--charge:${slot.soc}%">
-      <span class="slot-number">${slot.id}</span>
-      <div class="vehicle"><strong>${available ? "AVAILABLE" : slot.vehicle}</strong><small>${slot.connector} / ${slot.status.toUpperCase()}</small></div>
-      <div class="charge-bar"><i style="width:${slot.soc}%"></i></div>
-      <strong>${available ? "READY" : `${slot.soc}%`}</strong>
-      <span class="source ${available ? "ready" : solar ? "solar" : "grid"}">${available ? "READY" : solar ? "SOLAR" : "GRID"}</span>
+  $(".slot-list").innerHTML = slots.map(slot => {
+    const active = slot.status === "occupied";
+    const soc = Math.max(0,Math.min(100,Number(slot.soc)||0));
+    return `<div class="slot-row ${active ? "" : "muted"}">
+      <span class="slot-number">${escapeHTML(slot.id)}</span>
+      <div class="vehicle"><strong>${escapeHTML(active ? slot.vehicle : slot.status.toUpperCase())}</strong><small>${escapeHTML(slot.stationName||"")} · ${escapeHTML(slot.connector)} · ${escapeHTML(slot.id)}</small>${active ? `<small>${Number(slot.powerKW).toFixed(1)} kW · ${Number(slot.energyKWh||0).toFixed(2)} kWh · ₹${Number(slot.estimatedCost||0).toFixed(2)}</small>` : ""}</div>
+      <div class="charge-bar"><i style="width:${soc}%"></i></div>
+      <strong>${active ? `${soc.toFixed(1)}%` : "—"}</strong>
+      <span class="source ${active ? "solar" : "ready"}">${active ? "CHARGING" : escapeHTML(slot.status.toUpperCase())}</span>
     </div>`;
   }).join("");
+}
+function renderStation(data) {
+  renderSlots(data.slots);
+  $("#activePower").textContent = data.activePowerKW.toFixed(1);
+  $("#energyDelivered").textContent = Number(data.energyKWh||0).toFixed(2);
+  $("#estimatedSpend").textContent = Number(data.estimatedCost||0).toFixed(2);
+  $("#customerSessionList").innerHTML = (data.recentSessions||[]).map(s=>`<div class="customer-session-row"><strong>${escapeHTML(s.vehicleName||s.vehicle)} · ${escapeHTML(s.connector)}</strong><small>${s.ended ? "Finished" : "Charging"} · ${Number(s.currentSoc).toFixed(1)}% battery</small><span>${Number(s.energy).toFixed(2)} kWh · ₹${Number(s.cost).toFixed(2)} estimated</span></div>`).join("") || '<p class="queue-empty">Start charging in the phone app to see the same session here.</p>';
 }
 
 function renderQueue(items) {
@@ -127,15 +133,13 @@ function renderQueue(items) {
   </div>`).join("");
   if (!items.length) $("#queueList").innerHTML = '<p class="queue-empty">No vehicles waiting. Add an arrival to begin.</p>';
   $("#serveNext").disabled = !items.length;
-  $("#queueCount").textContent = String(items.length).padStart(2,"0");
+
 }
 
 async function refreshStation() {
   try {
     const data = await api.station();
-    renderSlots(data.slots);
-    $("#activePower").textContent = data.activePowerKW.toFixed(1);
-    $("#solarShare").innerHTML = `${data.solarShare}<small>%</small>`;
+    renderStation(data);
     setApiStatus(true);
   } catch {
     renderSlots(fallback.slots);
@@ -362,5 +366,5 @@ const initialPanel = location.hash.slice(1);
 const initialButton = document.querySelector(`.nav-item[data-target="${["overview","schedule","queue","energy","emergency"].includes(initialPanel) ? initialPanel : "overview"}"]`);
 initialButton?.click();
 updateClock(); setInterval(()=>{if(!document.hidden)updateClock();},1000); previewSolar();
-Promise.all([api.health(),api.station(),api.queue()]).then(([_,station,queue])=>{setApiStatus(true);renderSlots(station.slots);renderQueue(queue.items);}).catch(()=>{setApiStatus(false);renderSlots(fallback.slots);renderQueue(fallback.queue);});
-setInterval(()=>{ if(!document.hidden){refreshStation();if(apiOnline)refreshQueue();} },10000);
+Promise.all([api.health(),api.station(),api.queue()]).then(([_,station,queue])=>{setApiStatus(true);renderStation(station);renderQueue(queue.items);}).catch(()=>{setApiStatus(false);renderSlots(fallback.slots);renderQueue(fallback.queue);});
+setInterval(()=>{ if(!document.hidden){refreshStation();if(apiOnline)refreshQueue();} },3000);
