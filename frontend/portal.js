@@ -115,7 +115,21 @@ function renderSlots(slots) {
     </div>`;
   }).join("");
 }
+let recentVehicleData = {recentSessions:[],slots:[]};
+function renderRecentVehicles() {
+  const filter = $("#recentVehicleFilter").value;
+  const sessions = (recentVehicleData.recentSessions||[]).filter(s=>filter==="all"||(filter==="finished"?Boolean(s.ended):!s.ended));
+  $("#recentVehicleCount").textContent = `${sessions.length} session${sessions.length===1?"":"s"}`;
+  const time = value => value ? new Date(value).toLocaleString("en-IN",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}) : "In progress";
+  $("#recentVehicleList").innerHTML = sessions.map(s=>{
+    const station=(recentVehicleData.slots||[]).find(c=>c.id===s.connector)?.stationName||s.station;
+    const duration=Math.max(0,Math.round(((s.ended||Date.now())-s.started)/1000));
+    return `<article class="card recent-vehicle-card"><div class="card-heading"><div><p class="eyebrow">${escapeHTML(station)}</p><h2>${escapeHTML(s.vehicleName||s.vehicle)}</h2></div><span class="tag">${s.ended?"FINISHED":"CHARGING"}</span></div><p class="recent-session-id">${escapeHTML(s.id)}</p><dl class="recent-vehicle-details"><div><dt>Connector</dt><dd>${escapeHTML(s.connector)}</dd></div><div><dt>Battery level</dt><dd>${Number(s.currentSoc).toFixed(1)}% / ${Number(s.target)}% target</dd></div><div><dt>Energy delivered</dt><dd>${Number(s.energy).toFixed(2)} kWh</dd></div><div><dt>Estimated cost</dt><dd>₹${Number(s.cost).toFixed(2)}</dd></div><div><dt>Charging power</dt><dd>${Number(s.power).toFixed(1)} kW</dd></div><div><dt>Tariff</dt><dd>₹${Number(s.rate).toFixed(2)}/kWh</dd></div><div><dt>Started</dt><dd>${escapeHTML(time(s.started))}</dd></div><div><dt>Ended</dt><dd>${escapeHTML(time(s.ended))}</dd></div><div><dt>Elapsed time</dt><dd>${Math.floor(duration/60)}m ${duration%60}s</dd></div><div><dt>Receipt</dt><dd>${s.settled?"Checkout completed":"Not checked out"}</dd></div></dl><p class="session-sync-note">${escapeHTML(s.reason||"Charging in progress")} · Simulated charging; no payment collected.</p></article>`;
+  }).join("")||`<article class="card"><p class="queue-empty">${filter==="finished"?"No finished charging sessions yet.":filter==="active"?"No vehicles are currently charging.":"No recent vehicles yet. Start a session in the connected phone app."}</p></article>`;
+}
+$("#recentVehicleFilter").addEventListener("change",renderRecentVehicles);
 function renderStation(data) {
+  recentVehicleData=data;renderRecentVehicles();
   renderSlots(data.slots);
   $("#activePower").textContent = data.activePowerKW.toFixed(1);
   $("#energyDelivered").textContent = Number(data.energyKWh||0).toFixed(2);
@@ -157,7 +171,7 @@ $$('.nav-item').forEach(button => button.addEventListener('click', () => {
   $$('.panel').forEach(panel => panel.classList.remove('active-panel'));
   button.classList.add('active');
   $(`#${button.dataset.target}`).classList.add('active-panel');
-  const titles = { overview:"Station overview", schedule:"Charging planner", queue:"Smart waiting queue", energy:"Solar energy studio", emergency:"Emergency control" };
+  const titles = { overview:"Station overview", recent:"Recent vehicles", schedule:"Charging planner", queue:"Smart waiting queue", energy:"Solar energy studio", emergency:"Emergency control" };
   $("#currentViewTitle").textContent = titles[button.dataset.target] || "Operations center";
   $$('.nav-item').forEach(item => item.setAttribute("aria-current",item === button ? "page" : "false"));
   history.replaceState(null,"",`#${button.dataset.target}`);
@@ -363,7 +377,7 @@ $("#emergencyForm").addEventListener("submit",async event=>{
 $("#dismissBanner").addEventListener("click",()=>$("#emergencyBanner").classList.remove("active"));
 
 const initialPanel = location.hash.slice(1);
-const initialButton = document.querySelector(`.nav-item[data-target="${["overview","schedule","queue","energy","emergency"].includes(initialPanel) ? initialPanel : "overview"}"]`);
+const initialButton = document.querySelector(`.nav-item[data-target="${["overview","recent","schedule","queue","energy","emergency"].includes(initialPanel) ? initialPanel : "overview"}"]`);
 initialButton?.click();
 updateClock(); setInterval(()=>{if(!document.hidden)updateClock();},1000); previewSolar();
 Promise.all([api.health(),api.station(),api.queue()]).then(([_,station,queue])=>{setApiStatus(true);renderStation(station);renderQueue(queue.items);}).catch(()=>{setApiStatus(false);renderSlots(fallback.slots);renderQueue(fallback.queue);});

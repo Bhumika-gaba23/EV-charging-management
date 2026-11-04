@@ -18,7 +18,12 @@ operator. This remains a public college demo, not production operator login.
    estimated cost. Recent sessions shows the matching connector.
 5. Stop charging in the app. The connector becomes available, power drops, and
    the recent entry changes to Finished while retaining delivered energy/cost.
-6. Complete checkout in the app to show the simulated receipt. No money is taken.
+6. Open **Recent vehicles** in the left navigation (or `#recent`). Filter All,
+   Finished charging, or Currently charging. Cards show the latest 10 sessions:
+   vehicle/station/connector, battery/target, energy, estimated cost, tariff,
+   session power, start/end times, elapsed wall-clock time and checkout status.
+   This list updates with the same three-second snapshot as Overview.
+7. Complete checkout in the app to show the simulated receipt. No money is taken.
 
 The dashboard aggregates the five demo stations rather than mapping their sessions
 onto the unrelated A1/A2/B1/B2 planner bays. Schedule, queue and solar remain

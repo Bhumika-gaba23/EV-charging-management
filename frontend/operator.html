@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="styles.css">
   <link rel="stylesheet" href="theme.css">
   <link rel="stylesheet" href="portal.css">
-  <link rel="stylesheet" href="dashboard.css?v=20261104-sharedsessions">
+  <link rel="stylesheet" href="dashboard.css?v=20261104-recentvehicles">
   <link rel="icon" href="assets/pluggo.svg" type="image/svg+xml">
 </head>
 <body>
@@ -46,10 +46,11 @@
     </a>
     <nav aria-label="Dashboard navigation">
       <button class="nav-item active" data-target="overview"><span>01</span>Overview</button>
-      <button class="nav-item" data-target="schedule"><span>02</span>Schedule</button>
-      <button class="nav-item" data-target="queue"><span>03</span>Smart queue</button>
-      <button class="nav-item" data-target="energy"><span>04</span>Solar energy</button>
-      <button class="nav-item" data-target="emergency"><span>05</span>Emergency</button>
+      <button class="nav-item" data-target="recent"><span>02</span>Recent vehicles</button>
+      <button class="nav-item" data-target="schedule"><span>03</span>Schedule</button>
+      <button class="nav-item" data-target="queue"><span>04</span>Smart queue</button>
+      <button class="nav-item" data-target="energy"><span>05</span>Solar energy</button>
+      <button class="nav-item" data-target="emergency"><span>06</span>Emergency</button>
     </nav>
     <button id="themeToggle" class="theme-toggle" type="button" aria-label="Switch to light mode" aria-pressed="true">
       <span class="theme-icon">DARK</span><span class="theme-label">APPEARANCE</span><i aria-hidden="true"></i>
@@ -107,6 +108,12 @@
         </article>
         <article class="card customer-sessions-card"><p class="eyebrow">SHARED WITH THE PHONE APP</p><h2>Recent charging sessions</h2><p class="session-sync-note">Updates every 3 seconds · simulated meter readings</p><div id="customerSessionList" aria-live="polite"></div></article>
       </div>
+    </section>
+
+    <section id="recent" class="panel">
+      <div class="section-heading"><p class="eyebrow">CUSTOMER CHARGING HISTORY</p><h2>Recent vehicles</h2><p>Latest 10 sessions shared with the phone app. Costs are simulated estimates.</p></div>
+      <div class="recent-toolbar"><label for="recentVehicleFilter">Show sessions</label><select id="recentVehicleFilter"><option value="all">All recent vehicles</option><option value="finished">Finished charging</option><option value="active">Currently charging</option></select><span id="recentVehicleCount" aria-live="polite"></span></div>
+      <div id="recentVehicleList" class="recent-vehicle-grid" aria-live="polite"><article class="card"><p class="queue-empty">Loading recent vehicles…</p></article></div>
     </section>
 
     <section id="schedule" class="panel">
@@ -174,7 +181,7 @@
   <footer class="dashboard-footer"><span>Pluggo · EV charging management</span><span>Simulation data · no physical charger connected</span><a href="assets/models/CREDITS.md" target="_blank" rel="noopener">Model credits ↗</a></footer>
   <dialog id="operatorInfo" class="operator-info"><div><h2>Station operator</h2><button type="button" id="closeOperatorInfo" aria-label="Close operator details">×</button></div><p>This project dashboard demonstrates scheduling, budget control, priority queues, solar allocation and emergency handling.</p><p id="operatorConnection"></p><p>Production operator authentication is future work.</p></dialog>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script src="api-client.js?v=20261104-sharedsessions"></script>
-  <script src="portal.js?v=20261104-sharedsessions"></script>
+  <script src="api-client.js?v=20261104-recentvehicles"></script>
+  <script src="portal.js?v=20261104-recentvehicles"></script>
 </body>
 </html>

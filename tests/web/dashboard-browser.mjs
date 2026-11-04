@@ -18,9 +18,9 @@ try {
  for(const theme of ['light','dark']) {await p.locator('#themeToggle').click();assert.ok(await p.evaluate(()=>['light','dark'].includes(document.documentElement.dataset.theme)));}
  for(const width of [1440,1024,390,320]) {
   await p.setViewportSize({width,height:900});
-  for(const view of ['overview','schedule','queue','energy','emergency']) {await p.locator(`.nav-item[data-target="${view}"]`).click();await p.waitForTimeout(100);assert.ok(await p.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),`${width}:${view} overflow`);}
+  for(const view of ['overview','recent','schedule','queue','energy','emergency']) {await p.locator(`.nav-item[data-target="${view}"]`).click();await p.waitForTimeout(100);assert.ok(await p.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),`${width}:${view} overflow`);}
  }
  await p.setViewportSize({width:1440,height:1000});await p.locator('.nav-item[data-target="overview"]').click();await p.waitForTimeout(450);await p.screenshot({path:'docs/ui-audit/dashboard/desktop-overview.png',fullPage:true});
  await p.setViewportSize({width:390,height:844});await p.waitForTimeout(300);await p.screenshot({path:'docs/ui-audit/dashboard/phone-overview.png',fullPage:true});
- assert.deepEqual(errors,[]);console.log('PASS: dashboard C++/demo planner, cargo profile, queue add/serve, solar simulation, emergency flow, operator info, manual scanner, both themes and 20 responsive route checks.');
+ assert.deepEqual(errors,[]);console.log('PASS: dashboard C++/demo planner, cargo profile, queue add/serve, solar simulation, emergency flow, operator info, manual scanner, both themes and 24 responsive route checks.');
 }finally{await browser.close();}

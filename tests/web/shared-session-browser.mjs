@@ -23,6 +23,13 @@ try {
  await call(`sessions/${created.sessionId}/stop`,{});
  await p.waitForFunction(id=>[...document.querySelectorAll('.slot-row')].some(r=>r.textContent.includes(id)&&r.textContent.includes('AVAILABLE')),connector.id,{timeout:15000});
  await p.waitForFunction(()=>document.querySelector('#customerSessionList').textContent.includes('Finished'));
- await p.screenshot({path:'docs/ui-audit/shared-sessions/stopped.png',fullPage:true});assert.deepEqual(errors,[]);
+ await p.screenshot({path:'docs/ui-audit/shared-sessions/stopped.png',fullPage:true});await p.locator('.nav-item[data-target="recent"]').click();
+ await p.locator('#recentVehicleFilter').selectOption('finished');
+ const detail=p.locator('.recent-vehicle-card').filter({hasText:created.sessionId});await detail.waitFor();
+ assert.match(await detail.innerText(),/FINISHED/);assert.match(await detail.innerText(),/Energy delivered/);assert.match(await detail.innerText(),/Stopped by you/);
+ await p.locator('#recentVehicleFilter').selectOption('active');assert.equal(await p.locator('.recent-vehicle-card').filter({hasText:created.sessionId}).count(),0);
+ await p.locator('#recentVehicleFilter').selectOption('all');await p.waitForTimeout(500);await p.screenshot({path:'docs/ui-audit/shared-sessions/recent-vehicles.png',fullPage:true});
+ for(const width of [390,320]){await p.setViewportSize({width,height:844});assert.ok(await p.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));}
+ assert.deepEqual(errors,[]);
  console.log('PASS: customer session appears on live operator dashboard; metering advances energy/cost; stopping releases connector and updates history.');
 } finally {if(started)await call('reset',{});await browser.close();}

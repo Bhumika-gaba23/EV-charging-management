@@ -338,3 +338,13 @@ html[data-theme] .slot-row .slot-number {white-space:nowrap;font-size:9px;}
 html[data-theme] .customer-sessions-card {align-self:start;}
 html[data-theme] .session-card .slot-list {max-height:560px;overflow-y:auto;scrollbar-width:thin;}
 html[data-theme] .slot-row .source {font-size:8px;}
+
+html[data-theme] .recent-toolbar {display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:20px 0;color:var(--d-muted);font-size:12px;}
+html[data-theme] .recent-toolbar select {width:auto;min-width:180px;border-radius:999px;padding:12px 18px;color:var(--d-text);}
+html[data-theme] .recent-vehicle-grid {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;}
+html[data-theme] .recent-vehicle-card h2 {font-size:22px;}
+html[data-theme] .recent-session-id {font-size:10px;color:var(--d-muted);overflow-wrap:anywhere;margin:14px 0;}
+html[data-theme] .recent-vehicle-details {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;margin:22px 0;}
+html[data-theme] .recent-vehicle-details dt {color:var(--d-muted);font-size:11px;margin-bottom:6px;}
+html[data-theme] .recent-vehicle-details dd {margin:0;font-size:13px;overflow-wrap:anywhere;}
+@media(max-width:850px){html[data-theme] .recent-vehicle-grid {grid-template-columns:minmax(0,1fr);}}
