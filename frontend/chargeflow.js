@@ -1533,18 +1533,20 @@ $("#previewMotion").onchange = (event) => {
     savedMotion = String(animationAllowed);
   } catch {}
 };
-function useFallback() {
+// permanent = the 3D view cannot work here (no WebGL, lost context). A slow load is not permanent.
+function useFallback(permanent = true) {
   clearTimeout(modelPosterTimer);
+  if (permanent !== false) $("#stageLoading").hidden = true;
   $("#vehicleFallback").style.opacity = "1";
   $("#vehicleCanvas").classList.remove("model-ready");
   $("#vehicleFallback").hidden = false;
   $("#vehicleCanvas").hidden = true;
 }
-(performanceProfile === "poster" ? Promise.reject(new Error("Low-memory poster preview")) : import("./vehicle-scene.js?v=20261118-spin1"))
+(performanceProfile === "poster" ? Promise.reject(new Error("Low-memory poster preview")) : import("./vehicle-scene.js?v=20261118-spin2"))
   .then(({ createShowroom }) => {
     sceneController = createShowroom(
       $("#vehicleCanvas"),
-      useFallback,
+      () => useFallback(true),
       (status, id) => {
         if (id !== state.vehicle) return;
         const ready = status === "ready";
@@ -1552,8 +1554,9 @@ function useFallback() {
         // Swap only after the first 3D frame is drawn; overlapping poster/canvas
         // fades create double outlines as the continuously rotating model moves.
         $("#vehicleFallback").hidden = ready;
+        $("#stageLoading").hidden = ready;
         $("#vehicleFallback").style.opacity = "1";
-        if (!ready) modelPosterTimer = setTimeout(useFallback, 12000);
+        if (!ready) modelPosterTimer = setTimeout(() => useFallback(false), 30000);
         $("#vehicleCanvas").hidden = false;
         $("#vehicleCanvas").classList.toggle("model-ready", ready);
       },
@@ -1567,7 +1570,7 @@ function useFallback() {
     sceneController.setShadowStrength(shadowStrength());
     sceneController.setVisible(page === "home" || page === "garage");
   })
-  .catch(useFallback);
+  .catch(() => useFallback(true));
 const tick = setInterval(() => {
   if (document.hidden) return;
   if (!localPreview) { if (!document.hidden) refreshBackend(); return; }

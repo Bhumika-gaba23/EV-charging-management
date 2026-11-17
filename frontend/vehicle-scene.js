@@ -6,10 +6,10 @@ import { RoomEnvironment } from "./vendor/RoomEnvironment.js";
 
 // Licensed, optimized GLB assets. See assets/models/CREDITS.md for provenance.
 const files = {
-  car: { url: "assets/models/car.glb?v=white-polish-4", length: 4.8 },
-  scooter: { url: "assets/models/scooter.glb?v=white-polish-4", length: 3.4 },
+  car: { url: "assets/models/car.glb?v=white-polish-5", length: 4.8 },
+  scooter: { url: "assets/models/scooter.glb?v=white-polish-5", length: 3.4 },
   cargo: { url: null, length: 3.6 },
-  bike: { url: "assets/models/bike.glb?v=white-polish-4", length: 3.9 },
+  bike: { url: "assets/models/bike.glb?v=white-polish-5", length: 3.9 },
 };
 
 export function createShowroom(container, onFailure, onStatus = () => {}) {
@@ -531,6 +531,7 @@ export function createShowroom(container, onFailure, onStatus = () => {}) {
     reset,
     // The contact shadow is tuned for dark backgrounds; light surfaces need a much softer one.
     setShadowStrength(value) {
+      shadow.visible = value > 0.001;
       shadow.material.opacity = value;
       dirty = true;
       syncAnimation();

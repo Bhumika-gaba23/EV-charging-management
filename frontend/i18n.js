@@ -115,6 +115,7 @@
     "View receipt": "रसीद देखें", "Pay now": "अभी भुगतान करें", "View live session": "लाइव सेशन देखें",
 
     // Garage and settings
+    "Loading 3D…": "3D लोड हो रहा है…",
     "Settings": "सेटिंग्स", "Account": "खाता",
     "Pluggo matches chargers to the vehicle you pick here.": "आप यहाँ जो वाहन चुनते हैं, Pluggo उसी के हिसाब से चार्जर दिखाता है।",
     "Your vehicle": "आपका वाहन", "Appearance": "रूप-रंग", "Style": "स्टाइल",

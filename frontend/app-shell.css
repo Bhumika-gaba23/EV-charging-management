@@ -581,3 +581,20 @@ html[data-style="light"] .garage-vehicles .garage-vehicle img { filter: none !im
 /* Garage: the vehicle floats on the page, no panel behind it. */
 .garage-stage .vehicle-stage { background: none !important; border: 0 !important; box-shadow: none !important; -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
 .garage-stage .vehicle-stage::before, .garage-stage .vehicle-stage::after { display: none !important; }
+
+/* "Loading 3D…" while the model downloads, so a slow phone never looks like a broken still image. */
+.vehicle-stage { position: relative; }
+.stage-loading {
+  position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); z-index: 6; display: inline-flex; align-items: center; gap: 8px;
+  padding: 6px 12px; border-radius: 999px; font-size: 12px; color: var(--s-muted); background: var(--s-raised, rgb(20 20 22 / 70%));
+  border: 1px solid var(--s-line); pointer-events: none; white-space: nowrap;
+}
+.stage-loading[hidden] { display: none; }
+.stage-loading i { width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--s-muted); border-top-color: transparent; animation: stage-spin .9s linear infinite; }
+@keyframes stage-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .stage-loading i { animation: none; } }
+
+/* Light is flat: separation comes from hairline borders, never from drop shadows. */
+html[data-style="light"] *, html[data-style="light"] *::before, html[data-style="light"] *::after { box-shadow: none !important; text-shadow: none !important; }
+html[data-style="light"] :is(img, canvas, svg) { filter: none !important; }
+html[data-style="light"] :is(.glass-nav, .home-widget, .home-station, .session-card, .activity-card, .week-card, .live-banner, .settings-group, .garage-vehicles, .station-selection, .flow-dialog, .vehicle-menu) { border: 1px solid rgb(17 18 20 / 10%) !important; }

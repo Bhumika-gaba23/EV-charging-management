@@ -35,7 +35,7 @@ jobs:
         with:
           node-version: "22"
       - name: Frontend logic tests
-        run: node --test tests/web/demo.test.mjs tests/web/session-summary.test.mjs tests/web/discovery.test.mjs
+        run: node --test tests/web/demo.test.mjs tests/web/session-summary.test.mjs tests/web/discovery.test.mjs tests/web/preload.test.mjs
 
   render-image:
     runs-on: ubuntu-latest

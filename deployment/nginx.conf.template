@@ -6,6 +6,12 @@ http {
     default_type application/octet-stream;
     access_log /dev/stdout;
     client_max_body_size 16k;
+    # Compress scripts, styles and the 3D models: the phone downloads about a third of the bytes.
+    gzip on;
+    gzip_comp_level 6;
+    gzip_min_length 1024;
+    gzip_vary on;
+    gzip_types application/octet-stream model/gltf-binary application/javascript text/javascript text/css image/svg+xml application/json text/plain;
     server {
         listen __PORT__;
         root /app/frontend;
@@ -27,6 +33,8 @@ http {
             proxy_set_header Connection "";
         }
         location /api/ { return 404; }
+        # Images and 3D models change rarely (their URLs carry a version), so phones keep them a week.
+        location ~* \.(glb|png|webp|jpg|svg)$ { try_files $uri =404; add_header Cache-Control "public, max-age=604800"; }
         location / { try_files $uri $uri/ =404; add_header Cache-Control "no-cache"; }
     }
 }
