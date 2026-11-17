@@ -54,6 +54,7 @@ const paths = {
   receipt: '<path d="M5 3h14v19l-3-2-4 2-4-2-3 2ZM8 7h8m-8 4h8m-8 4h5"/>',
   stop: '<rect x="5" y="5" width="14" height="14" rx="3"/>',
   camera: '<path d="M3 7h4l2-3h6l2 3h4v13H3Z"/><circle cx="12" cy="13" r="4"/>',
+  share: '<path d="M12 3v12m0-12-4 4m4-4 4 4M5 12v8h14v-8"/>',
 };
 const icon = (name) =>
   `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true">${paths[name] || paths.bolt}</svg>`;
@@ -108,6 +109,28 @@ let googleMap = null,
   googleMarkers = [],
   mapsFailed = false;
 const currency = (n) => `₹${n.toFixed(2)}`;
+// Charging & payment preferences from Settings. They shape the charge sheet defaults and the
+// goals behind the activity rings; they stay on this device.
+const PREF_OPTIONS = {
+  target: [60, 70, 80, 90, 100],
+  budget: [100, 200, 300, 500, 750, 1000],
+  monthlyBudget: [500, 1000, 2000, 3000, 5000],
+  energyGoal: [25, 50, 100, 150, 250],
+  chargesGoal: [4, 8, 12, 16, 24],
+};
+const prefs = { target: 80, budget: 300, monthlyBudget: 2000, energyGoal: 100, chargesGoal: 8 };
+try {
+  const saved = JSON.parse(localStorage.getItem("pluggo.prefs") || "{}");
+  for (const key of Object.keys(prefs)) if (PREF_OPTIONS[key].includes(Number(saved[key]))) prefs[key] = Number(saved[key]);
+} catch {}
+function savePrefs() { try { localStorage.setItem("pluggo.prefs", JSON.stringify(prefs)); } catch {} }
+// Typical efficiency per vehicle type, used for an estimated (not measured) range.
+const KM_PER_KWH = { car: 6.5, scooter: 30, bike: 25, cargo: 7.5 };
+function batteryLevel(id) {
+  const session = state.sessions.find(item => item.vehicle === id);
+  return Math.min(100, Math.max(0, session ? soc(session) : 25));
+}
+function estimatedRange(id) { return Math.round(batteryLevel(id) / 100 * vehicles[id].capacity * (KM_PER_KWH[id] || 6)); }
 const activeSession = () => state.sessions.find((s) => !s.ended);
 const pendingSession = () => state.sessions.find((s) => s.ended && !s.settled);
 const total = (s) => s.backendOwned ? s.cost : s.energy * stationById(s.station).rate;
@@ -215,7 +238,7 @@ function updateLens() {
 }
 function navigate() {
   const next = location.hash.slice(1) || "home";
-  page = ["home", "stations", "sessions", "garage"].includes(next)
+  page = ["home", "stations", "sessions", "garage", "settings"].includes(next)
     ? next
     : "home";
   if ($("#flowDialog").open) $("#flowDialog").close();
@@ -230,20 +253,23 @@ function navigate() {
   );
   document.body.dataset.page = page;
   updateLens();
-  sceneController?.setVisible(page === "home");
+  // One live 3D stage: it moves into Garage there and back to Home everywhere else.
+  const stage = $("#vehicleStage"), stageHome = page === "garage" ? $("#garageStage") : $(".vehicle-wallet");
+  if (stage.parentElement !== stageHome) stageHome.prepend(stage);
+  sceneController?.setVisible(page === "home" || page === "garage");
   if (page === "stations") {
     renderStations();
     renderMap();
     if (!locationRequested) { locationRequested = true; requestDeviceLocation(); }
   }
   if (page === "sessions") renderSessions();
-  if (page === "garage" && stationSource === "real") $("#mapSettings").open = true;
+  if (page === "settings" && stationSource === "real") $("#mapSettings").open = true;
   window.scrollTo({ top: 0, behavior: "instant" });
   animatePage($("#page-" + page));
   $("#vehicleDropdown").open = false;
   if (page === "home") { renderHomeWidgets(); playPluggoAnimation(); }
   else stopPluggoAnimation();
-  document.title = `Pluggo — ${{ home: "Your next charge, closer.", stations: "Find your spot", sessions: "Your charging story", garage: "My garage" }[page]}`;
+  document.title = `Pluggo — ${{ home: "Your next charge, closer.", stations: "Find your spot", sessions: "Your charging story", garage: "My garage", settings: "Settings" }[page]}`;
 }
 function animatePage(section) {
   if (matchMedia("(prefers-reduced-motion: reduce)").matches || document.documentElement.dataset.motion === "off") return;
@@ -406,9 +432,22 @@ function renderHomeWidgets() {
   $("#homeBatteryCapacity").textContent = `${(level / 100 * vehicle.capacity).toFixed(1)} of ${vehicle.capacity} kWh`;
   $("#homeBatteryProgress").value = level;
   $("#homeBatteryProgress").textContent = `${Math.round(level)}%`;
-  $("#homePowerValue").replaceChildren(document.createTextNode(String(power)), Object.assign(document.createElement("span"), {textContent:" kW"}));
-  $("#homePowerStatus").textContent = charging ? "Charging now" : `Up to ${vehicle.power} kW`;
+  // While charging this widget shows live power; otherwise the more useful estimated range.
+  $("#homePowerLabel").textContent = charging ? "Charging power" : "Estimated range";
+  $("#homePowerValue").replaceChildren(document.createTextNode(String(charging ? power : estimatedRange(state.vehicle))), Object.assign(document.createElement("span"), {textContent: charging ? " kW" : " km"}));
+  $("#homePowerStatus").textContent = charging ? "Charging now" : `Typical · charges up to ${vehicle.power} kW`;
+  const blocking = activeSession() || pendingSession();
+  $("#homeCtaLabel").textContent = activeSession() ? "View live charge" : blocking ? "Pay for your charge" : "Start charging";
 }
+// One clear action on Home: resume what is in progress, or go straight to the nearest free charger.
+$("#homeStartCharging").onclick = () => {
+  const blocking = activeSession() || pendingSession();
+  if (blocking) { openSession(blocking); return; }
+  const nearest = stations
+    .filter(s => compatible(s, state.vehicle) && available(s, state.vehicle))
+    .sort((a, b) => distance(a, origin) - distance(b, origin))[0];
+  if (nearest) openStation(nearest); else location.hash = "stations";
+};
 function stopPluggoAnimation() {
   $("#pluggoMotion").getAnimations({subtree:true}).forEach(animation => animation.cancel());
 }
@@ -479,7 +518,7 @@ function renderSelectedStation(station) {
   $("#stationSelection").dataset.stationId = station.id;
   const plugs = station.connectors.filter(connector => vehicles[state.vehicle].connectors.includes(connector.type));
   const free = plugs.filter(connector => connector.available).length;
-  $("#stationSelection").innerHTML = `<div class="station-sheet-handle" aria-hidden="true"></div><div class="station-sheet-heading"><span class="sheet-station-icon">${icon("station")}</span><div><h2>${station.name}</h2><p>${station.area} · Pluggo station</p></div><span class="sheet-distance">${distance(station, origin).toFixed(1)} km</span></div><div class="sheet-availability"><span class="availability-dot ${free ? "" : "busy"}" aria-hidden="true"></span>${free ? `${free} compatible plug${free === 1 ? "" : "s"} available` : "Compatible plugs in use"}</div><dl class="station-sheet-stats"><div><dt>Power</dt><dd>${Math.max(...plugs.map(connector => connector.power))} kW</dd></div><div><dt>Plugs</dt><dd>${free} / ${plugs.length}</dd></div><div><dt>Tariff</dt><dd>₹${station.rate}/kWh</dd></div></dl><div class="station-sheet-actions"><button class="primary-button" data-station="${station.id}" aria-label="View ${station.name}">View chargers</button><a href="${stationDirections(station)}" target="_blank" rel="noopener noreferrer" class="secondary-button">Directions ↗</a></div>`;
+  $("#stationSelection").innerHTML = `<button type="button" class="station-sheet-handle" aria-label="Show or hide station details"></button><div class="station-sheet-heading"><span class="sheet-station-icon">${icon("station")}</span><div><h2>${station.name}</h2><p>${station.area} · Pluggo station</p></div><span class="sheet-distance">${distance(station, origin).toFixed(1)} km</span></div><div class="sheet-availability"><span class="availability-dot ${free ? "" : "busy"}" aria-hidden="true"></span>${free ? `${free} compatible plug${free === 1 ? "" : "s"} available` : "Compatible plugs in use"}</div><dl class="station-sheet-stats"><div><dt>Power</dt><dd>${Math.max(...plugs.map(connector => connector.power))} kW</dd></div><div><dt>Plugs</dt><dd>${free} / ${plugs.length}</dd></div><div><dt>Tariff</dt><dd>₹${station.rate}/kWh</dd></div></dl><div class="station-sheet-actions"><button class="primary-button" data-station="${station.id}" aria-label="View ${station.name}">View chargers</button><a href="${stationDirections(station)}" target="_blank" rel="noopener noreferrer" class="secondary-button">Directions ↗</a></div>`;
   if (previous && previous !== station.id && animationAllowed && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
     const sheet = $("#stationSelection");
     sheet.getAnimations({subtree:true}).forEach(a => {if(a.id === "station-change")a.cancel();});
@@ -492,9 +531,27 @@ function renderSelectedStation(station) {
 }
 function selectMapStation(station) {
   if (!station) return;
+  setSheetCollapsed(false);
   selectedStationId = station.id;
   renderStations();
 }
+// The station card collapses to a single row so more of the map shows: tap the handle or swipe it.
+function setSheetCollapsed(collapsed) {
+  $("#stationSelection").classList.toggle("is-collapsed", collapsed);
+  $("#stationSelection .station-sheet-handle")?.setAttribute("aria-expanded", String(!collapsed));
+}
+$("#stationSelection").addEventListener("click", event => {
+  if (event.target.closest(".station-sheet-handle")) setSheetCollapsed(!$("#stationSelection").classList.contains("is-collapsed"));
+});
+let sheetDragStart = null;
+$("#stationSelection").addEventListener("pointerdown", event => {
+  if (event.target.closest(".station-sheet-handle, .station-sheet-heading")) sheetDragStart = event.clientY;
+});
+$("#stationSelection").addEventListener("pointerup", event => {
+  if (sheetDragStart === null) return;
+  const moved = event.clientY - sheetDragStart; sheetDragStart = null;
+  if (Math.abs(moved) > 36) setSheetCollapsed(moved > 0);
+});
 const sheetResizeObserver = new ResizeObserver(entries => {
   const height = $("#stationSelection").getBoundingClientRect().height;
   $("#page-stations").style.setProperty("--station-sheet-height", `${height}px`);
@@ -504,7 +561,7 @@ function renderGarage() {
   $("#garageVehicles").innerHTML = Object.entries(vehicles)
     .map(
       ([id, v]) =>
-        `<button class="garage-vehicle" data-vehicle="${id}" aria-pressed="${state.vehicle === id}"><img src="${v.image}" alt="" loading="lazy"><span class="garage-vehicle-text"><strong>${v.name}</strong><small>${v.capacity} kWh · ${v.power} kW · ${v.connectors.join(" / ")}</small></span><span class="garage-check" aria-hidden="true">${state.vehicle === id ? icon("check") : ""}</span></button>`,
+        `<button class="garage-vehicle" data-vehicle="${id}" aria-pressed="${state.vehicle === id}"><img src="${v.image}" alt="" loading="lazy"><span class="garage-vehicle-text"><strong>${v.name}</strong><small>${v.capacity} kWh · ${v.power} kW · ${v.connectors.join(" / ")}</small><span class="garage-battery"><span class="garage-battery-bar" aria-hidden="true"><span style="width:${Math.round(batteryLevel(id))}%"></span></span><span>${Math.round(batteryLevel(id))}%</span><span>~${estimatedRange(id)} km</span></span></span><span class="garage-check" aria-hidden="true">${state.vehicle === id ? icon("check") : ""}</span></button>`,
     )
     .join("");
 }
@@ -567,13 +624,36 @@ function reportLocation(message) {
   clearTimeout(locationMessageTimer);
   locationMessageTimer = setTimeout(() => { locationMessage.hidden = true; }, 5000);
 }
+// Settings → Charging & payment.
+const PREF_FORMAT = { target: v => `${v}%`, budget: v => `₹${v}`, monthlyBudget: v => `₹${v.toLocaleString("en-IN")}`, energyGoal: v => `${v} kWh`, chargesGoal: v => `${v} charges` };
+document.querySelectorAll("select[data-pref]").forEach(select => {
+  const key = select.dataset.pref;
+  select.innerHTML = PREF_OPTIONS[key].map(value => `<option value="${value}"${value === prefs[key] ? " selected" : ""}>${PREF_FORMAT[key](value)}</option>`).join("");
+  select.addEventListener("change", () => {
+    prefs[key] = Number(select.value);
+    savePrefs();
+    if (page === "sessions") renderSessionSummary();
+    toast("Saved.");
+  });
+});
+const INFO_PAGES = {
+  help: ["HELP & SUPPORT", "How can we help?", `<div class="credits-list info-list"><h3>Start a charge</h3><p>Tap Start charging on Home, or pick a station on the map. Choose a free charger that fits your vehicle, set a target and budget, then start.</p><h3>Stop and pay</h3><p>Stop any time from the live session. Pay with UPI, card or netbanking through Razorpay. Charges under ₹1 are free.</p><h3>Receipts</h3><p>Every finished charge is in Sessions. Open a receipt to share it.</p><h3>Sign in</h3><p>Sign in with your mobile number to keep your charges and receipts on every device. We text a one-time code.</p></div>`],
+  privacy: ["PRIVACY", "Your data, simply.", `<div class="credits-list info-list"><h3>What we keep</h3><p>Your charging sessions and receipts, and your mobile number if you sign in, so your history follows you across devices.</p><h3>Location</h3><p>Your location is used on your phone to sort nearby stations. If you turn on Google Maps search, your search area is sent to Google.</p><h3>Payments</h3><p>Razorpay processes payments. Pluggo never sees your card or UPI details; we keep only the payment ID for your receipt.</p><h3>On this device</h3><p>Your style, language and charging preferences are saved on this phone. Clear my history removes your sessions here.</p></div>`],
+  terms: ["TERMS OF USE", "The short version.", `<div class="credits-list info-list"><h3>Pilot release</h3><p>Pluggo network stations and chargers are simulated while partner chargers are onboarded, and charging runs faster than real time.</p><h3>Payments</h3><p>Payments run in Razorpay test mode during the pilot, so no real money moves.</p><h3>Estimates</h3><p>Range, time and cost estimates are typical values, not guarantees.</p></div>`],
+};
+document.querySelectorAll("[data-info]").forEach(button => button.addEventListener("click", () => {
+  const [eyebrow, title, body] = INFO_PAGES[button.dataset.info];
+  showDialog(eyebrow, `<h2 id="dialogTitle">${title}</h2>${body}`);
+}));
 function applyAppStyle(style) {
   if (!["dark", "light", "glass"].includes(style)) style = "dark";
   document.documentElement.dataset.style = style;
   try { localStorage.setItem("pluggo.style", style); } catch {}
   document.querySelector('meta[name="theme-color"]')?.setAttribute("content", style === "light" ? "#f4f4f6" : "#0b0c0e");
   document.querySelectorAll("[data-app-style]").forEach(option => option.setAttribute("aria-checked", String(option.dataset.appStyle === style)));
+  sceneController?.setShadowStrength(shadowStrength());
 }
+function shadowStrength() { return document.documentElement.dataset.style === "light" ? 0.18 : 0.85; }
 document.querySelectorAll("[data-app-style]").forEach(option => option.addEventListener("click", () => applyAppStyle(option.dataset.appStyle)));
 applyAppStyle(document.documentElement.dataset.style);
 $("#useLocation").onclick = requestDeviceLocation;
@@ -615,7 +695,7 @@ function requestDeviceLocation() {
     },
     () => {
       reportLocation(
-        "Location blocked or unavailable · allow it in browser settings, or search a city.",
+        "Location is off · showing New Delhi",
       );
       finish();
     },
@@ -677,7 +757,7 @@ function drawStreetMarkers(list) {
     const free = group.some(s => available(s, state.vehicle));
     const title = clustered ? `${group.length} stations · click to zoom` : `${station.name} · ${free ? "Available" : "In use"}`;
     const marker = L.marker([lat, lng], {
-      icon: L.divIcon({className: "street-marker", html: `<span class="street-marker-core ${free ? "" : "busy"} ${clustered ? "cluster" : ""}">${clustered ? group.length : icon("bolt")}${!clustered ? `<i class="pin-availability-dot ${free ? "" : "busy"}" aria-hidden="true"></i>` : ""}</span>`, iconSize: [44, 44], iconAnchor: [22, 22]}),
+      icon: L.divIcon({className: "street-marker", html: `<span class="street-marker-core ${free ? "" : "busy"} ${clustered ? "cluster" : ""}">${clustered ? group.length : icon("bolt")}${!clustered ? `<i class="pin-availability-dot ${free ? "" : "busy"}" aria-hidden="true"></i><b class="pin-price">₹${station.rate}</b>` : ""}</span>`, iconSize: [44, 44], iconAnchor: [22, 22]}),
       title, alt: title, keyboard: true,
     }).addTo(streetMarkers);
     marker.bindTooltip(title, {direction: "top", offset: [0, -22]});
@@ -714,7 +794,7 @@ let mapsKey = "";
 try {
   mapsKey = sessionStorage.getItem("chargeflow.maps.key") || "";
 } catch {}
-$("#openMapSettings").onclick = () => { location.hash = "garage"; $("#mapSettings").open = true; };
+$("#openMapSettings").onclick = () => { location.hash = "settings"; $("#mapSettings").open = true; };
 $("#mapsKeyForm").onsubmit = (event) => {
   event.preventDefault();
   const key = $("#mapsApiKey").value.trim();
@@ -808,7 +888,7 @@ function showRealNotice(message, setup = false) {
   panel.hidden = false;
   panel.replaceChildren(document.createTextNode(message));
   if (setup) {
-    const link = document.createElement("a"); link.href = "#garage"; link.textContent = "Open Map settings ↗"; panel.append(link);
+    const link = document.createElement("a"); link.href = "#settings"; link.textContent = "Open Map settings ↗"; panel.append(link);
   }
 }
 function setStationSource(source) {
@@ -870,10 +950,10 @@ function renderRealStations() {
   if (!realPlaces.some(place => place.id === selectedPlaceId)) selectedPlaceId = realPlaces[0]?.id || null;
   const place = realPlaces.find(place => place.id === selectedPlaceId);
   if (!place) {
-    $("#stationSelection").innerHTML = `<div class="station-sheet-handle" aria-hidden="true"></div><h2>Find a real charger.</h2><p class="sheet-empty-copy">${realSearchState === "loading" ? "Searching Google Places…" : realSearchState === "done" ? "No chargers found. Try a city or charger name." : "Search nearby or enter a city above. Real search needs a Google Maps key."}</p><a href="#garage" class="secondary-button">Map settings ↗</a>`;
+    $("#stationSelection").innerHTML = `<button type="button" class="station-sheet-handle" aria-label="Show or hide station details"></button><h2>Find a real charger.</h2><p class="sheet-empty-copy">${realSearchState === "loading" ? "Searching Google Places…" : realSearchState === "done" ? "No chargers found. Try a city or charger name." : "Search nearby or enter a city above. Real search needs a Google Maps key."}</p><a href="#settings" class="secondary-button">Map settings ↗</a>`;
     return;
   }
-  $("#stationSelection").innerHTML = `<div class="station-sheet-handle" aria-hidden="true"></div><div class="station-sheet-heading"><span class="sheet-station-icon">${icon("station")}</span><div><h2>${escapeText(place.displayName || "Charging station")}</h2><p>${escapeText(place.formattedAddress)}</p></div></div><p class="sheet-availability"><span class="availability-dot unknown" aria-hidden="true"></span>Availability and pricing not provided</p><a class="primary-button real-station" href="${escapeText(placeMapsLink(place))}" target="_blank" rel="noopener noreferrer">View in Google Maps ↗</a>`;
+  $("#stationSelection").innerHTML = `<button type="button" class="station-sheet-handle" aria-label="Show or hide station details"></button><div class="station-sheet-heading"><span class="sheet-station-icon">${icon("station")}</span><div><h2>${escapeText(place.displayName || "Charging station")}</h2><p>${escapeText(place.formattedAddress)}</p></div></div><p class="sheet-availability"><span class="availability-dot unknown" aria-hidden="true"></span>Availability and pricing not provided</p><a class="primary-button real-station" href="${escapeText(placeMapsLink(place))}" target="_blank" rel="noopener noreferrer">View in Google Maps ↗</a>`;
 }
 function renderRealMap() {
   if (streetMarkers) streetMarkers.clearLayers();
@@ -924,7 +1004,7 @@ $("#flowDialog").addEventListener("close", () => {
   stopCamera();
   dialogSession = null;
   document.body.classList.remove("dialog-open");
-  sceneController?.setVisible(page === "home" && !document.hidden);
+  sceneController?.setVisible((page === "home" || page === "garage") && !document.hidden);
 });
 $("#flowDialog").addEventListener("click", (event) => {
   if (event.target === $("#flowDialog")) {
@@ -980,7 +1060,7 @@ function openSetup(station, connector) {
   }
   showDialog(
     "YOUR CHARGE, YOUR WAY",
-    `<h2 id="dialogTitle">A little more ready.</h2><p class="dialog-subtitle">${station.name} · ${connector.id} · ${v.label}<br>Starting from 25% battery.</p><form id="chargePlan"><div class="slider-field"><label for="chargeTarget">Charge target <output id="targetOutput">80%</output></label><input id="chargeTarget" type="range" min="30" max="100" step="5" value="80"></div><div class="slider-field"><label for="chargeBudget">Budget cap <output id="budgetOutput">₹300</output></label><input id="chargeBudget" type="range" min="50" max="1000" step="50" value="300"></div><p class="dialog-subtitle">Stops at your target or budget, whichever comes first.</p><div class="bill-summary" id="chargeEstimate"></div><button type="submit" class="primary-button dialog-full">Start charging ${icon("bolt")}</button></form>`,
+    `<h2 id="dialogTitle">A little more ready.</h2><p class="dialog-subtitle">${station.name} · ${connector.id} · ${v.label}<br>Starting from 25% battery.</p><form id="chargePlan"><div class="slider-field"><label for="chargeTarget">Charge target <output id="targetOutput">${prefs.target}%</output></label><input id="chargeTarget" type="range" min="30" max="100" step="5" value="${prefs.target}"></div><div class="slider-field"><label for="chargeBudget">Budget cap <output id="budgetOutput">₹${prefs.budget}</output></label><input id="chargeBudget" type="range" min="50" max="1000" step="50" value="${prefs.budget}"></div><p class="dialog-subtitle">Stops at your target or budget, whichever comes first.</p><div class="bill-summary" id="chargeEstimate"></div><button type="submit" class="primary-button dialog-full">Start charging ${icon("bolt")}</button></form>`,
   );
   function estimate() {
     const target = Number($("#chargeTarget").value),
@@ -1077,7 +1157,8 @@ function updateSessionDialog() {
     : `<div><span>Energy added</span><strong>${s.energy.toFixed(2)}<small> kWh</small></strong></div><div><span>Charging time</span><strong>${Math.floor((s.energy / s.power) * 60)}<small> min</small></strong></div><div><span>Cost</span><strong>${currency(total(s))}</strong></div><p class="charge-context">${s.ended ? s.reason : `${s.power} kW`} · Target ${s.target}%</p>`;
   if (s.settled) {
     $("#sessionActions").innerHTML =
-      `<button id="receiptDone" class="primary-button dialog-full">Back to sessions</button>`;
+      `<button id="receiptDone" class="primary-button dialog-full">Back to sessions</button><button id="shareReceipt" class="secondary-button dialog-full">${icon("share")} Share receipt</button>`;
+    $("#shareReceipt").onclick = () => shareReceipt(s);
     $("#receiptDone").onclick = () => {
       $("#flowDialog").close();
       location.hash = "sessions";
@@ -1151,6 +1232,7 @@ function renderAccount() {
   const card = $("#accountCard");
   if (!card) return;
   card.hidden = localPreview || !backendConfig.authRequired;
+  $("#accountLabel").hidden = card.hidden;
   if (card.hidden) return;
   const html = account.signedIn
     ? `<div class="settings-heading">${icon("shield")}<h2>Signed in</h2></div><p>${account.phone || "Phone account"} · your charges and receipts are saved to this number on every device.</p><button class="secondary-button" id="signOutButton" type="button">Sign out</button>`
@@ -1214,12 +1296,59 @@ function openSignIn(after) {
   };
 }
 let summaryPeriod = "month";
+async function shareReceipt(session) {
+  const station = stationById(session.station);
+  const when = new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Kolkata" }).format(new Date(session.started));
+  const text = [`Pluggo charging receipt ${session.receipt?.id || session.id}`, `${station.name} · ${session.connector}`, `${when} IST`,
+    `Energy: ${session.energy.toFixed(2)} kWh`, `Total: ${currency(total(session))}`, `Paid: ${currency(paidAmount(session))}${session.receipt?.paymentId ? ` (Razorpay ${session.receipt.paymentId})` : ""}`].join("\n");
+  try {
+    if (navigator.share) { await navigator.share({ title: "Pluggo receipt", text }); return; }
+    await navigator.clipboard.writeText(text);
+    toast("Receipt copied.");
+  } catch (error) {
+    if (error?.name !== "AbortError") toast("Could not share the receipt.");
+  }
+}
 function renderSessionSummary() {
   const summary = summarizeSessions(state.sessions,{period:summaryPeriod,cost:total});
   const periodLabel = {week:"this week",month:"this month",all:"across all time"}[summaryPeriod];
   $("#summaryCaption").textContent = `Completed charges ${periodLabel} · India time`;
-  const html = `<article class="summary-stat"><span>Estimated spend</span><strong>${currency(summary.cost)}</strong><small>${currency(summary.collected)} paid</small></article><article class="summary-stat"><span>Energy added</span><strong>${summary.energy.toFixed(2)}<small> kWh</small></strong><small>Across completed charges</small></article><article class="summary-stat"><span>Charging time</span><strong>${chargingDuration(summary.minutes)}</strong><small>Time on charger</small></article><article class="summary-stat"><span>Completed sessions</span><strong>${summary.completed}</strong><small>${summary.completed === 1 ? "One charge finished" : "Charges finished"}</small></article>`;
+  // Goals are monthly (Settings); scale them to the selected period.
+  const firstEnded = Math.min(...state.sessions.map(item => Number(item.ended)).filter(n => n > 0), Date.now());
+  const scale = summaryPeriod === "week" ? 7 / 30 : summaryPeriod === "month" ? 1 : Math.max(1, (Date.now() - firstEnded) / (30 * 864e5));
+  const rings = [
+    {key:"energy", label:"Energy", value:summary.energy, goal:prefs.energyGoal * scale, text:`${summary.energy.toFixed(1)} / ${Math.round(prefs.energyGoal * scale)} kWh`},
+    {key:"spend", label:"Spend", value:summary.cost, goal:prefs.monthlyBudget * scale, text:`₹${Math.round(summary.cost)} / ₹${Math.round(prefs.monthlyBudget * scale)}`},
+    {key:"charges", label:"Charges", value:summary.completed, goal:Math.max(1, Math.round(prefs.chargesGoal * scale)), text:`${summary.completed} / ${Math.max(1, Math.round(prefs.chargesGoal * scale))}`},
+  ];
+  const radii = [52, 38, 24];
+  const ringSvg = rings.map((ring, index) => {
+    const r = radii[index], c = 2 * Math.PI * r, ratio = ring.goal > 0 ? ring.value / ring.goal : 0;
+    const shown = Math.min(1, ratio);
+    return `<g class="ring ring-${ring.key}"><title>${ring.label}: ${ring.text} (${Math.round(ratio * 100)}%)</title><circle class="ring-track" cx="60" cy="60" r="${r}"/>${shown > 0 ? `<circle class="ring-fill" cx="60" cy="60" r="${r}" stroke-dasharray="${(shown * c).toFixed(2)} ${c.toFixed(2)}"/>` : ""}</g>`;
+  }).join("");
+  const legend = rings.map(ring => `<li><span class="ring-swatch ring-${ring.key}" aria-hidden="true"></span><span><small>${ring.label}</small><strong>${ring.text}</strong></span><span class="ring-percent">${Math.round(ring.goal > 0 ? ring.value / ring.goal * 100 : 0)}%</span></li>`).join("");
+  const html = `<div class="activity-rings"><svg viewBox="0 0 120 120" role="img" aria-label="Energy, spend and charges against your goals">${ringSvg}</svg><ul class="ring-legend">${legend}</ul></div><div class="activity-strip"><span><small>Time on charger</small><strong>${chargingDuration(summary.minutes)}</strong></span><span><small>Paid</small><strong>${currency(summary.collected)}</strong></span><span><small>Average</small><strong>${summary.completed ? `₹${(summary.cost / summary.completed).toFixed(0)}` : "—"}</strong></span></div>`;
   if ($("#sessionSummaryCards").innerHTML !== html) $("#sessionSummaryCards").innerHTML = html;
+  renderWeekChart();
+}
+// Energy added per day for the last seven India days: one series, so no legend; the title names it.
+function renderWeekChart() {
+  const key = (value) => new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Kolkata"}).format(new Date(value));
+  const days = [...Array(7)].map((_, index) => {
+    const date = new Date(Date.now() - (6 - index) * 864e5);
+    return {key:key(date), label:new Intl.DateTimeFormat("en-IN",{weekday:"narrow",timeZone:"Asia/Kolkata"}).format(date), name:new Intl.DateTimeFormat("en-IN",{weekday:"long",day:"numeric",month:"short",timeZone:"Asia/Kolkata"}).format(date), energy:0};
+  });
+  for (const item of state.sessions) if (Number(item.ended) > 0) { const day = days.find(d => d.key === key(Number(item.ended))); if (day) day.energy += Math.max(0, Number(item.energy) || 0); }
+  const max = Math.max(...days.map(d => d.energy));
+  const peak = max > 0 ? days.findIndex(d => d.energy === max) : -1;
+  const bars = days.map((day, index) => {
+    const height = max > 0 ? Math.max(day.energy > 0 ? 4 : 0, day.energy / max * 64) : 0;
+    const x = 8 + index * 40;
+    return `<g class="week-bar${index === 6 ? " is-today" : ""}" tabindex="0"><title>${day.name}: ${day.energy.toFixed(2)} kWh</title><rect class="week-hit" x="${x - 4}" y="0" width="32" height="96"/><rect class="week-base" x="${x}" y="76" width="24" height="2" rx="1"/>${height ? `<rect class="week-fill" x="${x}" y="${78 - height}" width="24" height="${height}" rx="4"/>` : ""}${index === peak ? `<text class="week-peak" x="${x + 12}" y="${70 - height}">${day.energy.toFixed(1)}</text>` : ""}<text class="week-day" x="${x + 12}" y="93">${day.label}</text></g>`;
+  }).join("");
+  const html = `<div class="week-head"><h3>Energy · last 7 days</h3><small>kWh per day</small></div><svg viewBox="0 0 288 98" role="img" aria-label="Energy added per day for the last seven days">${bars}</svg>`;
+  if ($("#weekChart").innerHTML !== html) $("#weekChart").innerHTML = html;
 }
 document.querySelectorAll("[data-summary-period]").forEach(button => button.addEventListener("click", () => {
   summaryPeriod = button.dataset.summaryPeriod;
@@ -1232,14 +1361,29 @@ function renderSessions() {
   // An all-zero overview is noise: show it only once there is something to sum up.
   $("#sessionOverview").hidden = $("#sessionListLabel").hidden = !state.sessions.length;
   renderSessionSummary();
-  $("#sessionList").innerHTML = state.sessions.length
+  // A charge in progress (or awaiting payment) is pinned above everything else.
+  const live = activeSession() || pendingSession();
+  $("#liveBanner").hidden = !live;
+  if (live) {
+    const html = `<button type="button" class="live-banner" data-session="${live.id}"><span class="live-pulse" aria-hidden="true"></span><span class="live-copy"><small>${live.ended ? "Payment due" : "Charging now"}</small><strong>${stationById(live.station).name}</strong><span>${Math.round(soc(live))}% · ${live.energy.toFixed(2)} kWh · ${currency(total(live))}</span></span><span class="live-action">${live.ended ? "Pay" : "Open"} ${icon("arrow-up-right")}</span></button>`;
+    if ($("#liveBanner").innerHTML !== html) $("#liveBanner").innerHTML = html;
+  }
+  const monthName = (value) => new Intl.DateTimeFormat("en-IN", { month: "long", year: "numeric", timeZone: "Asia/Kolkata" }).format(new Date(value));
+  let lastMonth = "";
+  const listHtml = state.sessions.length
     ? state.sessions
         .map(
-          (s) =>
-            `<article class="session-card"><span class="session-symbol">${icon(s.settled ? "receipt" : s.ended ? "check" : "bolt")}</span><div class="session-info"><p class="eyebrow">${s.settled ? `COMPLETED · ${currency(paidAmount(s))} PAID` : s.ended ? "PAYMENT DUE" : "CHARGING"}</p><h2>${stationById(s.station).name}</h2><p>${vehicles[s.vehicle].label} · ${s.connector} · ${s.energy.toFixed(2)} kWh<br>${new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", timeZone: "Asia/Kolkata" }).format(new Date(s.started))} · ${s.reason || "Charging in progress"}</p>${!s.ended ? `<div class="session-bar"><span style="width:${(s.energy / energyLimit(s)) * 100}%"></span></div>` : ""}</div><div class="session-bill"><span class="session-cost-label">Bill</span><strong>${currency(total(s))}</strong><button class="secondary-button" data-session="${s.id}">${s.settled ? "View receipt" : s.ended ? "Pay now" : "View live session"} ${icon("arrow-up-right")}</button></div></article>`,
+          (s) => {
+            const month = monthName(s.started);
+            const heading = month !== lastMonth ? `<h3 class="month-label">${month}</h3>` : "";
+            lastMonth = month;
+            return heading +
+            `<article class="session-card"><span class="session-symbol">${icon(s.settled ? "receipt" : s.ended ? "check" : "bolt")}</span><div class="session-info"><p class="eyebrow">${s.settled ? `COMPLETED · ${currency(paidAmount(s))} PAID` : s.ended ? "PAYMENT DUE" : "CHARGING"}</p><h2>${stationById(s.station).name}</h2><p>${vehicles[s.vehicle].label} · ${s.connector} · ${s.energy.toFixed(2)} kWh<br>${new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", timeZone: "Asia/Kolkata" }).format(new Date(s.started))} · ${s.reason || "Charging in progress"}</p>${!s.ended ? `<div class="session-bar"><span style="width:${(s.energy / energyLimit(s)) * 100}%"></span></div>` : ""}</div><div class="session-bill"><span class="session-cost-label">Bill</span><strong>${currency(total(s))}</strong><button class="secondary-button" data-session="${s.id}">${s.settled ? "View receipt" : s.ended ? "Pay now" : "View live session"} ${icon("arrow-up-right")}</button></div></article>`;
+          },
         )
         .join("")
     : `<div class="empty-state session-empty">${icon("bolt")}<div><h2>No sessions yet.</h2><p>Your charges and receipts will appear here.</p></div><a href="#stations" class="primary-button">Find a station ${icon("arrow-up-right")}</a></div>`;
+  if ($("#sessionList").innerHTML !== listHtml) $("#sessionList").innerHTML = listHtml;
 }
 function parseCode(raw) {
   const text = raw.trim();
@@ -1364,23 +1508,19 @@ $("#resetDemo").onclick = () => {
     toast("All cleared.");
   };
 };
-try {
-  const savedMotion = localStorage.getItem("pluggo.preview-motion");
-  if (
-    savedMotion !== null &&
-    !matchMedia("(prefers-reduced-motion: reduce)").matches
-  )
-    animationAllowed = savedMotion === "true";
-} catch {}
+// The phone's reduce-motion setting (also switched on by many Android battery savers) only
+// picks the default. An explicit choice in Settings always wins, so rotation can be turned back on.
+let savedMotion = null;
+try { savedMotion = localStorage.getItem("pluggo.preview-motion"); } catch {}
+if (savedMotion !== null) animationAllowed = savedMotion === "true";
 document.documentElement.dataset.motion = animationAllowed ? "on" : "off";
 $("#previewMotion").checked = animationAllowed;
-$("#previewMotion").disabled = matchMedia("(prefers-reduced-motion: reduce)").matches;
 matchMedia("(prefers-reduced-motion: reduce)").addEventListener("change", event => {
-  const enabled = animationAllowed && !event.matches;
-  document.documentElement.dataset.motion = enabled ? "on" : "off";
-  $("#previewMotion").checked = enabled;
-  $("#previewMotion").disabled = event.matches;
-  sceneController?.setMotion(enabled);
+  if (savedMotion !== null) return;
+  animationAllowed = !event.matches;
+  document.documentElement.dataset.motion = animationAllowed ? "on" : "off";
+  $("#previewMotion").checked = animationAllowed;
+  sceneController?.setMotion(animationAllowed);
   if (event.matches) document.getAnimations().forEach(animation => animation.cancel());
 });
 $("#previewMotion").onchange = (event) => {
@@ -1390,6 +1530,7 @@ $("#previewMotion").onchange = (event) => {
   if (!animationAllowed) stopPluggoAnimation();
   try {
     localStorage.setItem("pluggo.preview-motion", String(animationAllowed));
+    savedMotion = String(animationAllowed);
   } catch {}
 };
 function useFallback() {
@@ -1399,7 +1540,7 @@ function useFallback() {
   $("#vehicleFallback").hidden = false;
   $("#vehicleCanvas").hidden = true;
 }
-(performanceProfile === "poster" ? Promise.reject(new Error("Low-memory poster preview")) : import("./vehicle-scene.js?v=20261104-summary1"))
+(performanceProfile === "poster" ? Promise.reject(new Error("Low-memory poster preview")) : import("./vehicle-scene.js?v=20261118-shadow1"))
   .then(({ createShowroom }) => {
     sceneController = createShowroom(
       $("#vehicleCanvas"),
@@ -1423,7 +1564,8 @@ function useFallback() {
     });
     sceneController.setVehicle(state.vehicle);
     sceneController.setMotion(animationAllowed);
-    sceneController.setVisible(page === "home");
+    sceneController.setShadowStrength(shadowStrength());
+    sceneController.setVisible(page === "home" || page === "garage");
   })
   .catch(useFallback);
 const tick = setInterval(() => {
@@ -1449,7 +1591,7 @@ window.addEventListener("pagehide", () => {
 });
 document.addEventListener("visibilitychange", () => {
   document.documentElement.dataset.visibility = document.hidden ? "hidden" : "visible";
-  sceneController?.setVisible(!document.hidden && page === "home");
+  sceneController?.setVisible(!document.hidden && (page === "home" || page === "garage"));
   if (document.hidden) { stopCamera(); stopPluggoAnimation(); }
   else {
     if (!localPreview) { refreshBackend(); return; }

@@ -18,7 +18,7 @@
     <link rel="stylesheet" href="wallet.css?v=20261104-server9" />
     <link rel="stylesheet" href="reference-layout.css?v=20261104-summary1" />
     <link rel="stylesheet" href="account.css?v=20261118-live1" />
-    <link rel="stylesheet" href="app-shell.css?v=20261118-shell2" />
+    <link rel="stylesheet" href="app-shell.css?v=20261118-shell5" />
     <script>
       // Apply the saved style before first paint so the page never flashes the wrong theme.
       (function () {
@@ -55,13 +55,15 @@
           ><a href="#sessions" data-page="sessions"
             ><i data-icon="bolt"></i><span>Sessions</span
             ><span id="sessionDot" class="session-dot" hidden></span></a
-          ><a href="#garage" data-page="garage"
-            ><i data-icon="car"></i><span>My garage</span></a
+          ><a href="#garage" data-page="garage" aria-label="My garage"
+            ><i data-icon="car"></i><span>Garage</span></a
+          ><a href="#settings" data-page="settings" aria-label="Settings"
+            ><i data-icon="settings"></i><span>Settings</span></a
           >
         </nav>
       </div>
       <div class="header-meta">
-        <span class="location-label" id="headerLocation">New Delhi</span
+        <a href="#stations" class="location-label" id="headerLocation" aria-label="Change location"><i data-icon="pin"></i><span>New Delhi</span></a
         ><span class="demo-badge" id="connectionMode" hidden aria-hidden="true">CONNECTING</span>
       </div>
     </header>
@@ -84,7 +86,7 @@
             <img
               id="vehicleFallback"
               class="vehicle-fallback"
-              src="assets/models/car-poster.png"
+              src="assets/models/car-poster-soft.png?v=soft1"
               alt="White electric car preview"
               fetchpriority="high"
             />
@@ -98,7 +100,8 @@
           </article>
 
         </div>
-        <div class="home-widgets" aria-label="Selected vehicle information"><article class="home-widget battery-widget" aria-labelledby="homeBatteryLabel"><div class="widget-heading"><i data-icon="battery"></i><h2 id="homeBatteryLabel">Battery</h2></div><div class="widget-value"><strong id="homeBatteryValue">25<span>%</span></strong><small id="homeBatteryCapacity">10 of 40 kWh</small></div><progress id="homeBatteryProgress" max="100" value="25" aria-label="Battery level">25%</progress></article><article class="home-widget power-widget" aria-labelledby="homePowerLabel"><div class="widget-heading"><i data-icon="bolt"></i><h2 id="homePowerLabel">Charging power</h2></div><div class="widget-value"><strong id="homePowerValue">0<span> kW</span></strong></div><p id="homePowerStatus">Up to 50 kW</p></article></div>
+        <div class="home-widgets" aria-label="Selected vehicle information"><article class="home-widget battery-widget" aria-labelledby="homeBatteryLabel"><div class="widget-heading"><i data-icon="battery"></i><h2 id="homeBatteryLabel">Battery</h2></div><div class="widget-value"><strong id="homeBatteryValue">25<span>%</span></strong><small id="homeBatteryCapacity">10 of 40 kWh</small></div><progress id="homeBatteryProgress" max="100" value="25" aria-label="Battery level">25%</progress></article><article class="home-widget power-widget" aria-labelledby="homePowerLabel"><div class="widget-heading"><i data-icon="bolt"></i><h2 id="homePowerLabel">Estimated range</h2></div><div class="widget-value"><strong id="homePowerValue">0<span> kW</span></strong></div><p id="homePowerStatus">Up to 50 kW</p></article></div>
+        <button type="button" id="homeStartCharging" class="primary-button home-cta"><span id="homeCtaLabel">Start charging</span> <i data-icon="bolt"></i></button>
         <div class="lower-heading"><h2>Nearest station</h2><a href="#stations" class="text-link">View map ↗</a></div>
         <div id="homeStations" class="home-stations"></div>
       </section>
@@ -132,19 +135,27 @@
         hidden
       >
         <header class="app-title"><h1>Sessions</h1></header>
+        <div id="liveBanner" hidden></div>
         <section class="session-overview" id="sessionOverview" aria-label="Charging summary">
           <div class="summary-heading"><h2 class="visually-hidden">Your charging overview</h2><div class="summary-period" role="group" aria-label="Summary period"><button type="button" data-summary-period="week" aria-pressed="false">Week</button><button type="button" data-summary-period="month" aria-pressed="true">Month</button><button type="button" data-summary-period="all" aria-pressed="false">All time</button></div></div>
           <p id="summaryCaption" class="summary-caption">Completed charges this month · India time</p>
-          <div class="session-summary-grid" id="sessionSummaryCards"></div>
+          <div class="activity-card" id="sessionSummaryCards"></div>
+          <div class="week-card" id="weekChart"></div>
         </section>
         <h2 class="list-label" id="sessionListLabel">History</h2>
         <div id="sessionList"></div>
       </section>
       <section id="page-garage" class="page" aria-label="My garage" hidden>
         <header class="app-title"><h1>Garage</h1></header>
-        <h2 class="list-label">Your vehicle</h2>
+        <div class="garage-stage" id="garageStage"></div>
+        <h2 class="list-label">Your vehicles</h2>
         <div id="garageVehicles" class="garage-vehicles"></div>
+        <p class="garage-hint">Pluggo matches chargers to the vehicle you pick here.</p>
+        </section>
+      <section id="page-settings" class="page" aria-label="Settings" hidden>
+        <header class="app-title"><h1>Settings</h1></header>
         <div class="garage-settings">
+          <h2 class="list-label" id="accountLabel" hidden>Account</h2>
           <article class="settings-card account-card" id="accountCard" hidden></article>
           <h2 class="list-label">Appearance</h2>
           <div class="settings-group">
@@ -152,8 +163,18 @@
             <div class="settings-row style-setting"><span>Style<small>How Pluggo looks on this device</small></span><div class="style-switch" role="radiogroup" aria-label="App style"><button type="button" role="radio" data-app-style="dark" aria-checked="true">Dark</button><button type="button" role="radio" data-app-style="light" aria-checked="false">Light</button><button type="button" role="radio" data-app-style="glass" aria-checked="false">Glass</button></div></div>
             <label class="settings-row motion-setting" for="previewMotion"><span>Animate vehicle preview<small>Slow 360° rotation on Home</small></span><input id="previewMotion" type="checkbox" role="switch" checked /></label>
           </div>
-          <h2 class="list-label">Maps</h2>
-          <details class="settings-group advanced-settings" id="mapSettings"><summary class="settings-row"><span>Real charger search<small id="mapConnectionSummary">Connect real charger search</small></span><span class="settings-chevron" aria-hidden="true">›</span></summary><div class="advanced-settings-body"><p>Connect a website-restricted Google Maps key to search every charger nearby. Needs Maps JavaScript API, Places API (New) and billing.</p>
+          <h2 class="list-label">Charging &amp; payment</h2>
+          <div class="settings-group" id="chargingPrefs">
+            <label class="settings-row select-row" for="prefTarget"><span>Default charge target<small>Where the slider starts when you charge</small></span><select id="prefTarget" data-pref="target"></select></label>
+            <label class="settings-row select-row" for="prefBudget"><span>Default budget per charge<small>Charging stops when this is reached</small></span><select id="prefBudget" data-pref="budget"></select></label>
+            <label class="settings-row select-row" for="prefMonthlyBudget"><span>Monthly budget<small>The orange spend ring in Sessions</small></span><select id="prefMonthlyBudget" data-pref="monthlyBudget"></select></label>
+            <label class="settings-row select-row" for="prefEnergyGoal"><span>Monthly energy goal<small>The blue energy ring in Sessions</small></span><select id="prefEnergyGoal" data-pref="energyGoal"></select></label>
+            <label class="settings-row select-row" for="prefChargesGoal"><span>Monthly charges goal<small>The green charges ring in Sessions</small></span><select id="prefChargesGoal" data-pref="chargesGoal"></select></label>
+            <div class="settings-row info-row"><span>Payment methods<small>UPI, cards and netbanking, secured by Razorpay</small></span></div>
+            <div class="settings-row info-row"><span>Receipts<small>Saved to your phone number when you are signed in</small></span></div>
+          </div>
+          <h2 class="list-label">Advanced</h2>
+          <details class="settings-group advanced-settings" id="mapSettings"><summary class="settings-row"><span>Google Maps search<small id="mapConnectionSummary">Connect real charger search</small></span><span class="settings-chevron" aria-hidden="true">›</span></summary><div class="advanced-settings-body"><p>Connect a website-restricted Google Maps key to search every charger nearby. Needs Maps JavaScript API, Places API (New) and billing.</p>
             <form id="mapsKeyForm">
               <label for="mapsApiKey">GOOGLE MAPS BROWSER API KEY</label>
               <div class="key-input">
@@ -180,12 +201,16 @@
           <h2 class="list-label">About</h2>
           <div class="settings-group">
             <details class="demo-details"><summary class="settings-row"><span>About Pluggo</span><span class="settings-chevron" aria-hidden="true">›</span></summary><p>Pilot release: Pluggo network stations and chargers are simulated while we onboard partner chargers, and charging runs faster than real time. Payments use Razorpay test mode, so no real money moves.</p></details>
+            <button type="button" class="settings-row" data-info="help"><span>Help &amp; support</span><span class="settings-chevron" aria-hidden="true">›</span></button>
+            <button type="button" class="settings-row" data-info="privacy"><span>Privacy</span><span class="settings-chevron" aria-hidden="true">›</span></button>
+            <button type="button" class="settings-row" data-info="terms"><span>Terms of use</span><span class="settings-chevron" aria-hidden="true">›</span></button>
             <button type="button" id="modelCredits" class="settings-row"><span>3D model credits</span><span class="settings-chevron" aria-hidden="true">›</span></button>
             <button type="button" class="settings-row danger-row" id="resetDemo"><span>Clear my history</span></button>
           </div>
-          <p class="app-version">pluggo. · Smart EV charging for India</p>
+          <p class="app-version">pluggo. · Smart EV charging for India<br><span translate="no">Version 2026.11 · pilot</span></p>
         </div>
       </section>
+
     </main>
     <dialog id="flowDialog" class="flow-dialog" aria-labelledby="dialogTitle">
       <div class="dialog-head">
@@ -204,7 +229,7 @@
       </p></noscript
     >
     <script src="vendor/leaflet.js"></script>
-    <script src="i18n.js?v=20261118-hi1"></script>
-    <script src="chargeflow.js?v=20261118-live3" type="module"></script>
+    <script src="i18n.js?v=20261118-hi3"></script>
+    <script src="chargeflow.js?v=20261118-live5" type="module"></script>
   </body>
 </html>

@@ -14,7 +14,7 @@ try {
  await p.locator('#vehiclePagination').focus();await p.keyboard.press('ArrowRight');await p.waitForFunction(()=>pluggoPerformance().ready&&pluggoPerformance().vehicle==='cargo');await p.keyboard.press('ArrowRight');await p.waitForFunction(()=>pluggoPerformance().ready&&pluggoPerformance().vehicle==='car');
  const picker=await p.locator('.home-vehicle-picker').boundingBox();await swipe(picker.x+Math.min(picker.width-10,120),picker.y+18,picker.x+10,picker.y+18);await p.waitForFunction(()=>pluggoPerformance().ready&&pluggoPerformance().vehicle==='scooter');assert.match(await p.evaluate(()=>location.hash),/^(#home)?$/);await p.locator('#vehiclePagination').focus();await p.keyboard.press('Home');await p.waitForFunction(()=>pluggoPerformance().ready&&pluggoPerformance().vehicle==='car');
  // Keep the vehicle static so a change in angle must come from the preview drag.
- await p.getByRole('link',{name:'My garage',exact:true}).tap();await p.locator('#previewMotion').uncheck();await p.getByRole('link',{name:'Home',exact:true}).tap();await p.waitForTimeout(500);
+ await p.getByRole('link',{name:'Settings',exact:true}).tap();await p.locator('#previewMotion').uncheck();await p.getByRole('link',{name:'Home',exact:true}).tap();await p.waitForTimeout(500);
  const before=await p.evaluate(()=>pluggoPerformance().azimuth),canvas=await p.locator('#vehicleCanvas canvas').boundingBox();
  await swipe(canvas.x+canvas.width*.65,canvas.y+canvas.height*.5,canvas.x+canvas.width*.3,canvas.y+canvas.height*.5);await p.waitForTimeout(250);
  assert.equal(await p.locator('#vehicleStage').getAttribute('data-vehicle-kind'),'car');assert.ok(Math.abs(await p.evaluate(()=>pluggoPerformance().azimuth)-before)>.1);

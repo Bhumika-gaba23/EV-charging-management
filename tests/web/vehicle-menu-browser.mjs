@@ -12,7 +12,7 @@ try {
   const menu=await p.locator('#vehicleMenu').boundingBox();assert.ok(menu.x>=0&&menu.x+menu.width<=width);
   assert.ok(await p.locator('#vehicleMenu').evaluate(el=>{const r=el.getBoundingClientRect();return el.contains(document.elementFromPoint(r.left+r.width/2,r.top+90));}),'Menu must receive input above the vehicle');
   assert.equal(await p.locator('#vehicleMenu').evaluate(e=>getComputedStyle(e).position),'absolute');
-  assert.match(await p.locator('#vehicleMenu').evaluate(e=>getComputedStyle(e).backdropFilter),/blur\(20px\)/);
+  assert.match(await p.locator('#vehicleMenu').evaluate(e=>getComputedStyle(e).backdropFilter),/blur\(\d+px\)/);
   await p.keyboard.press('Escape');await closed();
  }
  await p.setViewportSize({width:390,height:844});

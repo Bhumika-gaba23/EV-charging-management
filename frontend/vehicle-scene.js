@@ -528,6 +528,12 @@ export function createShowroom(container, onFailure, onStatus = () => {}) {
       syncAnimation();
     },
     reset,
+    // The contact shadow is tuned for dark backgrounds; light surfaces need a much softer one.
+    setShadowStrength(value) {
+      shadow.material.opacity = value;
+      dirty = true;
+      syncAnimation();
+    },
     setVisible(value) {
       manualVisible = value;
       syncAnimation();
