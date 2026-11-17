@@ -15,7 +15,7 @@
         "CCS2",
         "Type 2"
       ],
-      "image": "assets/models/car-poster.png?v=silver-5"
+      "image": "assets/models/car-poster-clean.png?v=clean1"
     },
     "scooter": {
       "label": "Electric scooter",
@@ -31,7 +31,7 @@
       "connectors": [
         "Bharat AC-001"
       ],
-      "image": "assets/models/scooter-poster.png?v=silver-5"
+      "image": "assets/models/scooter-poster-clean.png?v=clean1"
     },
     "bike": {
       "label": "Electric bike",
@@ -47,7 +47,7 @@
       "connectors": [
         "Bharat AC-001"
       ],
-      "image": "assets/models/bike-poster.png?v=silver-5"
+      "image": "assets/models/bike-poster-clean.png?v=clean1"
     },
     "cargo": {
       "label": "Electric cargo three-wheeler",
@@ -63,7 +63,7 @@
       "connectors": [
         "Bharat AC-001"
       ],
-      "image": "assets/models/cargo-poster.png?v=cargo1"
+      "image": "assets/models/cargo-poster-clean.png?v=clean1"
     }
   },
   "stations": [

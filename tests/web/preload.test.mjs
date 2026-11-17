@@ -1,4 +1,4 @@
-import test from 'node:test';import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';
+import test from 'node:test';import assert from 'node:assert/strict';import {readFileSync,existsSync} from 'node:fs';
 const html=readFileSync('frontend/index.html','utf8'),app=readFileSync('frontend/chargeflow.js','utf8'),scene=readFileSync('frontend/vehicle-scene.js','utf8'),nginx=readFileSync('deployment/nginx.conf.template','utf8');
 test('early-download hints match the URLs the app really imports',()=>{
  const preloaded=[...html.matchAll(/rel="modulepreload" href="([^"]+)"/g)].map(m=>m[1]);
@@ -20,4 +20,15 @@ test('the preloaded model URL matches the one the scene requests',()=>{
 test('nginx compresses the 3D models and scripts and caches heavy binaries',()=>{
  assert.match(nginx,/gzip on;/);assert.match(nginx,/gzip_types[^;]*application\/octet-stream/);assert.match(nginx,/max-age=604800/);
  assert.match(nginx,/location \/ \{[^}]*no-cache/,'HTML and scripts stay revalidated');
+});
+test('the server vehicle catalog points at pictures that exist and carry no baked-in shadow',()=>{
+ const catalog=JSON.parse(readFileSync('database/seed/customer_catalog.json','utf8'));
+ const images=Object.values(catalog.vehicles).map(v=>v.image);
+ assert.equal(images.length,4);
+ for(const image of images){
+  assert.match(image,/-poster-clean\.png/,`${image} must be a clean (shadow-free) picture`);
+  assert.ok(existsSync('frontend/'+image.split('?')[0]),`${image} must exist`);
+ }
+ // The app must also refuse to let a server override its pictures.
+ assert.match(app,/\{image,\.\.\.profile\}/);
 });

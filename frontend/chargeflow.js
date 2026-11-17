@@ -98,7 +98,7 @@ let page = "home";
 let dialogSession = null;
 let toastTimer;
 let sceneController;
-let modelPosterTimer;
+let modelPosterTimer, posterHideTimer;
 let animationAllowed = !matchMedia("(prefers-reduced-motion: reduce)").matches;
 let mediaStream = null,
   scannerFrame = null,
@@ -161,7 +161,9 @@ function applyBackend(payload, keepPreferences = true) {
   const catalogChanged = nextCatalog !== catalogSignature;
   catalogSignature = nextCatalog;
   stations.splice(0,stations.length,...payload.catalog.stations);
-  for (const [id,profile] of Object.entries(payload.catalog.vehicles)) if (Object.hasOwn(vehicles,id)) Object.assign(vehicles[id],profile);
+  // The server owns battery and connector data; the app owns how vehicles look. A server that still lists
+  // an older picture (with its baked-in shadow) must never override the one shipped with this app.
+  for (const [id,{image,...profile}] of Object.entries(payload.catalog.vehicles)) if (Object.hasOwn(vehicles,id)) Object.assign(vehicles[id],profile);
   state.sessions = payload.state.sessions;
   account = payload.account || account;
   backendConfig = payload.backend || backendConfig;
@@ -988,7 +990,10 @@ function layoutDialogActions() {
   $("#dialogActions").replaceChildren(candidate);
   $("#dialogActions").hidden = false;
 }
-function showDialog(eyebrow, html) {
+// modal:false is for the phone sign-in sheet. A modal dialog sits in the browser's top layer, above everything
+// on the page, so Google's reCAPTCHA box (added to the page itself) would open *behind* it, and tapping that box
+// would count as tapping outside the sheet. A plain sheet keeps the CAPTCHA above it and keeps the sheet open.
+function showDialog(eyebrow, html, { modal = true } = {}) {
   stopCamera();
   dialogSession = null;
   $("#dialogEyebrow").textContent = eyebrow;
@@ -999,8 +1004,17 @@ function showDialog(eyebrow, html) {
   document.body.classList.add("dialog-open");
   sceneController?.setVisible(false);
   const dialog = $("#flowDialog");
-  const wasOpen = dialog.open;
-  if (!wasOpen) dialog.showModal();
+  let wasOpen = dialog.open;
+  if (wasOpen && dialog.classList.contains("is-nonmodal") === modal) {
+    // Switching between the two kinds (for example sign-in finishing into the charge sheet) means re-opening.
+    dialog.close();
+    wasOpen = false;
+  }
+  if (!wasOpen) {
+    dialog.classList.toggle("is-nonmodal", !modal);
+    $("#dialogScrim").hidden = modal;
+    if (modal) dialog.showModal(); else dialog.show();
+  }
   const body = $("#dialogBody");
   body.getAnimations().forEach(animation => {if(animation.id === "dialog-step")animation.cancel();});
   if (wasOpen && animationAllowed && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
@@ -1010,7 +1024,16 @@ function showDialog(eyebrow, html) {
   body.scrollTop = 0;
 }
 $("#closeDialog").onclick = () => $("#flowDialog").close();
+const dialogScrim = Object.assign(document.createElement("div"), { id: "dialogScrim", hidden: true });
+document.body.append(dialogScrim);
+document.addEventListener("keydown", event => {
+  const dialog = $("#flowDialog");
+  if (event.key === "Escape" && dialog.open && dialog.classList.contains("is-nonmodal")) dialog.close();
+});
 $("#flowDialog").addEventListener("close", () => {
+  // close() followed straight away by a re-open (see showDialog) queues this event; the dialog is open again by now.
+  if ($("#flowDialog").open) return;
+  dialogScrim.hidden = true;
   stopCamera();
   dialogSession = null;
   document.body.classList.remove("dialog-open");
@@ -1263,6 +1286,7 @@ function openSignIn(after) {
   showDialog(
     "SIGN IN",
     `<h2 id="dialogTitle">Your number,<br>your receipts.</h2><p class="dialog-subtitle">We'll text a one-time code to verify your mobile number.</p><form id="phoneForm" class="sign-in-form" novalidate><label for="phoneInput">Mobile number</label><div class="phone-field"><span>+91</span><input id="phoneInput" type="tel" inputmode="numeric" autocomplete="tel-national" maxlength="14" placeholder="98765 43210" required></div><p class="form-error" id="signInError" role="alert"></p><button type="submit" class="primary-button dialog-full" id="sendCode">Send code ${icon("arrow-up-right")}</button></form><div id="recaptchaBox"></div>`,
+    { modal: false },
   );
   $("#phoneInput").focus();
   $("#phoneForm").onsubmit = async (event) => {
@@ -1563,9 +1587,12 @@ function useFallback(permanent = true) {
         clearTimeout(modelPosterTimer);
         // Swap only after the first 3D frame is drawn; overlapping poster/canvas
         // fades create double outlines as the continuously rotating model moves.
-        $("#vehicleFallback").hidden = ready;
         $("#stageLoading").hidden = ready;
         $("#vehicleFallback").style.opacity = "1";
+        clearTimeout(posterHideTimer);
+        // The picture stays under the fading-in 3D view and is removed once the 3D view is fully opaque.
+        if (ready) posterHideTimer = setTimeout(() => { $("#vehicleFallback").hidden = true; }, 360);
+        else $("#vehicleFallback").hidden = false;
         if (!ready) modelPosterTimer = setTimeout(() => useFallback(false), 30000);
         $("#vehicleCanvas").hidden = false;
         $("#vehicleCanvas").classList.toggle("model-ready", ready);
