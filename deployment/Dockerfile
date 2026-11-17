@@ -1,5 +1,5 @@
 FROM debian:bookworm-slim AS build
-RUN apt-get update && apt-get install -y --no-install-recommends g++ cmake git make libsqlite3-dev ca-certificates && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends g++ cmake git make libsqlite3-dev libcurl4-openssl-dev libssl-dev ca-certificates && rm -rf /var/lib/apt/lists/*
 WORKDIR /src
 COPY CMakeLists.txt ./
 COPY include ./include
@@ -9,7 +9,7 @@ COPY database/seed/customer_catalog.json ./database/seed/customer_catalog.json
 RUN cmake -S . -B /build -DEV_BUILD_WEB_API=ON -DBUILD_TESTING=OFF -DCMAKE_BUILD_TYPE=Release && cmake --build /build -j2 --target ev_web_api
 
 FROM debian:bookworm-slim
-RUN apt-get update && apt-get install -y --no-install-recommends nginx python3 python3-venv libsqlite3-0 libstdc++6 ca-certificates && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends nginx python3 python3-venv libsqlite3-0 libcurl4 libssl3 libstdc++6 ca-certificates && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY ocpp-simulator/requirements.txt /app/requirements.txt
 RUN python3 -m venv /app/venv && /app/venv/bin/pip install --no-cache-dir -r /app/requirements.txt

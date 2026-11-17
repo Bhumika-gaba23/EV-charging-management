@@ -1,6 +1,7 @@
 import { summarizeSessions, chargingDuration } from "./session-summary.js?v=20261104-summary1";
 import { performanceProfile } from "./performance-profile.js?v=20261104-summary1";
-import { CustomerApi } from "./customer-api.js?v=20261104-server9";
+import { CustomerApi } from "./customer-api.js?v=20261118-live1";
+import { normalizeIndianPhone, sendOtp, confirmOtp, signOutFirebase, friendlyAuthError, payWithRazorpay } from "./account.js?v=20261118-live1";
 import { findGoogleStations } from "./google-stations.js?v=20261104-server9";
 import {
   vehicles,
@@ -69,6 +70,8 @@ const customerApi = new CustomerApi();
 let backendReady = false, backendConnected = false, backendSyncing = false, backendMutations = 0, preferencePending = 0;
 let preferenceQueue = Promise.resolve(), lastPreferences = "", catalogSignature = "", backendRevision = 0;
 let state = { vehicle: "car", saved: [], sessions: [] };
+let account = { signedIn: false, phone: "" };
+let backendConfig = { authRequired: false, payments: "none" };
 let storageOkay = true;
 try {
   const saved = JSON.parse(localStorage.getItem(storageKey) || "null");
@@ -124,7 +127,7 @@ function save() {
 }
 function backendStatus(connected, message = "") {
   backendConnected = connected;
-  $("#connectionMode").textContent = localPreview ? "PREVIEW DEMO" : connected ? "SERVER DEMO" : "OFFLINE";
+  $("#connectionMode").textContent = localPreview ? "PREVIEW" : connected ? "LIVE" : "OFFLINE";
   $("#backendBanner").hidden = localPreview || connected;
   $("#backendMessage").textContent = message || "Charging server unavailable. Start the backend or retry.";
 }
@@ -137,6 +140,9 @@ function applyBackend(payload, keepPreferences = true) {
   stations.splice(0,stations.length,...payload.catalog.stations);
   for (const [id,profile] of Object.entries(payload.catalog.vehicles)) if (Object.hasOwn(vehicles,id)) Object.assign(vehicles[id],profile);
   state.sessions = payload.state.sessions;
+  account = payload.account || account;
+  backendConfig = payload.backend || backendConfig;
+  renderAccount();
   if (!keepPreferences) { state.vehicle = payload.state.vehicle; state.saved = payload.state.saved; lastPreferences = JSON.stringify({vehicle:state.vehicle,saved:state.saved}); }
   backendStatus(true);
   if (catalogChanged || oldVehicle !== state.vehicle) { renderVehicle(); renderStations(); renderMap(); }
@@ -198,7 +204,7 @@ function card(station) {
     vehicles[state.vehicle].connectors.includes(c.type),
   );
   const count = plugs.filter((c) => c.available).length;
-  return `<article class="station-card"><div class="station-card-top"><div><h3>${station.name}</h3><p class="station-area">${station.area} · ${distance(station, origin).toFixed(1)} km away</p></div><button class="save-button" data-save="${station.id}" aria-label="${state.saved.includes(station.id) ? "Unsave" : "Save"} ${station.name}" aria-pressed="${state.saved.includes(station.id)}">${icon("bookmark")}</button></div><span class="station-status ${count ? "" : "busy"}"><span class="status-pip"></span>${count ? `${count} compatible plug${count === 1 ? "" : "s"} available` : "Compatible plugs in use"}</span><p class="station-connectors">${[...new Set(plugs.map((c) => c.type))].join(" · ")} · up to ${Math.max(...plugs.map((c) => c.power))} kW</p><div class="station-card-bottom"><span class="rate">₹${station.rate} <small>/ kWh · demo</small></span><button class="secondary-button" data-station="${station.id}" aria-label="View ${station.name}">View station ${icon("arrow-up-right")}</button></div></article>`;
+  return `<article class="station-card"><div class="station-card-top"><div><h3>${station.name}</h3><p class="station-area">${station.area} · ${distance(station, origin).toFixed(1)} km away</p></div><button class="save-button" data-save="${station.id}" aria-label="${state.saved.includes(station.id) ? "Unsave" : "Save"} ${station.name}" aria-pressed="${state.saved.includes(station.id)}">${icon("bookmark")}</button></div><span class="station-status ${count ? "" : "busy"}"><span class="status-pip"></span>${count ? `${count} compatible plug${count === 1 ? "" : "s"} available` : "Compatible plugs in use"}</span><p class="station-connectors">${[...new Set(plugs.map((c) => c.type))].join(" · ")} · up to ${Math.max(...plugs.map((c) => c.power))} kW</p><div class="station-card-bottom"><span class="rate">₹${station.rate} <small>/ kWh</small></span><button class="secondary-button" data-station="${station.id}" aria-label="View ${station.name}">View station ${icon("arrow-up-right")}</button></div></article>`;
 }
 function updateLens() {
   const selected = $(".glass-nav a[aria-current]");
@@ -401,7 +407,7 @@ function renderHomeWidgets() {
   $("#homeBatteryProgress").value = level;
   $("#homeBatteryProgress").textContent = `${Math.round(level)}%`;
   $("#homePowerValue").replaceChildren(document.createTextNode(String(power)), Object.assign(document.createElement("span"), {textContent:" kW"}));
-  $("#homePowerStatus").textContent = charging ? "Simulated charging session" : `Up to ${vehicle.power} kW · demo`;
+  $("#homePowerStatus").textContent = charging ? "Charging now" : `Up to ${vehicle.power} kW`;
 }
 function stopPluggoAnimation() {
   $("#pluggoMotion").getAnimations({subtree:true}).forEach(animation => animation.cancel());
@@ -456,7 +462,7 @@ function homeStation(station) {
 function renderStations() {
   if (stationSource === "real") { renderRealStations(); return; }
   const list = orderedStations();
-  $("#mapCaption").textContent = "Demo availability · not live";
+  $("#mapCaption").textContent = "Pluggo network · live availability";
   const count = list.filter(station => available(station, state.vehicle)).length;
   $("#resultCount").textContent = `${count} available · ${list.length} compatible stations`;
   $("#mapEmpty").hidden = list.length > 0;
@@ -473,7 +479,7 @@ function renderSelectedStation(station) {
   $("#stationSelection").dataset.stationId = station.id;
   const plugs = station.connectors.filter(connector => vehicles[state.vehicle].connectors.includes(connector.type));
   const free = plugs.filter(connector => connector.available).length;
-  $("#stationSelection").innerHTML = `<div class="station-sheet-handle" aria-hidden="true"></div><div class="station-sheet-heading"><span class="sheet-station-icon">${icon("station")}</span><div><h2>${station.name}</h2><p>${station.area} · Demo station</p></div><span class="sheet-distance">${distance(station, origin).toFixed(1)} km</span></div><div class="sheet-availability"><span class="availability-dot ${free ? "" : "busy"}" aria-hidden="true"></span>${free ? `${free} compatible plug${free === 1 ? "" : "s"} available` : "Compatible plugs in use"}</div><dl class="station-sheet-stats"><div><dt>Power</dt><dd>${Math.max(...plugs.map(connector => connector.power))} kW</dd></div><div><dt>Plugs</dt><dd>${free} / ${plugs.length}</dd></div><div><dt>Demo tariff</dt><dd>₹${station.rate}/kWh</dd></div></dl><div class="station-sheet-actions"><button class="primary-button" data-station="${station.id}" aria-label="View ${station.name}">View chargers</button><a href="${stationDirections(station)}" target="_blank" rel="noopener noreferrer" class="secondary-button">Directions ↗</a></div>`;
+  $("#stationSelection").innerHTML = `<div class="station-sheet-handle" aria-hidden="true"></div><div class="station-sheet-heading"><span class="sheet-station-icon">${icon("station")}</span><div><h2>${station.name}</h2><p>${station.area} · Pluggo station</p></div><span class="sheet-distance">${distance(station, origin).toFixed(1)} km</span></div><div class="sheet-availability"><span class="availability-dot ${free ? "" : "busy"}" aria-hidden="true"></span>${free ? `${free} compatible plug${free === 1 ? "" : "s"} available` : "Compatible plugs in use"}</div><dl class="station-sheet-stats"><div><dt>Power</dt><dd>${Math.max(...plugs.map(connector => connector.power))} kW</dd></div><div><dt>Plugs</dt><dd>${free} / ${plugs.length}</dd></div><div><dt>Tariff</dt><dd>₹${station.rate}/kWh</dd></div></dl><div class="station-sheet-actions"><button class="primary-button" data-station="${station.id}" aria-label="View ${station.name}">View chargers</button><a href="${stationDirections(station)}" target="_blank" rel="noopener noreferrer" class="secondary-button">Directions ↗</a></div>`;
   if (previous && previous !== station.id && animationAllowed && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
     const sheet = $("#stationSelection");
     sheet.getAnimations({subtree:true}).forEach(a => {if(a.id === "station-change")a.cancel();});
@@ -498,7 +504,7 @@ function renderGarage() {
   $("#garageVehicles").innerHTML = Object.entries(vehicles)
     .map(
       ([id, v]) =>
-        `<button class="garage-vehicle" data-vehicle="${id}" aria-pressed="${state.vehicle === id}"><span class="pill">${state.vehicle === id ? "SELECTED" : "DEMO PROFILE"}</span><img src="${v.image}" alt="White ${v.label.toLowerCase()}" loading="lazy"><h2>${v.name}</h2><p>${v.capacity} kWh · ${v.power} kW<br>${v.connectors.join(" / ")} · demo profile</p></button>`,
+        `<button class="garage-vehicle" data-vehicle="${id}" aria-pressed="${state.vehicle === id}"><span class="pill">${state.vehicle === id ? "SELECTED" : "EV PROFILE"}</span><img src="${v.image}" alt="White ${v.label.toLowerCase()}" loading="lazy"><h2>${v.name}</h2><p>${v.capacity} kWh · ${v.power} kW<br>${v.connectors.join(" / ")}</p></button>`,
     )
     .join("");
 }
@@ -533,7 +539,7 @@ document.addEventListener("click", (event) => {
 $("#modelCredits").onclick = () =>
   showDialog(
     "MODEL CREDITS",
-    `<h2 id="dialogTitle">Designed by talented people.</h2><p class="dialog-subtitle">These vehicles are visual previews. Battery sizes and connectors are fictional demo profiles.</p><div class="credits-list"><h3>Tesla Model 3 (2024)</h3><p>Model by RBLXSupercars; download-page uploader brandonleong28. <a href="https://sketchfab.com/3d-models/2024-tesla-model-3-fd22be415215453693d67e33aa7812d0" target="_blank" rel="noopener noreferrer">Original source · CC BY 4.0</a>. Downloaded from the credited public copy in erictfree/Carbon-Footprint-AI-Visualizer. This is an independent visualization, not a Tesla-endorsed app.</p><h3>Urban scooter</h3><p>Original unbranded model by Innerscene. <a href="https://www.innerscene.com/tools/library/3d-parts/urban-motor-scooter-9dd945f9" target="_blank" rel="noopener noreferrer">Source · CC0</a>.</p><h3>Pluggo Cargo</h3><p>Original Pluggo design: an enclosed electric delivery three-wheeler, built for this project. Battery and charging specifications are simulated.</p><h3>Concept motorcycle</h3><p>Cyberpunk Bike Concept Design by Berk Gedik, via Objaverse and Renderlyst. <a href="https://sketchfab.com/3d-models/99290272e69d4cd8a56af2d2e1274e0d" target="_blank" rel="noopener noreferrer">Source · CC BY 4.0</a>.</p><p>Models adapted for Pluggo: simplified geometry, reduced textures, white finishes and preview images. <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0 terms</a>.</p></div>`,
+    `<h2 id="dialogTitle">Designed by talented people.</h2><p class="dialog-subtitle">These vehicles are visual previews. Battery sizes and connectors are typical profiles for each vehicle type.</p><div class="credits-list"><h3>Tesla Model 3 (2024)</h3><p>Model by RBLXSupercars; download-page uploader brandonleong28. <a href="https://sketchfab.com/3d-models/2024-tesla-model-3-fd22be415215453693d67e33aa7812d0" target="_blank" rel="noopener noreferrer">Original source · CC BY 4.0</a>. Downloaded from the credited public copy in erictfree/Carbon-Footprint-AI-Visualizer. This is an independent visualization, not a Tesla-endorsed app.</p><h3>Urban scooter</h3><p>Original unbranded model by Innerscene. <a href="https://www.innerscene.com/tools/library/3d-parts/urban-motor-scooter-9dd945f9" target="_blank" rel="noopener noreferrer">Source · CC0</a>.</p><h3>Pluggo Cargo</h3><p>Original Pluggo design: an enclosed electric delivery three-wheeler, built for this project. Battery and charging specifications are typical values.</p><h3>Concept motorcycle</h3><p>Cyberpunk Bike Concept Design by Berk Gedik, via Objaverse and Renderlyst. <a href="https://sketchfab.com/3d-models/99290272e69d4cd8a56af2d2e1274e0d" target="_blank" rel="noopener noreferrer">Source · CC BY 4.0</a>.</p><p>Models adapted for Pluggo: simplified geometry, reduced textures, white finishes and preview images. <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0 terms</a>.</p></div>`,
   );
 $("#stationSearch").oninput = (event) => {
   if (stationSource === "real") return;
@@ -564,7 +570,7 @@ function requestDeviceLocation() {
   locationRequested = true;
   if (!navigator.geolocation) {
     reportLocation(
-      "Location unavailable · browsing demo stations in New Delhi.",
+      "Location unavailable · showing Pluggo stations in New Delhi.",
     );
     return;
   }
@@ -582,7 +588,7 @@ function requestDeviceLocation() {
         device: true,
       };
       reportLocation(
-        stationSource === "real" ? "Using your location · Google charger search." : "Using your device location · demo distances are straight-line.",
+        stationSource === "real" ? "Using your location · Google charger search." : "Using your device location · distances are straight-line.",
       );
       renderVehicle();
       renderStations();
@@ -670,14 +676,14 @@ function renderMap() {
   if (stationSource === "real") { renderRealMap(); return; }
   const list = orderedStations();
   if (googleMap && !mapsFailed) {
-    $("#mapModeLabel").textContent = "GOOGLE MAPS · DEMO STATIONS";
+    $("#mapModeLabel").textContent = "GOOGLE MAPS · PLUGGO NETWORK";
     googleMarkers.forEach((m) => (m.map = null));
     googleMarkers = [];
     for (const station of list) {
       const marker = new google.maps.marker.AdvancedMarkerElement({
         map: googleMap,
         position: { lat: station.lat, lng: station.lng },
-        title: station.name + (available(station, state.vehicle) ? " · Available" : " · In use") + " · fictional demo station",
+        title: station.name + (available(station, state.vehicle) ? " · Available" : " · In use"),
         content: googlePin(station),
         gmpClickable: true,
       });
@@ -708,7 +714,7 @@ $("#mapsKeyForm").onsubmit = (event) => {
     location.hash = "stations";
     location.reload();
   } catch {
-    toast("Tab storage is unavailable; use the illustrated map for this demo.");
+    toast("Tab storage is unavailable; use the street map instead.");
   }
 };
 $("#clearMapsKey").onclick = () => {
@@ -733,7 +739,7 @@ async function loadMaps() {
     $("#mapCaption").textContent =
       "Google Maps unavailable · using OpenStreetMap";
     $("#mapsStatus").textContent =
-      "Google Maps could not load. Check key restrictions, Maps JavaScript API and billing. The illustrated demo is still available.";
+      "Google Maps could not load. Check key restrictions, Maps JavaScript API and billing. The Pluggo street map is still available.";
     renderMap();
     if (stationSource === "real") showRealNotice("Google Maps could not load. Check your key, allowed websites, enabled APIs and billing in My garage.", true);
   };
@@ -794,7 +800,7 @@ function showRealNotice(message, setup = false) {
 }
 function setStationSource(source) {
   stationSource = source; ++realSearchGeneration; realPlaces = []; realSearchState = "idle";
-  if (origin.device) reportLocation(source === "real" ? "Using your location · Google charger search." : "Using your device location · demo distances are straight-line.");
+  if (origin.device) reportLocation(source === "real" ? "Using your location · Google charger search." : "Using your device location · distances are straight-line.");
   $("#realStationSearch").disabled = false; $("#realStationSearch").textContent = "Search nearby";
   $("#stationSelection").removeAttribute("aria-busy");
   $("#demoStationSource").setAttribute("aria-pressed", String(source === "demo"));
@@ -803,9 +809,9 @@ function setStationSource(source) {
   $("#realStationSearch").hidden = source === "demo";
   $(".map-legend").hidden = source === "real";
   $(".map-interaction-hint").hidden = source === "real";
-  $(".demo-tag").textContent = source === "real" ? "Google Places" : "Demo stations";
+  $(".demo-tag").textContent = source === "real" ? "Google Places" : "Pluggo network";
   $("#stationSearch").value = ""; filters.search = "";
-  $("#stationSearch").placeholder = source === "real" ? "City, area, or charger name" : "Search a demo station or locality";
+  $("#stationSearch").placeholder = source === "real" ? "City, area, or charger name" : "Search a station or locality";
   $("#realStationNotice").hidden = source === "demo";
   if (source === "real") {
     showRealNotice(googleMap && !mapsFailed ? "Search chargers within 5 km of your location, or enter a city or station name. Live plug availability is not provided." : "Google charger search needs a configured API key. Enable Maps JavaScript API, Places API (New), and billing in My garage.", !googleMap || mapsFailed);
@@ -829,7 +835,7 @@ $("#stationSearchForm").onsubmit = async event => {
     const found = await findGoogleStations(google, {query: $("#stationSearch").value, origin});
     if (token !== realSearchGeneration || stationSource !== "real") return;
     realPlaces = found; realSearchState = "done"; renderRealStations(); renderRealMap();
-    showRealNotice(found.length ? "Google Places results. Check connector support, prices and availability with the operator. Demo charging is available in the Demo charging tab." : "No chargers found. Try a nearby city, locality or charger name.");
+    showRealNotice(found.length ? "Google Places results. Check connector support, prices and availability with the operator. In-app charging and payment work at Pluggo network stations." : "No chargers found. Try a nearby city, locality or charger name.");
   } catch {
     if (token === realSearchGeneration && stationSource === "real") { realSearchState = "error"; renderRealStations(); showRealNotice("Google charger search failed. Check Places API (New), key restrictions, billing and quota, then try again.", true); }
   } finally {
@@ -921,7 +927,7 @@ $("#flowDialog").addEventListener("click", (event) => {
   }
 });
 const notice = (message) =>
-  `<p class="dialog-note">${icon("flask")}<span>${message}</span></p>`;
+  `<p class="dialog-note">${icon("shield")}<span>${message}</span></p>`;
 function openStation(station) {
   if (!station) return;
   const v = vehicles[state.vehicle];
@@ -934,8 +940,8 @@ function openStation(station) {
   const supported = (c) => v.connectors.includes(c.type);
   const ready = station.connectors.filter((c) => supported(c) && c.available);
   showDialog(
-    "DEMO STATION · NEW DELHI",
-    `<h2 id="dialogTitle">${station.name}</h2><p class="dialog-subtitle">${station.area} · ${distance(station, origin).toFixed(1)} km straight-line distance</p><div class="detail-tariff"><div><strong>₹${station.rate}</strong><small> / kWh</small></div><span><span class="availability-dot ${ready.length ? "" : "busy"}" aria-hidden="true"></span> ${ready.length} compatible plug${ready.length === 1 ? "" : "s"} available<br>Demo tariff · no extra fees</span></div><fieldset class="connector-picker"><legend>Charger for your ${v.name}</legend>${station.connectors.map((c) => `<label class="connector-choice ${supported(c) && c.available ? "" : "unavailable"}"><input type="radio" name="connector" value="${c.id}" data-connector="${c.id}" ${c === ready[0] ? "checked" : ""} ${supported(c) && c.available ? "" : "disabled"}><span><strong>${c.type}<span>${c.power} kW</span></strong><small><span class="availability-dot ${!supported(c) ? "unknown" : c.available ? "" : "busy"}" aria-hidden="true"></span> ${c.id} · ${!supported(c) ? "Incompatible with selected vehicle" : c.available ? "Available" : "In use"}</small></span></label>`).join("")}</fieldset><div class="amenities">${station.amenities.map((a) => `<span class="pill">${a}</span>`).join("")}</div><div class="dialog-links"><button class="text-link" id="scanConnector">${icon("qr")} Scan or enter code</button><a href="${destination}" target="_blank" rel="noopener noreferrer" class="text-link">Google Maps directions ${icon("arrow-up-right")}</a></div>${notice("Fictional demo station · not a real charging destination.")}<button id="selectCharger" class="primary-button dialog-full" ${ready.length ? "" : "disabled"}>Select charger ${icon("arrow-up-right")}</button>`,
+    "PLUGGO STATION · NEW DELHI",
+    `<h2 id="dialogTitle">${station.name}</h2><p class="dialog-subtitle">${station.area} · ${distance(station, origin).toFixed(1)} km straight-line distance</p><div class="detail-tariff"><div><strong>₹${station.rate}</strong><small> / kWh</small></div><span><span class="availability-dot ${ready.length ? "" : "busy"}" aria-hidden="true"></span> ${ready.length} compatible plug${ready.length === 1 ? "" : "s"} available<br>No booking or idle fees</span></div><fieldset class="connector-picker"><legend>Charger for your ${v.name}</legend>${station.connectors.map((c) => `<label class="connector-choice ${supported(c) && c.available ? "" : "unavailable"}"><input type="radio" name="connector" value="${c.id}" data-connector="${c.id}" ${c === ready[0] ? "checked" : ""} ${supported(c) && c.available ? "" : "disabled"}><span><strong>${c.type}<span>${c.power} kW</span></strong><small><span class="availability-dot ${!supported(c) ? "unknown" : c.available ? "" : "busy"}" aria-hidden="true"></span> ${c.id} · ${!supported(c) ? "Incompatible with selected vehicle" : c.available ? "Available" : "In use"}</small></span></label>`).join("")}</fieldset><div class="amenities">${station.amenities.map((a) => `<span class="pill">${a}</span>`).join("")}</div><div class="dialog-links"><button class="text-link" id="scanConnector">${icon("qr")} Scan or enter code</button><a href="${destination}" target="_blank" rel="noopener noreferrer" class="text-link">Google Maps directions ${icon("arrow-up-right")}</a></div><button id="selectCharger" class="primary-button dialog-full" ${ready.length ? "" : "disabled"}>Select charger ${icon("arrow-up-right")}</button>`,
   );
   $("#selectCharger").onclick = () =>
     openSetup(
@@ -956,13 +962,13 @@ function openSetup(station, connector) {
   if (blocking) {
     openSession(blocking);
     toast(
-      "Finish your current charge or demo checkout before starting another.",
+      "Finish your current charge or payment before starting another.",
     );
     return;
   }
   showDialog(
     "YOUR CHARGE, YOUR WAY",
-    `<h2 id="dialogTitle">A little more ready.</h2><p class="dialog-subtitle">${station.name} · ${connector.id} · ${v.label}<br>Starting at a simulated 25% battery.</p><form id="chargePlan"><div class="slider-field"><label for="chargeTarget">Charge target <output id="targetOutput">80%</output></label><input id="chargeTarget" type="range" min="30" max="100" step="5" value="80"></div><div class="slider-field"><label for="chargeBudget">Budget cap <output id="budgetOutput">₹300</output></label><input id="chargeBudget" type="range" min="50" max="1000" step="50" value="300"></div><p class="dialog-subtitle">Stops at your target or budget, whichever comes first.</p><div class="bill-summary" id="chargeEstimate"></div>${notice("60× demo speed · no physical charger connected.")}<button type="submit" class="primary-button dialog-full">Start simulated charging ${icon("bolt")}</button></form>`,
+    `<h2 id="dialogTitle">A little more ready.</h2><p class="dialog-subtitle">${station.name} · ${connector.id} · ${v.label}<br>Starting from 25% battery.</p><form id="chargePlan"><div class="slider-field"><label for="chargeTarget">Charge target <output id="targetOutput">80%</output></label><input id="chargeTarget" type="range" min="30" max="100" step="5" value="80"></div><div class="slider-field"><label for="chargeBudget">Budget cap <output id="budgetOutput">₹300</output></label><input id="chargeBudget" type="range" min="50" max="1000" step="50" value="300"></div><p class="dialog-subtitle">Stops at your target or budget, whichever comes first.</p><div class="bill-summary" id="chargeEstimate"></div><button type="submit" class="primary-button dialog-full">Start charging ${icon("bolt")}</button></form>`,
   );
   function estimate() {
     const target = Number($("#chargeTarget").value),
@@ -977,12 +983,8 @@ function openSetup(station, connector) {
     $("#chargeEstimate").innerHTML =
       billRow("Energy to add", `${energy.toFixed(2)} kWh`) +
       billRow("Charging power", `${power} kW`) +
-      billRow(
-        "Demo duration (60×)",
-        `~${Math.ceil((energy / power) * 60)} seconds`,
-      ) +
-      billRow("Estimated demo bill", currency(energy * station.rate)) +
-      billRow("Real amount charged", "₹0.00", "total");
+      billRow("Estimated time", `~${Math.max(1, Math.ceil((energy / power) * 60))} min`) +
+      billRow("Estimated bill", currency(energy * station.rate), "total");
   }
   $("#chargeTarget").oninput = estimate;
   $("#chargeBudget").oninput = estimate;
@@ -992,6 +994,10 @@ function openSetup(station, connector) {
     event.preventDefault();
     if (activeSession() || pendingSession()) {
       toast("There is already a session to finish.");
+      return;
+    }
+    if (!localPreview && backendConfig.authRequired && !account.signedIn) {
+      openSignIn(() => openSetup(station, stationById(station.id).connectors.find(c => c.id === connector.id) || connector));
       return;
     }
     if (!localPreview) {
@@ -1031,11 +1037,11 @@ function openSession(session) {
   const ended = !!session.ended;
   showDialog(
     session.settled
-      ? "DEMO RECEIPT"
+      ? "RECEIPT"
       : ended
         ? "CHARGE COMPLETE"
-        : "LIVE SESSION / 60× DEMO SPEED",
-    `<h2 id="dialogTitle">${station.name}</h2><p class="dialog-subtitle">${session.connector} · ${vehicles[session.vehicle].label}</p>${!session.settled ? `<img class="session-vehicle-preview" src="${vehicles[session.vehicle].image}" alt="${vehicles[session.vehicle].name}">` : ""}${session.settled ? `<div class="receipt-hero"><div class="receipt-symbol">${icon("check")}</div><h3>Demo payment completed</h3><div class="receipt-amount"><small>ACTUAL AMOUNT COLLECTED</small><strong>₹0.00</strong></div><p>No real money was charged.</p></div>` : ""}<div class="charge-ring" id="chargeRing" ${session.settled ? "hidden" : ""}><div>${icon(session.settled ? "check" : ended ? "receipt" : "bolt")}<strong id="liveSoc">${soc(session).toFixed(0)}%</strong><small>SIMULATED BATTERY</small></div></div><div class="bill-summary" id="sessionSummary"></div>${session.settled ? `<details class="receipt-details"><summary>Session details</summary>${billRow("Charging power used", `${session.power} kW`)}${billRow("Completed", session.reason)}<p class="receipt-id">${session.receipt?.id || session.id}<br>${new Intl.DateTimeFormat("en-IN", {dateStyle:"medium",timeStyle:"short",timeZone:"Asia/Kolkata"}).format(new Date(session.started))} IST<br>Demo receipt · not a tax invoice</p></details>` : ""}<div id="sessionActions"></div>${session.settled ? "" : notice("Simulated battery and energy · no real payment.")}`,
+        : "LIVE SESSION",
+    `<h2 id="dialogTitle">${station.name}</h2><p class="dialog-subtitle">${session.connector} · ${vehicles[session.vehicle].label}</p>${!session.settled ? `<img class="session-vehicle-preview" src="${vehicles[session.vehicle].image}" alt="${vehicles[session.vehicle].name}">` : ""}${session.settled ? `<div class="receipt-hero"><div class="receipt-symbol">${icon("check")}</div><h3>${paidAmount(session) > 0 ? "Payment received" : "Checkout complete"}</h3><div class="receipt-amount"><small>AMOUNT PAID</small><strong>${currency(paidAmount(session))}</strong></div><p>${session.receipt?.paymentId ? `Paid via Razorpay · ${session.receipt.paymentId}` : "No payment was needed for this charge."}</p></div>` : ""}<div class="charge-ring" id="chargeRing" ${session.settled ? "hidden" : ""}><div>${icon(session.settled ? "check" : ended ? "receipt" : "bolt")}<strong id="liveSoc">${soc(session).toFixed(0)}%</strong><small>BATTERY</small></div></div><div class="bill-summary" id="sessionSummary"></div>${session.settled ? `<details class="receipt-details"><summary>Session details</summary>${billRow("Charging power used", `${session.power} kW`)}${billRow("Completed", session.reason)}<p class="receipt-id">${session.receipt?.id || session.id}<br>${new Intl.DateTimeFormat("en-IN", {dateStyle:"medium",timeStyle:"short",timeZone:"Asia/Kolkata"}).format(new Date(session.started))} IST<br>Pluggo charging receipt</p></details>` : ""}<div id="sessionActions"></div>`,
   );
   dialogSession = session.id;
   updateSessionDialog();
@@ -1051,12 +1057,12 @@ function updateSessionDialog() {
   $("#sessionSummary").innerHTML = s.settled
     ? billRow("Energy delivered", `${s.energy.toFixed(2)} kWh`) +
       billRow(
-        "Simulated charging time",
+        "Charging time",
         (s.energy > 0 && (s.energy / s.power) * 60 < 1) ? "Less than 1 min" : `${Math.floor((s.energy / s.power) * 60)} min`,
       ) +
-      billRow("Demo total", currency(total(s))) +
-      billRow("Amount collected", "₹0.00", "total")
-    : `<div><span>Energy added</span><strong>${s.energy.toFixed(2)}<small> kWh</small></strong></div><div><span>Charging time</span><strong>${Math.floor((s.energy / s.power) * 60)}<small> min</small></strong></div><div><span>Demo cost</span><strong>${currency(total(s))}</strong></div><p class="charge-context">${s.ended ? s.reason : `${s.power} kW · 60× simulation`} · Target ${s.target}%</p>`;
+      billRow("Total", currency(total(s))) +
+      billRow("Amount paid", currency(paidAmount(s)), "total")
+    : `<div><span>Energy added</span><strong>${s.energy.toFixed(2)}<small> kWh</small></strong></div><div><span>Charging time</span><strong>${Math.floor((s.energy / s.power) * 60)}<small> min</small></strong></div><div><span>Cost</span><strong>${currency(total(s))}</strong></div><p class="charge-context">${s.ended ? s.reason : `${s.power} kW`} · Target ${s.target}%</p>`;
   if (s.settled) {
     $("#sessionActions").innerHTML =
       `<button id="receiptDone" class="primary-button dialog-full">Back to sessions</button>`;
@@ -1067,12 +1073,12 @@ function updateSessionDialog() {
   } else if (s.ended) {
     $("#dialogEyebrow").textContent = "CHARGE COMPLETE";
     $("#sessionActions").innerHTML =
-      `<button class="primary-button dialog-full" id="checkoutButton">Continue to demo checkout ${icon("arrow-up-right")}</button>`;
+      `<button class="primary-button dialog-full" id="checkoutButton">Continue to payment ${icon("arrow-up-right")}</button>`;
     $("#checkoutButton").onclick = () => openCheckout(s);
   } else {
     if (!$("#stopCharge")) {
       $("#sessionActions").innerHTML =
-        `<p class="dialog-subtitle">60× demo speed. Charging continues if you leave this page.</p><button class="secondary-button dialog-full" id="stopCharge">${icon("stop")} Stop demo charging</button>`;
+        `<p class="dialog-subtitle">Charging continues if you leave this page.</p><button class="secondary-button dialog-full" id="stopCharge">${icon("stop")} Stop charging</button>`;
       $("#stopCharge").onclick = async () => {
         if (!localPreview) { const reply=await backendAction($("#stopCharge"),()=>customerApi.stop(s.id)); if(reply) openSession(state.sessions.find(item=>item.id===s.id)); return; }
         updateSession(s);
@@ -1088,19 +1094,111 @@ function updateSessionDialog() {
   }
   layoutDialogActions();
 }
+const paidAmount = (s) => Math.max(0, Number(s.receipt?.amountCollected) || 0);
 function openCheckout(s) {
   if (!s.ended) return;
+  const station = stationById(s.station);
+  const due = total(s);
+  const online = !localPreview && backendConfig.payments === "razorpay" && due >= 1;
   showDialog(
-    "DEMO CHECKOUT / NO PAYMENT GATEWAY",
-    `<div class="receipt-symbol">${icon("shield")}</div><h2 id="dialogTitle">All charged.<br>No real charges.</h2><p class="dialog-subtitle">Your demo session is complete.</p><div class="bill-summary">${billRow("Station", stationById(s.station).name)}${billRow("Energy delivered", `${s.energy.toFixed(2)} kWh`)}${billRow("Demo bill", currency(total(s)))}${billRow("Amount collected", "₹0.00", "total")}</div>${notice("Demo checkout · no payment details required.")}<button class="primary-button dialog-full" id="completePayment">Complete demo payment · ₹0 ${icon("check")}</button>`,
+    "CHECKOUT",
+    `<div class="receipt-symbol">${icon("receipt")}</div><h2 id="dialogTitle">All charged.</h2><p class="dialog-subtitle">${station.name} · ${s.connector}</p><div class="bill-summary">${billRow("Energy delivered", `${s.energy.toFixed(2)} kWh`)}${billRow("Rate", `₹${s.rate ?? station.rate} / kWh`)}${billRow("Amount due", currency(due), "total")}</div>${online ? notice("Secure payment by Razorpay · UPI, cards and netbanking.") : due < 1 ? notice("Charges under ₹1 are on us.") : ""}<button class="primary-button dialog-full" id="completePayment">${online ? `Pay ${currency(due)}` : "Complete checkout"} ${icon("check")}</button>`,
   );
   $("#completePayment").onclick = async () => {
-    if (!localPreview) { const reply=await backendAction($("#completePayment"),()=>customerApi.checkout(s.id)); if(reply) openSession(state.sessions.find(item=>item.id===s.id)); return; }
-    s.settled = true;
-    save();
-    renderSessions();
-    openSession(s);
-    toast("Demo payment complete. ₹0 collected.");
+    const button = $("#completePayment");
+    if (localPreview) {
+      s.settled = true;
+      save();
+      renderSessions();
+      openSession(s);
+      toast("Checkout complete.");
+      return;
+    }
+    let payment = {};
+    if (online) {
+      button.disabled = true;
+      button.setAttribute("aria-busy", "true");
+      try {
+        const order = await customerApi.paymentOrder(s.id);
+        payment = await payWithRazorpay(order, { description: `Charging at ${station.name}` });
+      } catch (error) {
+        button.disabled = false;
+        button.removeAttribute("aria-busy");
+        toast(error.cancelled ? "Payment cancelled. You can pay whenever you're ready." : error.message);
+        return;
+      }
+    }
+    const reply = await backendAction(button, () => customerApi.checkout(s.id, payment));
+    if (reply) {
+      openSession(state.sessions.find((item) => item.id === s.id));
+      toast(online ? "Payment received. Thank you!" : "Checkout complete.");
+    }
+  };
+}
+function renderAccount() {
+  const card = $("#accountCard");
+  if (!card) return;
+  card.hidden = localPreview || !backendConfig.authRequired;
+  if (card.hidden) return;
+  const html = account.signedIn
+    ? `<div class="settings-heading">${icon("shield")}<h2>Signed in</h2></div><p>${account.phone || "Phone account"} · your charges and receipts are saved to this number on every device.</p><button class="secondary-button" id="signOutButton" type="button">Sign out</button>`
+    : `<div class="settings-heading">${icon("shield")}<h2>Sign in</h2></div><p>Use your mobile number to start charging and keep your receipts on every device.</p><button class="primary-button" id="signInButton" type="button">Sign in with phone ${icon("arrow-up-right")}</button>`;
+  if (card.innerHTML === html) return;
+  card.innerHTML = html;
+  $("#signInButton")?.addEventListener("click", () => openSignIn());
+  $("#signOutButton")?.addEventListener("click", async () => {
+    const reply = await backendAction($("#signOutButton"), () => customerApi.signOut(), false);
+    if (!reply) return;
+    await signOutFirebase(backendConfig.firebase);
+    renderGarage();
+    toast("Signed out.");
+  });
+}
+function openSignIn(after) {
+  if (!backendConfig.firebase) { toast("Phone sign-in is not available right now."); return; }
+  showDialog(
+    "SIGN IN",
+    `<h2 id="dialogTitle">Your number,<br>your receipts.</h2><p class="dialog-subtitle">We'll text a one-time code to verify your mobile number.</p><form id="phoneForm" class="sign-in-form" novalidate><label for="phoneInput">Mobile number</label><div class="phone-field"><span>+91</span><input id="phoneInput" type="tel" inputmode="numeric" autocomplete="tel-national" maxlength="14" placeholder="98765 43210" required></div><p class="form-error" id="signInError" role="alert"></p><button type="submit" class="primary-button dialog-full" id="sendCode">Send code ${icon("arrow-up-right")}</button></form><div id="recaptchaBox"></div>`,
+  );
+  $("#phoneInput").focus();
+  $("#phoneForm").onsubmit = async (event) => {
+    event.preventDefault();
+    const phone = normalizeIndianPhone($("#phoneInput").value);
+    if (!phone) { $("#signInError").textContent = "Enter a valid 10-digit Indian mobile number."; return; }
+    const button = $("#sendCode");
+    button.disabled = true;
+    $("#signInError").textContent = "";
+    try {
+      await sendOtp(backendConfig.firebase, phone, $("#recaptchaBox"));
+    } catch (error) {
+      button.disabled = false;
+      $("#signInError").textContent = friendlyAuthError(error);
+      return;
+    }
+    $("#phoneForm").innerHTML = `<label for="codeInput">6-digit code sent to ${phone}</label><input id="codeInput" class="otp-input" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="••••••" required><p class="form-error" id="signInError" role="alert"></p><button type="submit" class="primary-button dialog-full" id="verifyCode">Verify and continue ${icon("check")}</button><button type="button" class="text-link" id="changeNumber">Use a different number</button>`;
+    $("#codeInput").focus();
+    $("#changeNumber").onclick = () => openSignIn(after);
+    $("#phoneForm").onsubmit = async (submitEvent) => {
+      submitEvent.preventDefault();
+      const code = $("#codeInput").value.replace(/\D/g, "");
+      if (code.length !== 6) { $("#signInError").textContent = "Enter the 6-digit code from the SMS."; return; }
+      const verifyButton = $("#verifyCode");
+      verifyButton.disabled = true;
+      let token;
+      try {
+        token = await confirmOtp(code);
+      } catch (error) {
+        verifyButton.disabled = false;
+        $("#signInError").textContent = friendlyAuthError(error);
+        return;
+      }
+      const reply = await backendAction(verifyButton, () => customerApi.signIn(token), false);
+      if (!reply) return;
+      renderGarage();
+      toast(`Signed in as ${account.phone || phone}.`);
+      if (after) after();
+      else $("#flowDialog").close();
+    };
   };
 }
 let summaryPeriod = "month";
@@ -1108,7 +1206,7 @@ function renderSessionSummary() {
   const summary = summarizeSessions(state.sessions,{period:summaryPeriod,cost:total});
   const periodLabel = {week:"this week",month:"this month",all:"across all time"}[summaryPeriod];
   $("#summaryCaption").textContent = `Completed charges ${periodLabel} · India time`;
-  const html = `<article class="summary-stat"><span>Estimated spend</span><strong>${currency(summary.cost)}</strong><small>${currency(summary.collected)} actually collected</small></article><article class="summary-stat"><span>Energy added</span><strong>${summary.energy.toFixed(2)}<small> kWh</small></strong><small>Across completed charges</small></article><article class="summary-stat"><span>Charging time</span><strong>${chargingDuration(summary.minutes)}</strong><small>Simulated duration</small></article><article class="summary-stat"><span>Completed sessions</span><strong>${summary.completed}</strong><small>${summary.completed === 1 ? "One charge finished" : "Charges finished"}</small></article>`;
+  const html = `<article class="summary-stat"><span>Estimated spend</span><strong>${currency(summary.cost)}</strong><small>${currency(summary.collected)} paid</small></article><article class="summary-stat"><span>Energy added</span><strong>${summary.energy.toFixed(2)}<small> kWh</small></strong><small>Across completed charges</small></article><article class="summary-stat"><span>Charging time</span><strong>${chargingDuration(summary.minutes)}</strong><small>Time on charger</small></article><article class="summary-stat"><span>Completed sessions</span><strong>${summary.completed}</strong><small>${summary.completed === 1 ? "One charge finished" : "Charges finished"}</small></article>`;
   if ($("#sessionSummaryCards").innerHTML !== html) $("#sessionSummaryCards").innerHTML = html;
 }
 document.querySelectorAll("[data-summary-period]").forEach(button => button.addEventListener("click", () => {
@@ -1124,10 +1222,10 @@ function renderSessions() {
     ? state.sessions
         .map(
           (s) =>
-            `<article class="session-card"><span class="session-symbol">${icon(s.settled ? "receipt" : s.ended ? "check" : "bolt")}</span><div class="session-info"><p class="eyebrow">${s.settled ? "COMPLETED · ₹0 PAID" : s.ended ? "CHECKOUT READY" : "CHARGING · DEMO"}</p><h2>${stationById(s.station).name}</h2><p>${vehicles[s.vehicle].label} · ${s.connector} · ${s.energy.toFixed(2)} kWh<br>${new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", timeZone: "Asia/Kolkata" }).format(new Date(s.started))} · ${s.reason || "Simulated charging in progress"}</p>${!s.ended ? `<div class="session-bar"><span style="width:${(s.energy / energyLimit(s)) * 100}%"></span></div>` : ""}</div><div class="session-bill"><span class="session-cost-label">Demo bill</span><strong>${currency(total(s))}</strong><button class="secondary-button" data-session="${s.id}">${s.settled ? "View receipt" : s.ended ? "Demo checkout" : "View live session"} ${icon("arrow-up-right")}</button></div></article>`,
+            `<article class="session-card"><span class="session-symbol">${icon(s.settled ? "receipt" : s.ended ? "check" : "bolt")}</span><div class="session-info"><p class="eyebrow">${s.settled ? `COMPLETED · ${currency(paidAmount(s))} PAID` : s.ended ? "PAYMENT DUE" : "CHARGING"}</p><h2>${stationById(s.station).name}</h2><p>${vehicles[s.vehicle].label} · ${s.connector} · ${s.energy.toFixed(2)} kWh<br>${new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", timeZone: "Asia/Kolkata" }).format(new Date(s.started))} · ${s.reason || "Charging in progress"}</p>${!s.ended ? `<div class="session-bar"><span style="width:${(s.energy / energyLimit(s)) * 100}%"></span></div>` : ""}</div><div class="session-bill"><span class="session-cost-label">Bill</span><strong>${currency(total(s))}</strong><button class="secondary-button" data-session="${s.id}">${s.settled ? "View receipt" : s.ended ? "Pay now" : "View live session"} ${icon("arrow-up-right")}</button></div></article>`,
         )
         .join("")
-    : `<div class="empty-state session-empty">${icon("bolt")}<div><h2>No sessions yet.</h2><p>Your charges and receipts will appear here.</p></div><a href="#stations" class="primary-button">Explore demo stations ${icon("arrow-up-right")}</a></div>`;
+    : `<div class="empty-state session-empty">${icon("bolt")}<div><h2>No sessions yet.</h2><p>Your charges and receipts will appear here.</p></div><a href="#stations" class="primary-button">Find a station ${icon("arrow-up-right")}</a></div>`;
 }
 function parseCode(raw) {
   const text = raw.trim();
@@ -1150,7 +1248,7 @@ function parseCode(raw) {
 function openScanner(station) {
   showDialog(
     "SCAN / MANUAL VERIFICATION",
-    `<h2 id="dialogTitle">Meet your connector.</h2><p class="dialog-subtitle">Scan a demo QR or enter a code at ${station.name}. Camera access is optional.</p><video id="scanVideo" class="camera-video" autoplay playsinline muted hidden></video><button class="secondary-button dialog-full" id="startCamera">${icon("camera")} Start camera</button><p class="dialog-subtitle" id="cameraStatus" role="status"></p><form id="manualCodeForm"><label class="eyebrow" for="chargerCode">CHARGER CODE</label><div class="code-input"><input id="chargerCode" placeholder="e.g. ${station.connectors[0].id}" required maxlength="120" autocomplete="off"><button class="primary-button" type="submit">Verify ${icon("arrow-up-right")}</button></div></form><p id="codeError" class="form-error" role="alert"></p><p class="dialog-subtitle">Demo codes: ${station.connectors.map((c) => c.id).join(" · ")}<br>Camera frames stay on your device.</p>${notice("Only available connectors compatible with your selected vehicle can start a demo charge.")}`,
+    `<h2 id="dialogTitle">Meet your connector.</h2><p class="dialog-subtitle">Scan the charger's QR or enter its code at ${station.name}. Camera access is optional.</p><video id="scanVideo" class="camera-video" autoplay playsinline muted hidden></video><button class="secondary-button dialog-full" id="startCamera">${icon("camera")} Start camera</button><p class="dialog-subtitle" id="cameraStatus" role="status"></p><form id="manualCodeForm"><label class="eyebrow" for="chargerCode">CHARGER CODE</label><div class="code-input"><input id="chargerCode" placeholder="e.g. ${station.connectors[0].id}" required maxlength="120" autocomplete="off"><button class="primary-button" type="submit">Verify ${icon("arrow-up-right")}</button></div></form><p id="codeError" class="form-error" role="alert"></p><p class="dialog-subtitle">Charger IDs: ${station.connectors.map((c) => c.id).join(" · ")}<br>Camera frames stay on your device.</p>${notice("Only available connectors compatible with your selected vehicle can start a demo charge.")}`,
   );
   async function verify(raw) {
     if (!localPreview) {
@@ -1160,7 +1258,7 @@ function openScanner(station) {
     const connector = station.connectors.find((c) => c.id === parseCode(raw));
     if (!connector) {
       $("#codeError").textContent =
-        "Unknown code for this station. Try one of the listed demo IDs.";
+        "Unknown code for this station. Check the ID printed on the charger.";
       return false;
     }
     if (
@@ -1184,7 +1282,7 @@ function openScanner(station) {
       !navigator.mediaDevices?.getUserMedia
     ) {
       $("#cameraStatus").textContent =
-        "QR camera scanning is unavailable in this browser. Enter a demo code below.";
+        "QR camera scanning is unavailable in this browser. Enter the charger code below.";
       return;
     }
     const button = $("#startCamera");
@@ -1208,7 +1306,7 @@ function openScanner(station) {
       await video.play();
       const detector = new BarcodeDetector({ formats: ["qr_code"] });
       $("#cameraStatus").textContent =
-        "Camera active. Align a demo QR code in the frame.";
+        "Camera active. Align the charger's QR code in the frame.";
       async function scan() {
         if (!mediaStream || !$("#scanVideo")) return;
         try {
@@ -1224,7 +1322,7 @@ function openScanner(station) {
       if (generation !== cameraGeneration) return;
       if ($("#cameraStatus"))
         $("#cameraStatus").textContent =
-          "Camera unavailable or permission denied. Enter a demo code below.";
+          "Camera unavailable or permission denied. Enter the charger code below.";
       stopCamera();
       if (button.isConnected) button.disabled = false;
     }
@@ -1239,17 +1337,17 @@ function stopCamera() {
 $("#resetDemo").onclick = () => {
   showDialog(
     "START FRESH",
-    `<h2 id="dialogTitle">Ready for another run?</h2><p class="dialog-subtitle">Clear your demo sessions and saved stations, including any active simulated charge.</p><button id="confirmReset" class="primary-button dialog-full">Reset this demonstration ${icon("reset")}</button>`,
+    `<h2 id="dialogTitle">Start fresh?</h2><p class="dialog-subtitle">Clear your charging history and saved stations, including any active charge.</p><button id="confirmReset" class="primary-button dialog-full">Clear my history ${icon("reset")}</button>`,
   );
   $("#confirmReset").onclick = async () => {
-    if (!localPreview) { const reply=await backendAction($("#confirmReset"),()=>customerApi.reset(),false); if(reply) { $("#flowDialog").close(); renderGarage(); location.hash="home"; toast("Your server demo has been reset."); } return; }
+    if (!localPreview) { const reply=await backendAction($("#confirmReset"),()=>customerApi.reset(),false); if(reply) { $("#flowDialog").close(); renderGarage(); location.hash="home"; toast("Your history has been cleared."); } return; }
     state = { vehicle: "car", saved: [], sessions: [] };
     save();
     $("#flowDialog").close();
     selectVehicle("car", false);
     renderSessions();
     location.hash = "home";
-    toast("A fresh demo is ready.");
+    toast("All cleared.");
   };
 };
 try {
@@ -1322,7 +1420,7 @@ const tick = setInterval(() => {
     const completed = updateSession(current);
     if (completed) {
       save();
-      toast("Your demo charge is complete. Continue to the ₹0 checkout.");
+      toast("Your charge is complete. Continue to payment.");
     }
     renderSessions();
     renderHomeWidgets();

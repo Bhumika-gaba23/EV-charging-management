@@ -1,37 +1,45 @@
 name: ci
-on: [push, pull_request]
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
 jobs:
-  cpp:
+  backend:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: cmake -S . -B build -DEV_BUILD_WEB_API=ON -DBUILD_TESTING=ON
-      - run: cmake --build build -j2
-      - run: ctest --test-dir build --output-on-failure
-  flutter:
+      - name: Install build dependencies
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libsqlite3-dev libcurl4-openssl-dev libssl-dev
+      - name: Build C++ API and domain tests
+        run: |
+          cmake -S . -B build-web-demo -DEV_BUILD_WEB_API=ON -DBUILD_TESTING=ON -DCMAKE_BUILD_TYPE=Release
+          cmake --build build-web-demo -j2
+      - name: Domain checks
+        run: ctest --test-dir build-web-demo --output-on-failure
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install simulator dependencies
+        run: python -m pip install -r ocpp-simulator/requirements.txt
+      - name: Customer API, persistence and simulator tests
+        run: python tests/api/customer_integration.py
+      - name: Phone sign-in and Razorpay checkout tests
+        run: python tests/api/integrations_test.py
+
+  web-unit:
     runs-on: ubuntu-latest
-    defaults: {run: {working-directory: mobile}}
     steps:
       - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
-        with: {channel: stable}
-      - run: flutter pub get
-      - run: flutter analyze
-      - run: flutter test
-  containers:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Frontend logic tests
+        run: node --test tests/web/demo.test.mjs tests/web/session-summary.test.mjs tests/web/discovery.test.mjs
+
+  render-image:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: docker compose config
-      - run: docker build -f docker/api.Dockerfile .
-      - run: docker build ocpp-simulator
-*** Add File: C:\D Drive Backup\ev charging\.gitignore
-build*/
-.dart_tool/
-mobile/build/
-mobile/.flutter-plugins*
-postgres_data/
-*.log
-secrets/*.txt
-!secrets/*.example
-tmp/pdfs/rendered/
+      - name: Build the image Render deploys
+        run: docker build -f deployment/Dockerfile -t pluggo-render .

@@ -18,7 +18,7 @@ export const vehicles = {
     index: "02",
     capacity: 3,
     power: 1.5,
-    connectors: ["Demo AC"],
+    connectors: ["Bharat AC-001"],
     image: "assets/models/scooter-poster.png?v=silver-5",
   },
   bike: {
@@ -29,7 +29,7 @@ export const vehicles = {
     index: "03",
     capacity: 5,
     power: 3,
-    connectors: ["Demo AC"],
+    connectors: ["Bharat AC-001"],
     image: "assets/models/bike-poster.png?v=silver-5",
   },
   cargo: {
@@ -40,7 +40,7 @@ export const vehicles = {
     index: "04",
     capacity: 20,
     power: 6.6,
-    connectors: ["Demo AC"],
+    connectors: ["Bharat AC-001"],
     image: "assets/models/cargo-poster.png?v=cargo1",
   },
 };
@@ -56,7 +56,7 @@ export const stations = [
     connectors: [
       { id: "CP-01", type: "CCS2", power: 50, available: true },
       { id: "CP-02", type: "Type 2", power: 22, available: true },
-      { id: "CP-03", type: "Demo AC", power: 3.3, available: true },
+      { id: "CP-03", type: "Bharat AC-001", power: 3.3, available: true },
     ],
   },
   {
@@ -69,7 +69,7 @@ export const stations = [
     amenities: ["Open 24/7", "Metro nearby"],
     connectors: [
       { id: "MH-01", type: "CCS2", power: 30, available: true },
-      { id: "MH-02", type: "Demo AC", power: 3.3, available: true },
+      { id: "MH-02", type: "Bharat AC-001", power: 3.3, available: true },
     ],
   },
   {
@@ -95,7 +95,7 @@ export const stations = [
     amenities: ["Open 24/7", "Restroom", "Café"],
     connectors: [
       { id: "LR-01", type: "Type 2", power: 22, available: true },
-      { id: "LR-02", type: "Demo AC", power: 3.3, available: true },
+      { id: "LR-02", type: "Bharat AC-001", power: 3.3, available: true },
     ],
   },
   {
@@ -108,7 +108,7 @@ export const stations = [
     amenities: ["Open 24/7", "Shopping", "Parking"],
     connectors: [
       { id: "SK-01", type: "CCS2", power: 50, available: true },
-      { id: "SK-02", type: "Demo AC", power: 3.3, available: false },
+      { id: "SK-02", type: "Bharat AC-001", power: 3.3, available: false },
     ],
   },
 ];

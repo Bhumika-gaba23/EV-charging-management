@@ -23,7 +23,7 @@ try {
  assert.equal(glass.blur,'blur(20px) saturate(1.1)');assert.match(glass.background,/0.04\)/);assert.equal(glass.color,'rgb(21, 23, 25)');
  await p.waitForTimeout(700);await p.waitForFunction(()=>document.querySelectorAll('.leaflet-tile-loaded').length>0,{},{timeout:12000}).catch(()=>{});await p.screenshot({path:'docs/ui-audit/clear-glass/phone-stations.png'});
  await p.getByRole('button',{name:'View Central Circle',exact:true}).click();await p.locator('[data-connector="CP-03"]').check();await p.locator('#selectCharger').click();await p.getByRole('button',{name:'Start simulated charging'}).click();
- await p.getByRole('button',{name:'Stop demo charging'}).click();await p.getByRole('button',{name:'Continue to demo checkout'}).click();await p.getByRole('button',{name:'Complete demo payment · ₹0'}).click();
+ await p.getByRole('button',{name:'Stop charging'}).click();await p.getByRole('button',{name:'Continue to payment'}).click();await p.getByRole('button',{name:'Complete checkout'}).click();
  const state=await context.request.get('http://127.0.0.1:4173/api/customer/state').then(r=>r.json());assert.equal(state.state.sessions[0].vehicle,'cargo');assert.equal(state.state.sessions[0].power,3.3);assert.equal(state.state.sessions[0].settled,true);assert.equal(state.state.sessions[0].receipt.amountCollected,0);
  await p.locator('#closeDialog').click();await p.getByRole('link',{name:'Stations',exact:true}).click();
  for(const width of [320,390,1440]) {await p.setViewportSize({width,height:844});await p.waitForTimeout(200);assert.ok(await p.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));}

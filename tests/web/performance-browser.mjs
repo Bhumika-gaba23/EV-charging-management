@@ -43,7 +43,7 @@ try {
  await poster.locator('#vehicleDropdown summary').click();await poster.getByRole('menuitemradio',{name:/Urban Scooter/}).click();
  await poster.getByRole('link',{name:'Stations',exact:true}).click();
  assert.equal(await poster.locator('#stationSelection').evaluate(e=>getComputedStyle(e).backdropFilter),'blur(20px) saturate(1.1)');
- await poster.getByRole('button',{name:'View Central Circle',exact:true}).click();await poster.locator('[data-connector="CP-03"]').check();await poster.locator('#selectCharger').click();await poster.getByRole('button',{name:'Start simulated charging'}).click();await poster.getByRole('button',{name:'Stop demo charging'}).click();await poster.getByRole('button',{name:'Continue to demo checkout'}).click();await poster.getByRole('button',{name:'Complete demo payment · ₹0'}).click();
- assert.match(await poster.locator('#dialogBody').innerText(),/Demo payment completed/);assert.equal(modelRequests,0);assert.deepEqual(errors,[]);
+ await poster.getByRole('button',{name:'View Central Circle',exact:true}).click();await poster.locator('[data-connector="CP-03"]').check();await poster.locator('#selectCharger').click();await poster.getByRole('button',{name:'Start simulated charging'}).click();await poster.getByRole('button',{name:'Stop charging'}).click();await poster.getByRole('button',{name:'Continue to payment'}).click();await poster.getByRole('button',{name:'Complete checkout'}).click();
+ assert.match(await poster.locator('#dialogBody').innerText(),/Checkout complete|Payment received/);assert.equal(modelRequests,0);assert.deepEqual(errors,[]);
  await context.close();console.log('PASS: low-memory policy, uncapped display-frame rendering, sharp antialiased rendering, bounded model cache, idle sleep, memory-pressure cleanup, poster mode without GLB/Three downloads, 20px glass and complete charging flow.');
 }finally{await browser.close();}

@@ -46,6 +46,25 @@ Docker/Render package preserving the C++ backend. The C++ backend is deployed at
 https://pluggo-customer-demo.onrender.com. The selected default
 is free demo hosting with an ephemeral SQLite database; saved data can reset.
 
+## Phone sign-in and payments
+
+Both are optional and switched on by environment variables on the backend. Without them
+the app keeps anonymous visitors and a zero-amount checkout, and all tests run offline.
+
+| Variable | Purpose |
+|---|---|
+| `PLUGGO_FIREBASE_PROJECT_ID` | Turns on Firebase phone sign-in; charging then requires a signed-in number |
+| `PLUGGO_FIREBASE_API_KEY`, `PLUGGO_FIREBASE_APP_ID` | Public Firebase web-app config sent to the browser |
+| `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET` | Turns on Razorpay Checkout (use `rzp_test_…` keys for test mode) |
+
+The server verifies every Firebase ID token (RS256 signature against Google's rotating
+certificates, audience, issuer and expiry) and every Razorpay payment signature
+(HMAC-SHA256 of `order_id|payment_id`) before trusting them. A signed-in number owns one
+account, so its sessions and receipts follow it to other devices. Amounts under ₹1 settle
+without a payment. In Firebase, enable the Phone provider and add the app's domain under
+Authentication → Settings → Authorized domains. `tests/api/integrations_test.py` covers
+these flows with local stand-ins for both services.
+
 ## Shared phone and dashboard demonstration
 
 Customer charging sessions now appear in the operator Overview, using the same
@@ -56,10 +75,10 @@ its offline preview. See [demonstration steps](docs/submission/SHARED-CHARGING-D
 
 ## Live operations website
 
-The existing Vercel operations dashboard is published at
-**https://oops-omega.vercel.app** with Pluggo styling and a same-origin gateway to
-the C++ engine. The current backend link is temporary and depends on this Mac
-remaining awake and online. See [deployment details](deployment/vercel-dashboard/README.md).
+The Vercel operations dashboard is published at
+**https://oops-omega.vercel.app**. Its server-side gateway forwards operator requests to
+the C++ engine on Render (https://pluggo-customer-demo.onrender.com); it no longer
+depends on a developer machine. See [deployment details](deployment/vercel-dashboard/README.md).
 The hosted dashboard uses the legacy domain demonstration APIs; customer app
 history and totals remain separate under `/api/customer`.
 
@@ -211,7 +230,7 @@ Content-Type: application/json
 Send the returned token on protected calls:
 
 ```http
-Authorization: Bearer chargeflow-demo-token
+Authorization: Bearer chargeflow-demo-token  # development only
 ```
 
 | Method | Route | Purpose |

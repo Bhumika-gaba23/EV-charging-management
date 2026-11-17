@@ -29,7 +29,7 @@
       "capacity": 3,
       "power": 1.5,
       "connectors": [
-        "Demo AC"
+        "Bharat AC-001"
       ],
       "image": "assets/models/scooter-poster.png?v=silver-5"
     },
@@ -45,7 +45,7 @@
       "capacity": 5,
       "power": 3,
       "connectors": [
-        "Demo AC"
+        "Bharat AC-001"
       ],
       "image": "assets/models/bike-poster.png?v=silver-5"
     },
@@ -61,7 +61,7 @@
       "capacity": 20,
       "power": 6.6,
       "connectors": [
-        "Demo AC"
+        "Bharat AC-001"
       ],
       "image": "assets/models/cargo-poster.png?v=cargo1"
     }
@@ -94,7 +94,7 @@
         },
         {
           "id": "CP-03",
-          "type": "Demo AC",
+          "type": "Bharat AC-001",
           "power": 3.3,
           "available": true
         }
@@ -120,7 +120,7 @@
         },
         {
           "id": "MH-02",
-          "type": "Demo AC",
+          "type": "Bharat AC-001",
           "power": 3.3,
           "available": true
         }
@@ -173,7 +173,7 @@
         },
         {
           "id": "LR-02",
-          "type": "Demo AC",
+          "type": "Bharat AC-001",
           "power": 3.3,
           "available": true
         }
@@ -200,7 +200,7 @@
         },
         {
           "id": "SK-02",
-          "type": "Demo AC",
+          "type": "Bharat AC-001",
           "power": 3.3,
           "available": false
         }

@@ -1,0 +1,72 @@
+/* Phone sign-in form and account card. Uses the app's existing glass tokens. */
+.sign-in-form {
+  display: grid;
+  gap: 10px;
+  margin-top: 22px;
+}
+.sign-in-form label {
+  font-size: 12px;
+  letter-spacing: 0.4px;
+  color: var(--muted);
+}
+.phone-field {
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--glass-edge, var(--edge));
+  border-radius: 14px;
+  background: #ffffff06;
+  overflow: hidden;
+}
+.phone-field span {
+  padding: 14px 4px 14px 16px;
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--silver);
+}
+.phone-field input,
+.otp-input {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--silver);
+  font-size: 17px;
+  letter-spacing: 0.5px;
+  padding: 14px 16px 14px 6px;
+  outline: none;
+}
+.otp-input {
+  border: 1px solid var(--glass-edge, var(--edge));
+  border-radius: 14px;
+  background: #ffffff06;
+  padding: 14px 16px;
+  font-size: 22px;
+  letter-spacing: 10px;
+  text-align: center;
+}
+.phone-field:focus-within,
+.otp-input:focus {
+  border-color: #ffffff55;
+}
+.sign-in-form .form-error {
+  min-height: 1.2em;
+  margin: 0;
+  font-size: 12px;
+}
+.sign-in-form .text-link {
+  justify-self: center;
+  margin-top: 4px;
+}
+.account-card p {
+  margin: 12px 0 18px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.account-card .primary-button,
+.account-card .secondary-button {
+  width: 100%;
+  justify-content: center;
+}
+#recaptchaBox {
+  min-height: 0;
+}

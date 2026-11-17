@@ -9,7 +9,7 @@
     <meta name="theme-color" content="#0b0c0e" />
     <meta
       name="description"
-      content="Pluggo — a New Delhi EV charging demonstration. Choose your electric vehicle, explore stations and simulate a charge. No real payments."
+      content="Pluggo — smart EV charging for India. Find a compatible charger, charge within your budget and pay in the app."
     />
     <title>Pluggo — Your next charge, closer.</title>
     <link rel="icon" href="assets/pluggo.svg" type="image/svg+xml" />
@@ -17,6 +17,7 @@
     <link rel="stylesheet" href="chargeflow.css?v=20261104-server9" />
     <link rel="stylesheet" href="wallet.css?v=20261104-server9" />
     <link rel="stylesheet" href="reference-layout.css?v=20261104-summary1" />
+    <link rel="stylesheet" href="account.css?v=20261118-live1" />
     <script type="importmap">
       { "imports": { "three": "./vendor/three.module.min.js" } }
     </script>
@@ -85,7 +86,7 @@
           </article>
 
         </div>
-        <div class="home-widgets" aria-label="Selected vehicle demo information"><article class="home-widget battery-widget" aria-labelledby="homeBatteryLabel"><div class="widget-heading"><i data-icon="battery"></i><h2 id="homeBatteryLabel">Battery</h2><span class="widget-demo-label">Simulated</span></div><div class="widget-value"><strong id="homeBatteryValue">25<span>%</span></strong><small id="homeBatteryCapacity">10 of 40 kWh</small></div><progress id="homeBatteryProgress" max="100" value="25" aria-label="Simulated battery level">25%</progress></article><article class="home-widget power-widget" aria-labelledby="homePowerLabel"><div class="widget-heading"><i data-icon="bolt"></i><h2 id="homePowerLabel">Charging power</h2></div><div class="widget-value"><strong id="homePowerValue">0<span> kW</span></strong></div><p id="homePowerStatus">Up to 50 kW · demo</p></article></div>
+        <div class="home-widgets" aria-label="Selected vehicle information"><article class="home-widget battery-widget" aria-labelledby="homeBatteryLabel"><div class="widget-heading"><i data-icon="battery"></i><h2 id="homeBatteryLabel">Battery</h2></div><div class="widget-value"><strong id="homeBatteryValue">25<span>%</span></strong><small id="homeBatteryCapacity">10 of 40 kWh</small></div><progress id="homeBatteryProgress" max="100" value="25" aria-label="Battery level">25%</progress></article><article class="home-widget power-widget" aria-labelledby="homePowerLabel"><div class="widget-heading"><i data-icon="bolt"></i><h2 id="homePowerLabel">Charging power</h2></div><div class="widget-value"><strong id="homePowerValue">0<span> kW</span></strong></div><p id="homePowerStatus">Up to 50 kW</p></article></div>
         <div class="lower-heading"><h2>Nearest station</h2><a href="#stations" class="text-link">View map ↗</a></div>
         <div id="homeStations" class="home-stations"></div>
       </section>
@@ -95,7 +96,7 @@
         aria-label="Charging stations"
         hidden
       >
-        <div class="map-top-controls">        <div class="stations-heading"><a href="#home" class="icon-button map-back-button" aria-label="Back to Home"><i data-icon="back"></i></a><div><h1>Stations</h1><span class="demo-tag">Demo stations</span></div><div class="station-source" role="group" aria-label="Station source"><button id="demoStationSource" aria-pressed="true">Demo</button><button id="realStationSource" aria-pressed="false" title="Google Places search">Real</button></div><div class="map-settings-footer"><span id="mapModeLabel">OPENSTREETMAP</span><button id="openMapSettings" class="icon-button" aria-label="Map settings"><i data-icon="settings"></i></button></div></div>
+        <div class="map-top-controls">        <div class="stations-heading"><a href="#home" class="icon-button map-back-button" aria-label="Back to Home"><i data-icon="back"></i></a><div><h1>Stations</h1><span class="demo-tag">Pluggo network</span></div><div class="station-source" role="group" aria-label="Station source"><button id="demoStationSource" aria-pressed="true">Pluggo</button><button id="realStationSource" aria-pressed="false" title="Search every charger with Google Places">All</button></div><div class="map-settings-footer"><span id="mapModeLabel">OPENSTREETMAP</span><button id="openMapSettings" class="icon-button" aria-label="Map settings"><i data-icon="settings"></i></button></div></div>
         <form class="stations-controls" id="stationSearchForm"><label class="search-field"><i data-icon="search"></i><input id="stationSearch" placeholder="Search a station or locality" type="search" aria-label="Search a station or locality" /></label><button class="filter-chip" id="availableFilter" type="button" aria-pressed="false" aria-label="Available now">Available</button><button class="primary-button real-search-button" id="realStationSearch" type="submit" hidden>Search nearby</button><button type="button" class="map-locate" id="useLocation" aria-label="Use my location"><i data-icon="locate"></i></button></form>
         <div id="realStationNotice" class="real-station-notice" role="status" hidden></div>
 </div>
@@ -105,7 +106,7 @@
           <div id="mapNetworkStatus" class="map-network-status" role="status" hidden>Street tiles could not load. Station details are available below. <button id="retryMapTiles">Retry map</button></div>
         </div>
         <p class="map-interaction-hint visually-hidden">Select a station pin. Select a numbered group to zoom in.</p>
-        <div class="stations-summary visually-hidden"><span id="resultCount" role="status"></span><span id="mapCaption">Demo availability · not live</span></div>
+        <div class="stations-summary visually-hidden"><span id="resultCount" role="status"></span><span id="mapCaption">Pluggo network · live availability</span></div>
         <section id="stationSelection" class="station-selection" aria-label="Selected station" aria-live="polite"></section>
         <div class="map-empty" id="mapEmpty" hidden><strong>No matching stations.</strong><span>Try another locality or clear your filters.</span><button id="clearStationFilters" class="text-link">Clear filters</button></div>
       </section>
@@ -126,7 +127,7 @@
           <div class="summary-heading"><h2>Your charging overview</h2><div class="summary-period" role="group" aria-label="Summary period"><button type="button" data-summary-period="week" aria-pressed="false">Week</button><button type="button" data-summary-period="month" aria-pressed="true">Month</button><button type="button" data-summary-period="all" aria-pressed="false">All time</button></div></div>
           <p id="summaryCaption" class="summary-caption">Completed charges this month · India time</p>
           <div class="session-summary-grid" id="sessionSummaryCards"></div>
-          <p class="summary-footnote">Estimated charging costs and simulated charging time. Active sessions appear below.</p>
+          <p class="summary-footnote">Charging costs and time on charger. Active sessions appear below.</p>
         </section>
         <div id="sessionList"></div>
       </section>
@@ -136,13 +137,14 @@
             <p class="eyebrow">MAKE YOURSELF AT HOME</p>
             <h1>Your garage<span>.</span></h1>
             <p>
-              Pick your vehicle. We’ll match its demo connectors.
+              Pick your vehicle. We’ll match its connectors.
             </p>
           </div>
         </div>
         <div id="garageVehicles" class="garage-vehicles"></div>
         <div class="garage-settings">
-          <article class="settings-card preferences-card"><div class="settings-heading"><i data-icon="rotate"></i><h2>Make it yours.</h2></div><label class="motion-setting" for="previewMotion"><span>Animate vehicle previews<small>Slow 360° rotation</small></span><input id="previewMotion" type="checkbox" role="switch" checked /></label><details class="demo-details"><summary>About this demonstration</summary><p>Charging is simulated at 60× speed. No charger or payment provider is connected. Connected demo history is stored by the local server.</p><button class="secondary-button" id="resetDemo"><i data-icon="reset"></i> Reset demonstration</button></details></article>
+          <article class="settings-card account-card" id="accountCard" hidden></article>
+          <article class="settings-card preferences-card"><div class="settings-heading"><i data-icon="rotate"></i><h2>Make it yours.</h2></div><label class="motion-setting" for="previewMotion"><span>Animate vehicle previews<small>Slow 360° rotation</small></span><input id="previewMotion" type="checkbox" role="switch" checked /></label><details class="demo-details"><summary>About Pluggo</summary><p>Pilot release: Pluggo network stations and chargers are simulated while we onboard partner chargers, and charging runs faster than real time. Payments use Razorpay test mode, so no real money moves.</p><button class="secondary-button" id="resetDemo"><i data-icon="reset"></i> Clear my history</button></details></article>
           <details class="settings-card advanced-settings" id="mapSettings"><summary><span class="settings-heading"><i data-icon="map"></i><span><strong>Google Maps</strong><small id="mapConnectionSummary">Connect real charger search</small></span></span><span class="settings-chevron">⌄</span></summary><div class="advanced-settings-body"><p>Connect a website-restricted key for real charger search. Enable Maps JavaScript API, Places API (New), and billing.</p>
             <form id="mapsKeyForm">
               <label for="mapsApiKey">GOOGLE MAPS BROWSER API KEY</label>
@@ -171,7 +173,7 @@
       </section>
       <footer class="app-footer">
         <a class="footer-brand" href="#home">pluggo.</a>
-        <p>Demo only · no real money is charged.</p>
+        <p>Smart EV charging for India.</p>
         <button id="modelCredits" class="text-link">
           3D model credits <i data-icon="arrow-up-right"></i>
         </button>
@@ -190,10 +192,10 @@
     <div id="toast" role="status" aria-live="polite" class="toast"></div>
     <noscript
       ><p class="noscript">
-        Please enable JavaScript to explore the charging demonstration.
+        Please enable JavaScript to use Pluggo.
       </p></noscript
     >
     <script src="vendor/leaflet.js"></script>
-    <script src="chargeflow.js?v=20261104-summary1" type="module"></script>
+    <script src="chargeflow.js?v=20261118-live1" type="module"></script>
   </body>
 </html>

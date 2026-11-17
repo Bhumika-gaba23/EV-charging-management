@@ -17,6 +17,18 @@ services:
         value: "1"
       - key: PLUGGO_GATEWAY_KEY
         sync: false
+      # Phone sign-in (Firebase Authentication). Leave unset to keep anonymous visitors.
+      - key: PLUGGO_FIREBASE_PROJECT_ID
+        sync: false
+      - key: PLUGGO_FIREBASE_API_KEY
+        sync: false
+      - key: PLUGGO_FIREBASE_APP_ID
+        sync: false
+      # Razorpay test or live keys. Leave unset to keep the zero-amount checkout.
+      - key: RAZORPAY_KEY_ID
+        sync: false
+      - key: RAZORPAY_KEY_SECRET
+        sync: false
     disk:
       name: pluggo-customer-data
       mountPath: /data

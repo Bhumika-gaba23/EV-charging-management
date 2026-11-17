@@ -3,7 +3,7 @@ const browser=await chromium.launch({channel:'chrome',headless:true,args:['--ena
 try{
  const context=await browser.newContext({viewport:{width:390,height:844}});const p=await context.newPage();const errors=[];p.on('pageerror',e=>errors.push(e.message));
  await p.goto('http://127.0.0.1:4173');await p.waitForFunction(()=>window.pluggoBackend?.connected);await p.waitForFunction(()=>window.pluggoPerformance?.().ready);
- assert.equal(await p.locator('#connectionMode').innerText(),'SERVER DEMO');assert.equal(await p.locator('#backendBanner').isVisible(),false);
+ assert.equal(await p.locator('#connectionMode').innerText(),'LIVE');assert.equal(await p.locator('#backendBanner').isVisible(),false);
  await p.locator('#vehicleDropdown summary').click();await p.getByRole('menuitemradio',{name:/Urban Scooter/}).click();
  await p.waitForFunction(async()=>{const response=await fetch('/api/customer/state');const data=await response.json();return data.state.vehicle==='scooter';});
  await p.reload();await p.waitForFunction(()=>window.pluggoBackend?.connected);assert.equal(await p.locator('#selectedVehicleName').innerText(),'Urban Scooter');
@@ -14,7 +14,7 @@ try{
  const occupied=strangers.catalog.stations.find(s=>s.id==='CP').connectors.find(c=>c.id==='CP-03');assert.equal(occupied.available,false);
  await p.locator('#closeDialog').click();await p.getByRole('link',{name:'Home',exact:true}).click();await p.waitForFunction(()=>document.querySelector('#homeBatteryProgress').value>25);assert.match(await p.locator('#homePowerValue').innerText(),/1.5\s*kW/);
  await p.evaluate(()=>{const old=localStorage.getItem('chargeflow.web.v1');const value=JSON.parse(old);value.sessions=[{id:'injected',energy:999999}];localStorage.setItem('chargeflow.web.v1',JSON.stringify(value));});
- await p.reload();await p.waitForFunction(()=>window.pluggoBackend?.connected);await p.getByRole('link',{name:'Sessions',exact:true}).click();await p.getByRole('button',{name:'View live session'}).click();await p.getByRole('button',{name:'Stop demo charging'}).click();await p.getByRole('button',{name:'Continue to demo checkout'}).click();await p.getByRole('button',{name:'Complete demo payment · ₹0'}).click();await p.waitForFunction(()=>document.querySelector('#dialogBody').textContent.includes('Demo payment completed'));
+ await p.reload();await p.waitForFunction(()=>window.pluggoBackend?.connected);await p.getByRole('link',{name:'Sessions',exact:true}).click();await p.getByRole('button',{name:'View live session'}).click();await p.getByRole('button',{name:'Stop charging'}).click();await p.getByRole('button',{name:'Continue to payment'}).click();await p.getByRole('button',{name:'Complete checkout'}).click();await p.waitForFunction(()=>document.querySelector('#dialogBody').textContent.includes('Checkout complete'));
  const paid=await context.request.get('http://127.0.0.1:4173/api/customer/state').then(r=>r.json());assert.equal(paid.state.sessions[0].id,id);assert.equal(paid.state.sessions[0].settled,true);assert.equal(paid.state.sessions[0].receipt.amountCollected,0);
  await p.locator('#closeDialog').click();await p.getByRole('link',{name:'Home',exact:true}).click();
  await p.route('**/api/customer/state',route=>route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({ok:false,error:'Test outage'})}));await p.waitForFunction(()=>window.pluggoBackend?.connected===false);await p.locator('#backendBanner').waitFor({state:'visible'});

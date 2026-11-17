@@ -264,7 +264,7 @@ int main() {
     CROW_ROUTE(app, "/api/health")([] {
         crow::json::wvalue result;
         result["ok"] = true;
-        result["service"] = "ChargeFlow C++ API";
+        result["service"] = "Pluggo C++ API";
         return jsonResponse(std::move(result));
     });
 
@@ -580,7 +580,7 @@ int main() {
     CROW_ROUTE(app, "/api/v1/sessions/<string>/stop").methods(crow::HTTPMethod::POST)([](const crow::request& request,const std::string& id){if(!authorized(request))return unauthorized();std::lock_guard<std::mutex> lock(stateMutex);auto s=std::find_if(appSessions.begin(),appSessions.end(),[&](const auto& x){return x.id==id;});if(s==appSessions.end())return errorResponse("Session not found",404);s->status="stopped";auto r=sessionJson(*s);r["ok"]=true;return jsonResponse(std::move(r));});
     CROW_ROUTE(app, "/api/v1/sessions").methods(crow::HTTPMethod::POST)([](const crow::request& request){if(!authorized(request))return unauthorized();const auto body=crow::json::load(request.body);if(!body)return errorResponse("Invalid JSON body");const std::string key=request.get_header_value("Idempotency-Key");if(key.empty())return errorResponse("Idempotency-Key header is required",400);std::lock_guard<std::mutex> lock(stateMutex);const std::string vehicleId=text(body,"vehicleId");auto vehicle=std::find_if(vehicleProfiles.begin(),vehicleProfiles.end(),[&](const auto& x){return x.id==vehicleId;});if(vehicle==vehicleProfiles.end())return errorResponse("Vehicle profile not found",404);for(const auto& s:appSessions)if(s.idempotencyKey==key){auto r=sessionJson(s);r["ok"]=true;r["idempotentReplay"]=true;return jsonResponse(std::move(r),200);}Vehicle dv{vehicle->registration,vehicle->batteryCapacityKWh,vehicle->currentSoc,.17,vehicle->connector,vehicle->maxChargeRateKW};const double target=number(body,"targetSoc",80);const auto plan=TimeBoundScheduler::createPlan(dv,chargers,target,std::max(.25,number(body,"availableHours",2)));AppSession s;s.id="SES-"+std::to_string(200+nextSession++);s.userId="USR-101";s.vehicleId=vehicleId;s.chargerId=plan.chargerId;s.currentSoc=vehicle->currentSoc;s.targetSoc=target;s.powerKW=plan.assignedPowerKW;s.maximumBudget=number(body,"maximumBudget",1000);s.departureTime=text(body,"departureTime");s.idempotencyKey=key;appSessions.push_back(s);auto r=sessionJson(appSessions.back());r["ok"]=true;r["deadlineFeasible"]=plan.deadlineFeasible;return jsonResponse(std::move(r),201);});
 
-    std::cout << "ChargeFlow web portal: http://localhost:18080\n";
+    std::cout << "Pluggo web portal: http://localhost:18080\n";
     const char* port = std::getenv("CHARGEFLOW_PORT");
     const char* bind = std::getenv("CHARGEFLOW_BIND_ADDRESS");
     app.bindaddr(bind ? bind : "127.0.0.1").port(port ? std::stoi(port) : 18080).multithreaded().run();

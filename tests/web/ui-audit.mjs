@@ -18,9 +18,9 @@ try {for(const [device,width,height] of [['desktop',1440,1000],['phone',390,844]
  await p.locator('#selectCharger').click();await capture({path:`${folder}/${device}-charge-setup.png`,fullPage:false});
  await p.locator('#chargePlan button[type="submit"],#dialogActions button[form="chargePlan"]').click();
  await capture({path:`${folder}/${device}-charging.png`,fullPage:false});
- await p.getByRole('button',{name:'Stop demo charging'}).click();await p.getByRole('button',{name:'Continue to demo checkout'}).click();
+ await p.getByRole('button',{name:'Stop charging'}).click();await p.getByRole('button',{name:'Continue to payment'}).click();
  await capture({path:`${folder}/${device}-checkout.png`,fullPage:false});
- await p.getByRole('button',{name:'Complete demo payment · ₹0'}).click();await capture({path:`${folder}/${device}-receipt.png`,fullPage:false});
+ await p.getByRole('button',{name:'Complete checkout'}).click();await capture({path:`${folder}/${device}-receipt.png`,fullPage:false});
  await p.locator('#closeDialog').click();await p.getByRole('link',{name:'Sessions',exact:true}).click();await p.locator('#page-sessions').waitFor({state:'visible'});await p.waitForTimeout(400);
  await capture({path:`${folder}/${device}-sessions-history.png`,fullPage:true});
  if(process.env.BACKEND_AUDIT==='1')await context.request.post('http://127.0.0.1:4173/api/customer/reset',{headers:{'X-Pluggo-Request':'1'},data:{}});

@@ -182,16 +182,16 @@ try {
   await p.reload({ waitUntil: "networkidle" });
   await p.getByRole("link", { name: "Sessions", exact: true }).click();
   await p.getByRole("button", { name: "View live session" }).click();
-  await p.getByRole("button", { name: "Stop demo charging" }).click();
-  await p.getByRole("button", { name: "Continue to demo checkout" }).click();
+  await p.getByRole("button", { name: "Stop charging" }).click();
+  await p.getByRole("button", { name: "Continue to payment" }).click();
   assert.match(
     await p.locator("#dialogBody").textContent(),
-    /Demo checkout · no payment details required/,
+    /Amount due/,
   );
-  await p.getByRole("button", { name: "Complete demo payment · ₹0" }).click();
+  await p.getByRole("button", { name: "Complete checkout" }).click();
   assert.match(
     await p.locator("#dialogBody").textContent(),
-    /Demo payment completed/,
+    /Checkout complete|Payment received/,
   );
   await p.locator("#closeDialog").click();
   await p.reload({ waitUntil: "networkidle" });
@@ -297,12 +297,12 @@ try {
   assert.ok(footer.y + footer.height <= 844.5);
   assert.ok(body.y + body.height <= footer.y + 0.5);
   await phone.getByRole("button", { name: "Start simulated charging" }).click();
-  await phone.getByRole("button", { name: "Stop demo charging" }).click();
+  await phone.getByRole("button", { name: "Stop charging" }).click();
   await phone
-    .getByRole("button", { name: "Continue to demo checkout" })
+    .getByRole("button", { name: "Continue to payment" })
     .click();
   await phone
-    .getByRole("button", { name: "Complete demo payment · ₹0" })
+    .getByRole("button", { name: "Complete checkout" })
     .click();
   assert.match(
     await phone.locator("#dialogBody").textContent(),

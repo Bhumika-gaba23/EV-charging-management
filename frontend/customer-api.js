@@ -22,7 +22,10 @@ export class CustomerApi {
   preferences(value) { return this.request("preferences",{method:"PUT",body:value}); }
   start(value,key) { return this.request("sessions",{method:"POST",body:value,key}); }
   stop(id) { return this.request(`sessions/${encodeURIComponent(id)}/stop`,{method:"POST",body:{}}); }
-  checkout(id) { return this.request(`sessions/${encodeURIComponent(id)}/checkout`,{method:"POST",body:{}}); }
+  checkout(id,payment = {}) { return this.request(`sessions/${encodeURIComponent(id)}/checkout`,{method:"POST",body:payment}); }
+  paymentOrder(id) { return this.request(`sessions/${encodeURIComponent(id)}/payment`,{method:"POST",body:{}}); }
+  signIn(idToken) { return this.request("auth/firebase",{method:"POST",body:{idToken}}); }
+  signOut() { return this.request("auth/logout",{method:"POST",body:{}}); }
   reset() { return this.request("reset",{method:"POST",body:{}}); }
   verify(value) { return this.request("verify",{method:"POST",body:value}); }
 }

@@ -1,0 +1,26 @@
+# Keeps the free Render instance from idling out. Free web services stop after about
+# 15 minutes without traffic, and the free plan stores SQLite in a temporary folder, so a
+# stop also clears sessions and receipts. GitHub runs scheduled jobs on a best-effort basis
+# (delays of several minutes are normal), so the schedule is well inside that window.
+# Data is still lost when the service is redeployed or restarted by Render.
+name: keep-awake
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+permissions: {}
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Ping the Pluggo backend
+        env:
+          APP_URL: ${{ vars.PLUGGO_APP_URL || 'https://pluggo-customer-demo.onrender.com' }}
+        run: |
+          for attempt in 1 2 3; do
+            if curl -fsS --max-time 60 "$APP_URL/api/ready"; then echo; exit 0; fi
+            sleep 15
+          done
+          echo "Pluggo backend did not respond" >&2
+          exit 1
