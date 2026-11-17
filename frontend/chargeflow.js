@@ -653,7 +653,7 @@ function applyAppStyle(style) {
   document.querySelectorAll("[data-app-style]").forEach(option => option.setAttribute("aria-checked", String(option.dataset.appStyle === style)));
   sceneController?.setShadowStrength(shadowStrength());
 }
-function shadowStrength() { return document.documentElement.dataset.style === "light" ? 0.18 : 0.85; }
+function shadowStrength() { return document.documentElement.dataset.style === "light" ? 0 : 0.85; }
 document.querySelectorAll("[data-app-style]").forEach(option => option.addEventListener("click", () => applyAppStyle(option.dataset.appStyle)));
 applyAppStyle(document.documentElement.dataset.style);
 $("#useLocation").onclick = requestDeviceLocation;
@@ -1540,7 +1540,7 @@ function useFallback() {
   $("#vehicleFallback").hidden = false;
   $("#vehicleCanvas").hidden = true;
 }
-(performanceProfile === "poster" ? Promise.reject(new Error("Low-memory poster preview")) : import("./vehicle-scene.js?v=20261118-shadow1"))
+(performanceProfile === "poster" ? Promise.reject(new Error("Low-memory poster preview")) : import("./vehicle-scene.js?v=20261118-spin1"))
   .then(({ createShowroom }) => {
     sceneController = createShowroom(
       $("#vehicleCanvas"),

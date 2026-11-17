@@ -90,7 +90,8 @@ export function createShowroom(container, onFailure, onStatus = () => {}) {
   controls.dampingFactor = 0.075;
   controls.enablePan = false;
   controls.autoRotate = true;
-  controls.autoRotateSpeed = 0.8;
+  // One full turn about every 20 s: slow, but clearly moving on a phone.
+  controls.autoRotateSpeed = 3;
   controls.minPolarAngle = Math.PI * 0.22;
   controls.maxPolarAngle = Math.PI * 0.49;
   // Wheel scrolling keeps the page usable; pinch and keyboard zoom the model.

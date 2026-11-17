@@ -8,7 +8,7 @@ export const vehicles = {
     capacity: 40,
     power: 50,
     connectors: ["CCS2", "Type 2"],
-    image: "assets/models/car-poster-soft.png?v=soft1",
+    image: "assets/models/car-poster-clean.png?v=clean1",
   },
   scooter: {
     label: "Electric scooter",
@@ -19,7 +19,7 @@ export const vehicles = {
     capacity: 3,
     power: 1.5,
     connectors: ["Bharat AC-001"],
-    image: "assets/models/scooter-poster-soft.png?v=soft1",
+    image: "assets/models/scooter-poster-clean.png?v=clean1",
   },
   bike: {
     label: "Electric bike",
@@ -30,7 +30,7 @@ export const vehicles = {
     capacity: 5,
     power: 3,
     connectors: ["Bharat AC-001"],
-    image: "assets/models/bike-poster-soft.png?v=soft1",
+    image: "assets/models/bike-poster-clean.png?v=clean1",
   },
   cargo: {
     label: "Electric cargo three-wheeler",
@@ -41,7 +41,7 @@ export const vehicles = {
     capacity: 20,
     power: 6.6,
     connectors: ["Bharat AC-001"],
-    image: "assets/models/cargo-poster-soft.png?v=soft1",
+    image: "assets/models/cargo-poster-clean.png?v=clean1",
   },
 };
 export const stations = [
