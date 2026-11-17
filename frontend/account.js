@@ -32,9 +32,22 @@ export function normalizeIndianPhone(raw) {
 
 export async function sendOtp(config, phone, recaptchaElement) {
   const { auth, sdk } = await loadFirebase(config);
+  resetVerifier();
+  // reCAPTCHA can be rendered into an element only once, so every attempt gets a fresh one.
+  const host = document.createElement("div");
+  recaptchaElement.replaceChildren(host);
+  verifier = new sdk.RecaptchaVerifier(auth, host, { size: "invisible" });
+  try {
+    confirmation = await sdk.signInWithPhoneNumber(auth, phone, verifier);
+  } catch (error) {
+    resetVerifier();
+    throw error;
+  }
+}
+
+function resetVerifier() {
   if (verifier) { try { verifier.clear(); } catch {} }
-  verifier = new sdk.RecaptchaVerifier(auth, recaptchaElement, { size: "invisible" });
-  confirmation = await sdk.signInWithPhoneNumber(auth, phone, verifier);
+  verifier = null;
 }
 
 export async function confirmOtp(code) {

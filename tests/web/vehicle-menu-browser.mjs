@@ -1,7 +1,7 @@
 import {chromium} from 'playwright';import assert from 'node:assert/strict';import {mkdir} from 'node:fs/promises';
 const browser=await chromium.launch({channel:'chrome',headless:true,args:['--enable-unsafe-swiftshader']});
 try {
- const p=await browser.newPage({viewport:{width:390,height:844}});const errors=[];p.on('pageerror',e=>errors.push(e.message));
+ const p=await browser.newPage({viewport:{width:390,height:844}});await p.addInitScript(()=>localStorage.setItem('pluggo.style','glass'));const errors=[];p.on('pageerror',e=>errors.push(e.message));
  await p.goto('http://127.0.0.1:4173/?demo=1');await p.waitForFunction(()=>window.pluggoPerformance?.().ready);await p.waitForTimeout(700);
  const positions=()=>p.evaluate(()=>['#vehicleStage','.home-widgets','.home-map-shortcut'].map(s=>{const r=document.querySelector(s).getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height};}));
  const closed=()=>p.waitForFunction(()=>!document.querySelector('#vehicleDropdown').open);

@@ -1,7 +1,7 @@
 import { summarizeSessions, chargingDuration } from "./session-summary.js?v=20261104-summary1";
 import { performanceProfile } from "./performance-profile.js?v=20261104-summary1";
 import { CustomerApi } from "./customer-api.js?v=20261118-live1";
-import { normalizeIndianPhone, sendOtp, confirmOtp, signOutFirebase, friendlyAuthError, payWithRazorpay } from "./account.js?v=20261118-live1";
+import { normalizeIndianPhone, sendOtp, confirmOtp, signOutFirebase, friendlyAuthError, payWithRazorpay } from "./account.js?v=20261118-live2";
 import { findGoogleStations } from "./google-stations.js?v=20261104-server9";
 import {
   vehicles,
@@ -504,7 +504,7 @@ function renderGarage() {
   $("#garageVehicles").innerHTML = Object.entries(vehicles)
     .map(
       ([id, v]) =>
-        `<button class="garage-vehicle" data-vehicle="${id}" aria-pressed="${state.vehicle === id}"><span class="pill">${state.vehicle === id ? "SELECTED" : "EV PROFILE"}</span><img src="${v.image}" alt="White ${v.label.toLowerCase()}" loading="lazy"><h2>${v.name}</h2><p>${v.capacity} kWh · ${v.power} kW<br>${v.connectors.join(" / ")}</p></button>`,
+        `<button class="garage-vehicle" data-vehicle="${id}" aria-pressed="${state.vehicle === id}"><img src="${v.image}" alt="" loading="lazy"><span class="garage-vehicle-text"><strong>${v.name}</strong><small>${v.capacity} kWh · ${v.power} kW · ${v.connectors.join(" / ")}</small></span><span class="garage-check" aria-hidden="true">${state.vehicle === id ? icon("check") : ""}</span></button>`,
     )
     .join("");
 }
@@ -559,11 +559,23 @@ locationMessage.className = "location-message";
 locationMessage.setAttribute("role", "status");
 locationMessage.hidden = true;
 $(".stations-controls").after(locationMessage);
+let locationMessageTimer = 0;
 function reportLocation(message) {
   locationMessage.hidden = false;
   locationMessage.textContent = message;
   locationMessage.title = message;
+  clearTimeout(locationMessageTimer);
+  locationMessageTimer = setTimeout(() => { locationMessage.hidden = true; }, 5000);
 }
+function applyAppStyle(style) {
+  if (!["dark", "light", "glass"].includes(style)) style = "dark";
+  document.documentElement.dataset.style = style;
+  try { localStorage.setItem("pluggo.style", style); } catch {}
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", style === "light" ? "#f4f4f6" : "#0b0c0e");
+  document.querySelectorAll("[data-app-style]").forEach(option => option.setAttribute("aria-checked", String(option.dataset.appStyle === style)));
+}
+document.querySelectorAll("[data-app-style]").forEach(option => option.addEventListener("click", () => applyAppStyle(option.dataset.appStyle)));
+applyAppStyle(document.documentElement.dataset.style);
 $("#useLocation").onclick = requestDeviceLocation;
 function requestDeviceLocation() {
   if (locationPending) return;
@@ -632,7 +644,8 @@ function renderStreetMap(list) {
   if (!streetMap) {
     $("#stationMap").replaceChildren();
     streetMap = L.map("stationMap", {zoomControl: false, scrollWheelZoom: false, attributionControl: true});
-    L.control.zoom({position: "topright"}).addTo(streetMap);
+    // Phones pinch to zoom; only mouse users get +/- buttons.
+    if (matchMedia("(pointer: fine)").matches) L.control.zoom({position: "bottomright"}).addTo(streetMap);
     streetTiles = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 19,
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
@@ -809,7 +822,6 @@ function setStationSource(source) {
   $("#realStationSearch").hidden = source === "demo";
   $(".map-legend").hidden = source === "real";
   $(".map-interaction-hint").hidden = source === "real";
-  $(".demo-tag").textContent = source === "real" ? "Google Places" : "Pluggo network";
   $("#stationSearch").value = ""; filters.search = "";
   $("#stationSearch").placeholder = source === "real" ? "City, area, or charger name" : "Search a station or locality";
   $("#realStationNotice").hidden = source === "demo";
@@ -1217,6 +1229,8 @@ document.querySelectorAll("[data-summary-period]").forEach(button => button.addE
 function renderSessions() {
   $("#sessionDot").hidden = !activeSession() && !pendingSession();
   if (page !== "sessions") return;
+  // An all-zero overview is noise: show it only once there is something to sum up.
+  $("#sessionOverview").hidden = $("#sessionListLabel").hidden = !state.sessions.length;
   renderSessionSummary();
   $("#sessionList").innerHTML = state.sessions.length
     ? state.sessions

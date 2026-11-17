@@ -1,0 +1,245 @@
+/*
+ * App shell: native-app structure shared by every style, plus the Dark and Light skins.
+ * Loaded last. "Glass" is the original look, so it only receives the structural rules;
+ * Dark and Light repaint the shared components from the tokens below.
+ */
+
+/* ---------------------------------------------------------------- tokens */
+html[data-style="glass"] {
+  --s-bg: #0b0c0e; --s-surface: #ffffff0d; --s-surface-2: #ffffff14; --s-raised: #1b1b1bde;
+  --s-line: #ffffff22; --s-text: #f2f2f3; --s-muted: #9a9ca4; --s-primary: #f2f2f3; --s-on-primary: #0b0c0e;
+  --s-danger: #ff7b76;
+}
+html[data-style="dark"] {
+  color-scheme: dark;
+  --s-bg: #0b0c0e; --s-surface: #16171a; --s-surface-2: #222328; --s-raised: #16171af5;
+  --s-line: #ffffff14; --s-text: #f2f2f3; --s-muted: #8e9098; --s-primary: #f2f2f3; --s-on-primary: #0b0c0e;
+  --s-danger: #ff7b76; --s-shadow: 0 10px 30px #00000059;
+}
+html[data-style="light"] {
+  color-scheme: light;
+  --s-bg: #f4f4f6; --s-surface: #ffffff; --s-surface-2: #ebebef; --s-raised: #fffffff5;
+  --s-line: #0000001a; --s-text: #111214; --s-muted: #6b6d74; --s-primary: #111214; --s-on-primary: #ffffff;
+  --s-danger: #d93a35; --s-shadow: 0 10px 30px #0000001c;
+}
+
+/* ------------------------------------------------- structure (all styles) */
+.app-footer { display: none; }
+
+.app-title { margin: 6px 0 18px; }
+.app-title h1 { margin: 0; font-size: 32px; font-weight: 650; letter-spacing: -1px; line-height: 1.1; color: var(--s-text); }
+.list-label { margin: 26px 4px 10px; font-size: 13px; font-weight: 550; letter-spacing: 0; color: var(--s-muted); }
+.app-title + .list-label, .app-title + .session-overview { margin-top: 0; }
+
+/* Sessions */
+#page-sessions .session-overview { margin: 0; padding: 0; border: 0; background: none; box-shadow: none; }
+#page-sessions .summary-heading { margin: 0 0 12px; }
+#page-sessions .summary-period { width: 100%; }
+#page-sessions .summary-caption { margin: 0 4px 10px; font-size: 12px; }
+#page-sessions .session-summary-grid { gap: 10px; }
+
+/* Garage: compact selectable rows instead of four tall cards. */
+.garage-vehicles { display: flex !important; flex-direction: column; gap: 0; border: 1px solid var(--s-line); border-radius: 20px; overflow: hidden; background: var(--s-surface); }
+.garage-vehicles .garage-vehicle {
+  display: flex !important; align-items: center; gap: 14px; width: 100%; min-height: 76px; margin: 0;
+  padding: 10px 16px 10px 10px; border: 0 !important; border-radius: 0 !important; background: transparent !important;
+  box-shadow: none !important; text-align: left; color: var(--s-text); transform: none !important;
+}
+.garage-vehicles .garage-vehicle + .garage-vehicle { border-top: 1px solid var(--s-line) !important; }
+.garage-vehicles .garage-vehicle img { width: 84px; height: 56px; object-fit: contain; flex: none; margin: 0; position: static; transform: none; }
+.garage-vehicle-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.garage-vehicle-text strong { font-size: 15px; font-weight: 600; color: var(--s-text); }
+.garage-vehicle-text small { font-size: 12px; color: var(--s-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.garage-check { width: 22px; height: 22px; flex: none; display: grid; place-items: center; color: var(--s-text); }
+.garage-check .icon { width: 18px; height: 18px; }
+.garage-vehicle[aria-pressed="true"] { background: var(--s-surface-2) !important; }
+
+/* Settings as grouped list rows. */
+.garage-settings { display: block !important; margin-top: 0; }
+.garage-settings > .account-card { margin: 26px 0 0; }
+.settings-group { border: 1px solid var(--s-line); border-radius: 20px; overflow: hidden; background: var(--s-surface); padding: 0 !important; }
+.settings-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 14px; width: 100%; min-height: 56px;
+  padding: 12px 16px; margin: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none;
+  color: var(--s-text); font: inherit; font-size: 15px; text-align: left; cursor: pointer; list-style: none;
+}
+.settings-row::-webkit-details-marker { display: none; }
+.settings-group > * + *, .settings-group > details + *, .settings-group > * + details { border-top: 1px solid var(--s-line); }
+.settings-row > span:first-child { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.settings-row small { font-size: 12px; color: var(--s-muted); }
+.settings-chevron { font-size: 22px; line-height: 1; color: var(--s-muted); transition: rotate .2s; }
+details[open] > summary .settings-chevron { rotate: 90deg; }
+.danger-row, .danger-row span { color: var(--s-danger) !important; }
+.settings-group details > p, .advanced-settings-body { padding: 0 16px 16px; margin: 0; font-size: 13px; line-height: 1.6; color: var(--s-muted); }
+.settings-group .advanced-settings-body p { color: var(--s-muted); }
+.settings-group .motion-setting { margin: 0; }
+.style-setting { cursor: default; flex-wrap: wrap; }
+.style-switch { display: flex; gap: 3px; padding: 3px; border-radius: 12px; background: var(--s-surface-2); }
+.style-switch button { min-height: 34px; padding: 6px 12px; border: 0; border-radius: 9px; background: transparent; color: var(--s-muted); font: inherit; font-size: 13px; cursor: pointer; }
+.style-switch button[aria-checked="true"] { background: var(--s-surface); color: var(--s-text); box-shadow: 0 1px 4px #0000002a; }
+html[data-style="glass"] .style-switch button[aria-checked="true"] { background: #ffffff26; }
+.app-version { margin: 28px 0 8px; text-align: center; font-size: 12px; color: var(--s-muted); }
+
+/* Stations: one search row, one chip row, nothing else over the map. */
+#page-stations .map-top-controls { display: flex; flex-direction: column; gap: 10px; overflow: visible !important; max-height: none !important; }
+#page-stations .stations-controls { display: flex; flex-wrap: nowrap !important; align-items: center; gap: 8px; margin: 0 !important; }
+#page-stations .stations-controls .search-field { flex: 1; min-width: 0; min-height: 48px; border-radius: 999px; }
+#page-stations .stations-controls :is(.map-back-button, .map-locate) { width: 48px; height: 48px; min-width: 48px; min-height: 48px; border-radius: 50%; flex: none; display: grid; place-items: center; padding: 0; }
+#page-stations .map-chips { display: flex; align-items: center; gap: 8px; overflow-x: auto; scrollbar-width: none; margin: 0 -2px; padding: 2px; }
+#page-stations .map-chips::-webkit-scrollbar { display: none; }
+#page-stations .map-chips .station-source { margin: 0 !important; width: auto !important; flex: none; padding: 3px; border-radius: 999px; }
+#page-stations .map-chips .station-source button { min-height: 36px; min-width: 0; padding: 6px 14px !important; border-radius: 999px; font-size: 13px !important; flex: none; }
+#page-stations .map-chips .filter-chip,
+#page-stations .map-chips .real-search-button { min-height: 42px; padding: 8px 16px; border-radius: 999px; flex: none; font-size: 13px; width: auto; margin: 0; }
+#page-stations .map-legend, #page-stations .map-settings-footer { display: none !important; }
+#page-stations .location-message { margin: 0 !important; padding: 10px 14px !important; border-radius: 14px !important; font-size: 12px !important; }
+#page-stations .real-station-notice { margin: 0; }
+#page-stations .leaflet-top.leaflet-right { top: auto; }
+
+/* ----------------------------------------------- Dark & Light component skin */
+html:not([data-style="glass"]) body { background: var(--s-bg); color: var(--s-text); }
+html:not([data-style="glass"]) .ambient { display: none; }
+html:not([data-style="glass"]) :is(.app-header, .brand, .header-meta, .location-label) { color: var(--s-text); }
+html:not([data-style="glass"]) .location-label { color: var(--s-muted); }
+
+/* Surfaces: solid, one hairline, no glass sheen. */
+html:not([data-style="glass"]) :is(.home-widget, #page-home .home-station, .session-card, .summary-stat, .empty-state, .settings-card, .vehicle-menu, .flow-dialog, .charge-ring, .bill-summary),
+html:not([data-style="glass"]) #page-stations :is(.station-selection, .map-empty) {
+  background: var(--s-surface) !important; border: 1px solid var(--s-line) !important; color: var(--s-text);
+  box-shadow: none !important; -webkit-backdrop-filter: none !important; backdrop-filter: none !important; background-image: none !important;
+}
+html:not([data-style="glass"]) :is(.home-widget, #page-home .home-station, .session-card, .summary-stat, .empty-state, .settings-card)::before,
+html:not([data-style="glass"]) #page-stations :is(.station-selection, .map-empty)::before { display: none !important; }
+html:not([data-style="glass"]) #page-stations :is(.station-selection, .map-empty) { box-shadow: var(--s-shadow) !important; }
+html:not([data-style="glass"]) .flow-dialog { box-shadow: var(--s-shadow) !important; }
+html:not([data-style="glass"]) .flow-dialog::backdrop { background: #0000008c; }
+
+/* Floating controls over the map and the bottom bar. */
+html:not([data-style="glass"]) #page-stations :is(.map-back-button, .search-field, .map-locate, .filter-chip, .station-source, .location-message, .real-station-notice, .map-network-status, .leaflet-control-zoom),
+html:not([data-style="glass"]) .glass-nav,
+html:not([data-style="glass"]) body[data-page="stations"] .glass-nav {
+  background: var(--s-raised) !important; border: 1px solid var(--s-line) !important; color: var(--s-text) !important;
+  box-shadow: var(--s-shadow) !important; background-image: none !important;
+  -webkit-backdrop-filter: blur(16px) !important; backdrop-filter: blur(16px) !important;
+}
+html:not([data-style="glass"]) .glass-nav::before { display: none; }
+html:not([data-style="glass"]) :is(.glass-nav, body[data-page="stations"] .glass-nav) > a { color: var(--s-muted) !important; }
+html:not([data-style="glass"]) :is(.glass-nav, body[data-page="stations"] .glass-nav) > a[aria-current] { color: var(--s-text) !important; }
+html:not([data-style="glass"]) .nav-lens,
+html:not([data-style="glass"]) body[data-page="stations"] .nav-lens {
+  background: var(--s-surface-2) !important; border-color: transparent !important; box-shadow: none !important;
+  -webkit-backdrop-filter: none !important; backdrop-filter: none !important;
+}
+html:not([data-style="glass"]) #page-stations :is(.search-field input, .search-field > .icon, .map-locate, .map-back-button, .location-message, .real-station-notice, .real-station-notice a) { color: var(--s-text) !important; }
+html:not([data-style="glass"]) #page-stations .search-field input::placeholder { color: var(--s-muted) !important; }
+html:not([data-style="glass"]) #page-stations .station-source button { color: var(--s-muted) !important; background: transparent !important; border-color: transparent !important; box-shadow: none !important; }
+html:not([data-style="glass"]) #page-stations .station-source button[aria-pressed="true"],
+html:not([data-style="glass"]) #page-stations .filter-chip[aria-pressed="true"],
+html:not([data-style="glass"]) #page-stations .real-search-button { background: var(--s-primary) !important; color: var(--s-on-primary) !important; border-color: transparent !important; }
+html:not([data-style="glass"]) #page-stations .leaflet-control-zoom a { background: transparent !important; color: var(--s-text) !important; border-color: var(--s-line) !important; }
+
+/* Station sheet text. */
+html:not([data-style="glass"]) #page-stations :is(.station-sheet-heading h2, .station-sheet-stats dd, .sheet-availability, .sheet-empty-copy) { color: var(--s-text) !important; text-shadow: none !important; }
+html:not([data-style="glass"]) #page-stations :is(.station-sheet-heading p, .station-sheet-stats dt) { color: var(--s-muted) !important; }
+html:not([data-style="glass"]) #page-stations :is(.sheet-station-icon, .sheet-distance) { background: var(--s-surface-2) !important; border-color: transparent !important; color: var(--s-text) !important; box-shadow: none !important; }
+html:not([data-style="glass"]) #page-stations .station-sheet-stats > div + div { border-left-color: var(--s-line) !important; }
+html:not([data-style="glass"]) #page-stations .station-sheet-handle { background: var(--s-line) !important; }
+
+/* Buttons. */
+html:not([data-style="glass"]) .primary-button,
+html:not([data-style="glass"]) #page-stations .station-sheet-actions .primary-button {
+  background: var(--s-primary) !important; color: var(--s-on-primary) !important; border: 1px solid transparent !important;
+  box-shadow: none !important; background-image: none !important;
+}
+html:not([data-style="glass"]) :is(.secondary-button, .icon-button),
+html:not([data-style="glass"]) #page-stations .station-sheet-actions .secondary-button {
+  background: var(--s-surface-2) !important; color: var(--s-text) !important; border: 1px solid transparent !important;
+  box-shadow: none !important; background-image: none !important;
+}
+html:not([data-style="glass"]) .text-link { color: var(--s-text); }
+html:not([data-style="glass"]) :is(.summary-period, .vehicle-selector) { background: var(--s-surface-2) !important; border-color: transparent !important; box-shadow: none !important; background-image: none !important; }
+html:not([data-style="glass"]) :is(.summary-period, .vehicle-selector) button { color: var(--s-muted) !important; background: transparent !important; border-color: transparent !important; box-shadow: none !important; }
+html:not([data-style="glass"]) :is(.summary-period, .vehicle-selector) button[aria-pressed="true"] { background: var(--s-surface) !important; color: var(--s-text) !important; box-shadow: 0 1px 4px #0000002a !important; }
+
+/* Text inside cards. */
+html:not([data-style="glass"]) :is(.home-widget, .home-station, .session-card, .summary-stat, .empty-state, .settings-card, .flow-dialog, .vehicle-menu) :is(h1, h2, h3, strong) { color: var(--s-text); }
+html:not([data-style="glass"]) :is(.home-widget, .home-station, .session-card, .summary-stat, .empty-state, .settings-card, .flow-dialog, .vehicle-menu) :is(p, small, span, dt, .eyebrow, .dialog-subtitle) { color: var(--s-muted); }
+html:not([data-style="glass"]) :is(.widget-value > strong, .widget-value > strong > span, .summary-stat strong, .summary-stat strong small, .session-bill strong, .home-station h3, .home-station strong) { color: var(--s-text) !important; }
+html:not([data-style="glass"]) :is(.session-symbol, .empty-state > .icon, .sheet-station-icon) { background: var(--s-surface-2) !important; border-color: transparent !important; color: var(--s-text) !important; }
+html:not([data-style="glass"]) :is(input, textarea, select):not([type="checkbox"]) { color: var(--s-text); }
+html:not([data-style="glass"]) :is(.key-input input, .code-input input, .phone-field, .otp-input, #chargerCode) { background: var(--s-surface-2) !important; border-color: var(--s-line) !important; color: var(--s-text) !important; }
+html:not([data-style="glass"]) .toast { background: var(--s-primary) !important; color: var(--s-on-primary) !important; border-color: transparent !important; }
+html:not([data-style="glass"]) .backend-banner { background: var(--s-surface) !important; color: var(--s-text); border-color: var(--s-line) !important; }
+
+/* Map tiles follow the app style instead of always being a bright street map. */
+html[data-style="dark"] #page-stations .station-map { background: #1a1b1e !important; }
+html[data-style="dark"] #page-stations .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) grayscale(1) brightness(.78) contrast(.92); }
+html[data-style="light"] #page-stations .leaflet-tile-pane { filter: grayscale(.85) brightness(1.04); }
+html[data-style="light"] #page-stations .station-map { background: #e9e9ec !important; }
+
+/* ------------------------------------------------------ Light-only fixes */
+html[data-style="light"] :is(.brand, .home-vehicle-picker, #selectedVehicleName, .vehicle-picker-caption) { color: var(--s-text); }
+html[data-style="light"] .vehicle-picker-caption { color: var(--s-muted); }
+html[data-style="light"] .brand svg { stroke: var(--s-text); }
+html[data-style="light"] .stage-watermark { color: #0000000d; -webkit-text-stroke-color: #00000014; }
+html[data-style="light"] .vehicle-stage { background: radial-gradient(60% 55% at 50% 60%, #dcdde2, transparent 72%); }
+html[data-style="light"] .vehicle-page-dots button span { background: #00000033; }
+html[data-style="light"] .vehicle-page-dots button[aria-pressed="true"] span { background: var(--s-text); }
+html[data-style="light"] .pluggo-motion { color: #8a8c93; }
+html[data-style="light"] .pluggo-motion .pluggo-connector { color: #3a3b40; }
+html[data-style="light"] #homeBatteryProgress { background: #0000000f; }
+html[data-style="light"] #homeBatteryProgress::-webkit-progress-bar { background: #0000000f; }
+html[data-style="light"] #homeBatteryProgress::-webkit-progress-value { background: var(--s-text); }
+html[data-style="light"] .widget-heading > .icon, html[data-style="light"] .widget-heading h2 { color: var(--s-muted); }
+html[data-style="light"] .icon { color: inherit; }
+html[data-style="light"] .vehicle-menu > button[aria-checked="true"],
+html[data-style="light"] .vehicle-menu > button:hover { background: var(--s-surface-2); }
+html[data-style="light"] .vehicle-option-check { color: var(--s-text); }
+html[data-style="light"] .garage-vehicles .garage-vehicle img { filter: drop-shadow(0 4px 8px #0000002a); }
+html:not([data-style="glass"]) { background: var(--s-bg); }
+html[data-style="dark"] .vehicle-wallet .vehicle-stage::after { background: linear-gradient(180deg, transparent, #0b0c0ea8 72%, var(--s-bg)); }
+html[data-style="light"] .vehicle-wallet .vehicle-stage::after { background: linear-gradient(180deg, transparent, #f4f4f6a8 72%, var(--s-bg)); }
+html[data-style="light"] .vehicle-stage { background: radial-gradient(55% 45% at 50% 62%, #e2e3e8, transparent 75%); }
+
+/* Settings rows share one text weight. */
+.settings-group .settings-row, .settings-group .settings-row > span:first-child { font-weight: 450; font-size: 15px; }
+.settings-group .settings-row small { font-weight: 400; font-size: 12px; }
+.settings-group .demo-details { margin: 0; padding: 0; border: 0; background: none; }
+
+/* Quieter map attribution. */
+#page-stations .leaflet-control-attribution { font-size: 9px; opacity: .7; background: transparent !important; }
+html[data-style="dark"] #page-stations .leaflet-control-attribution, html[data-style="dark"] #page-stations .leaflet-control-attribution a { color: #8e9098; }
+.settings-group .settings-row,
+.settings-group .demo-details > summary { color: var(--s-text) !important; line-height: 1.3; font-size: 15px; min-height: 56px; }
+.settings-group .settings-row > span:first-child { color: var(--s-text) !important; line-height: 1.3; min-height: 0; }
+.settings-group .danger-row, .settings-group .danger-row > span:first-child { color: var(--s-danger) !important; }
+.style-setting .style-switch { margin-left: auto; }
+.settings-group .settings-row small { color: var(--s-muted) !important; line-height: 1.3; }
+.settings-group .motion-setting { padding: 12px 16px !important; min-height: 64px; }
+html[data-style="light"] #page-stations .leaflet-tile-pane { filter: grayscale(1) brightness(1.05) contrast(.95) !important; }
+.settings-group .style-setting { flex-direction: column; align-items: stretch; gap: 12px; padding: 14px 16px 16px; }
+.style-setting .style-switch { margin-left: 0; }
+.style-switch button { flex: 1; }
+.settings-group .motion-setting { margin: 0 !important; }
+html[data-style="light"] .motion-setting input { background: #d6d7dc !important; border-color: transparent !important; box-shadow: none !important; }
+html[data-style="light"] .motion-setting input:checked { background: var(--s-text) !important; }
+html[data-style="light"] .motion-setting input::before { background: #fff !important; box-shadow: 0 1px 3px #0003 !important; }
+
+/* Sheets and dialogs. */
+html:not([data-style="glass"]) .dialog-actions { background: var(--s-surface) !important; border-top: 1px solid var(--s-line) !important; }
+html:not([data-style="glass"]) .slider-field output { color: var(--s-text); }
+html:not([data-style="glass"]) .slider-field input { accent-color: var(--s-text); }
+html:not([data-style="glass"]) :is(.receipt-details, .demo-details, .maps-setup) > summary { color: var(--s-text); }
+html:not([data-style="glass"]) .session-bar { background: var(--s-surface-2) !important; }
+html:not([data-style="glass"]) .session-bar > span { background: var(--s-text) !important; }
+html[data-style="light"] .receipt-symbol, html[data-style="light"] .receipt-symbol .icon { color: var(--s-text); }
+
+/* Hindi: Devanagari needs a font that has it and no negative tracking. */
+html[lang="hi"] body, html[lang="hi"] button, html[lang="hi"] input {
+  font-family: "Noto Sans Devanagari", "Nirmala UI", "Mangal", Montserrat, system-ui, sans-serif;
+}
+html[lang="hi"] :is(h1, h2, h3, strong, .eyebrow, .app-title h1) { letter-spacing: 0 !important; }
+html[lang="hi"] .eyebrow { text-transform: none; }
+.settings-row small[lang], .style-setting small { font-family: inherit; }
+/* Letter-spacing splits Devanagari conjuncts apart. */
+html[lang="hi"] body * { letter-spacing: 0 !important; }

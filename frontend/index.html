@@ -18,6 +18,18 @@
     <link rel="stylesheet" href="wallet.css?v=20261104-server9" />
     <link rel="stylesheet" href="reference-layout.css?v=20261104-summary1" />
     <link rel="stylesheet" href="account.css?v=20261118-live1" />
+    <link rel="stylesheet" href="app-shell.css?v=20261118-shell2" />
+    <script>
+      // Apply the saved style before first paint so the page never flashes the wrong theme.
+      (function () {
+        var style = "dark";
+        try { style = localStorage.getItem("pluggo.style") || style; } catch (e) {}
+        if (!/^(dark|light|glass)$/.test(style)) style = "dark";
+        document.documentElement.dataset.style = style;
+        var meta = document.querySelector('meta[name="theme-color"]');
+        if (meta) meta.content = style === "light" ? "#f4f4f6" : "#0b0c0e";
+      })();
+    </script>
     <script type="importmap">
       { "imports": { "three": "./vendor/three.module.min.js" } }
     </script>
@@ -96,10 +108,13 @@
         aria-label="Charging stations"
         hidden
       >
-        <div class="map-top-controls">        <div class="stations-heading"><a href="#home" class="icon-button map-back-button" aria-label="Back to Home"><i data-icon="back"></i></a><div><h1>Stations</h1><span class="demo-tag">Pluggo network</span></div><div class="station-source" role="group" aria-label="Station source"><button id="demoStationSource" aria-pressed="true">Pluggo</button><button id="realStationSource" aria-pressed="false" title="Search every charger with Google Places">All</button></div><div class="map-settings-footer"><span id="mapModeLabel">OPENSTREETMAP</span><button id="openMapSettings" class="icon-button" aria-label="Map settings"><i data-icon="settings"></i></button></div></div>
-        <form class="stations-controls" id="stationSearchForm"><label class="search-field"><i data-icon="search"></i><input id="stationSearch" placeholder="Search a station or locality" type="search" aria-label="Search a station or locality" /></label><button class="filter-chip" id="availableFilter" type="button" aria-pressed="false" aria-label="Available now">Available</button><button class="primary-button real-search-button" id="realStationSearch" type="submit" hidden>Search nearby</button><button type="button" class="map-locate" id="useLocation" aria-label="Use my location"><i data-icon="locate"></i></button></form>
-        <div id="realStationNotice" class="real-station-notice" role="status" hidden></div>
-</div>
+        <div class="map-top-controls">
+          <h1 class="visually-hidden">Stations</h1>
+          <form class="stations-controls" id="stationSearchForm"><a href="#home" class="icon-button map-back-button" aria-label="Back to Home"><i data-icon="back"></i></a><label class="search-field"><i data-icon="search"></i><input id="stationSearch" placeholder="Search a station or area" type="search" aria-label="Search a station or locality" /></label><button type="button" class="map-locate" id="useLocation" aria-label="Use my location"><i data-icon="locate"></i></button></form>
+          <div class="map-chips"><div class="station-source" role="group" aria-label="Station source"><button type="button" id="demoStationSource" aria-pressed="true">Pluggo</button><button type="button" id="realStationSource" aria-pressed="false" title="Search every charger with Google Places">All chargers</button></div><button class="filter-chip" id="availableFilter" type="button" aria-pressed="false" aria-label="Available now">Available now</button><button class="primary-button real-search-button" id="realStationSearch" type="submit" form="stationSearchForm" hidden>Search here</button></div>
+          <div id="realStationNotice" class="real-station-notice" role="status" hidden></div>
+          <div class="map-settings-footer" hidden><span id="mapModeLabel">OPENSTREETMAP</span><button id="openMapSettings" type="button" class="icon-button" aria-label="Map settings"><i data-icon="settings"></i></button></div>
+        </div>
         <div class="station-explorer">
           <div id="stationMap" class="station-map" role="region" aria-label="New Delhi charging station street map"></div>
           <div class="map-legend"><span><b class="legend-dot"></b>Available</span><span><b class="legend-dot busy"></b>In use</span></div>
@@ -116,36 +131,29 @@
         aria-label="Charging sessions"
         hidden
       >
-        <div class="page-heading">
-          <div>
-            <p class="eyebrow">EVERY CHARGE HAS A STORY</p>
-            <h1>Your sessions<span>.</span></h1>
-            <p>See your totals, track a charge or pick up a receipt.</p>
-          </div>
-        </div>
-        <section class="session-overview" aria-label="Charging summary">
-          <div class="summary-heading"><h2>Your charging overview</h2><div class="summary-period" role="group" aria-label="Summary period"><button type="button" data-summary-period="week" aria-pressed="false">Week</button><button type="button" data-summary-period="month" aria-pressed="true">Month</button><button type="button" data-summary-period="all" aria-pressed="false">All time</button></div></div>
+        <header class="app-title"><h1>Sessions</h1></header>
+        <section class="session-overview" id="sessionOverview" aria-label="Charging summary">
+          <div class="summary-heading"><h2 class="visually-hidden">Your charging overview</h2><div class="summary-period" role="group" aria-label="Summary period"><button type="button" data-summary-period="week" aria-pressed="false">Week</button><button type="button" data-summary-period="month" aria-pressed="true">Month</button><button type="button" data-summary-period="all" aria-pressed="false">All time</button></div></div>
           <p id="summaryCaption" class="summary-caption">Completed charges this month · India time</p>
           <div class="session-summary-grid" id="sessionSummaryCards"></div>
-          <p class="summary-footnote">Charging costs and time on charger. Active sessions appear below.</p>
         </section>
+        <h2 class="list-label" id="sessionListLabel">History</h2>
         <div id="sessionList"></div>
       </section>
       <section id="page-garage" class="page" aria-label="My garage" hidden>
-        <div class="page-heading">
-          <div>
-            <p class="eyebrow">MAKE YOURSELF AT HOME</p>
-            <h1>Your garage<span>.</span></h1>
-            <p>
-              Pick your vehicle. We’ll match its connectors.
-            </p>
-          </div>
-        </div>
+        <header class="app-title"><h1>Garage</h1></header>
+        <h2 class="list-label">Your vehicle</h2>
         <div id="garageVehicles" class="garage-vehicles"></div>
         <div class="garage-settings">
           <article class="settings-card account-card" id="accountCard" hidden></article>
-          <article class="settings-card preferences-card"><div class="settings-heading"><i data-icon="rotate"></i><h2>Make it yours.</h2></div><label class="motion-setting" for="previewMotion"><span>Animate vehicle previews<small>Slow 360° rotation</small></span><input id="previewMotion" type="checkbox" role="switch" checked /></label><details class="demo-details"><summary>About Pluggo</summary><p>Pilot release: Pluggo network stations and chargers are simulated while we onboard partner chargers, and charging runs faster than real time. Payments use Razorpay test mode, so no real money moves.</p><button class="secondary-button" id="resetDemo"><i data-icon="reset"></i> Clear my history</button></details></article>
-          <details class="settings-card advanced-settings" id="mapSettings"><summary><span class="settings-heading"><i data-icon="map"></i><span><strong>Google Maps</strong><small id="mapConnectionSummary">Connect real charger search</small></span></span><span class="settings-chevron">⌄</span></summary><div class="advanced-settings-body"><p>Connect a website-restricted key for real charger search. Enable Maps JavaScript API, Places API (New), and billing.</p>
+          <h2 class="list-label">Appearance</h2>
+          <div class="settings-group">
+            <div class="settings-row style-setting"><span translate="no">Language · भाषा</span><div class="style-switch" role="radiogroup" aria-label="App language" translate="no"><button type="button" role="radio" data-app-lang="en" aria-checked="true" lang="en">English</button><button type="button" role="radio" data-app-lang="hi" aria-checked="false" lang="hi">हिन्दी</button></div></div>
+            <div class="settings-row style-setting"><span>Style<small>How Pluggo looks on this device</small></span><div class="style-switch" role="radiogroup" aria-label="App style"><button type="button" role="radio" data-app-style="dark" aria-checked="true">Dark</button><button type="button" role="radio" data-app-style="light" aria-checked="false">Light</button><button type="button" role="radio" data-app-style="glass" aria-checked="false">Glass</button></div></div>
+            <label class="settings-row motion-setting" for="previewMotion"><span>Animate vehicle preview<small>Slow 360° rotation on Home</small></span><input id="previewMotion" type="checkbox" role="switch" checked /></label>
+          </div>
+          <h2 class="list-label">Maps</h2>
+          <details class="settings-group advanced-settings" id="mapSettings"><summary class="settings-row"><span>Real charger search<small id="mapConnectionSummary">Connect real charger search</small></span><span class="settings-chevron" aria-hidden="true">›</span></summary><div class="advanced-settings-body"><p>Connect a website-restricted Google Maps key to search every charger nearby. Needs Maps JavaScript API, Places API (New) and billing.</p>
             <form id="mapsKeyForm">
               <label for="mapsApiKey">GOOGLE MAPS BROWSER API KEY</label>
               <div class="key-input">
@@ -169,15 +177,15 @@
             <p id="mapsStatus" role="status"></p>
             <details class="maps-setup"><summary>Google Maps setup steps</summary><ol><li>Create a Google Cloud project and enable billing.</li><li>Enable Maps JavaScript API and Places API (New).</li><li>Create an API key restricted to websites. Allow <code>http://127.0.0.1:4173/*</code> and your deployed domain.</li><li>Restrict the key to the two APIs above and set usage quotas.</li><li>Enter the key here, enable Maps, then choose Real stations in Stations.</li></ol><a class="text-link" href="https://developers.google.com/maps/documentation/javascript/get-api-key" target="_blank" rel="noopener noreferrer">Google’s key setup guide ↗</a></details>
 </div></details>
+          <h2 class="list-label">About</h2>
+          <div class="settings-group">
+            <details class="demo-details"><summary class="settings-row"><span>About Pluggo</span><span class="settings-chevron" aria-hidden="true">›</span></summary><p>Pilot release: Pluggo network stations and chargers are simulated while we onboard partner chargers, and charging runs faster than real time. Payments use Razorpay test mode, so no real money moves.</p></details>
+            <button type="button" id="modelCredits" class="settings-row"><span>3D model credits</span><span class="settings-chevron" aria-hidden="true">›</span></button>
+            <button type="button" class="settings-row danger-row" id="resetDemo"><span>Clear my history</span></button>
+          </div>
+          <p class="app-version">pluggo. · Smart EV charging for India</p>
         </div>
       </section>
-      <footer class="app-footer">
-        <a class="footer-brand" href="#home">pluggo.</a>
-        <p>Smart EV charging for India.</p>
-        <button id="modelCredits" class="text-link">
-          3D model credits <i data-icon="arrow-up-right"></i>
-        </button>
-      </footer>
     </main>
     <dialog id="flowDialog" class="flow-dialog" aria-labelledby="dialogTitle">
       <div class="dialog-head">
@@ -196,6 +204,7 @@
       </p></noscript
     >
     <script src="vendor/leaflet.js"></script>
-    <script src="chargeflow.js?v=20261118-live1" type="module"></script>
+    <script src="i18n.js?v=20261118-hi1"></script>
+    <script src="chargeflow.js?v=20261118-live3" type="module"></script>
   </body>
 </html>
