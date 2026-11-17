@@ -12,7 +12,7 @@
     "test:home": "node home-widgets-browser.mjs",
     "test:backend": "node backend-browser.mjs",
     "test:performance": "node performance-browser.mjs",
-    "test:glass": "node clear-glass-browser.mjs",
+    "test:glass": "node glass-browser.mjs",
     "test:menu": "node vehicle-menu-browser.mjs",
     "test:summary": "node --test session-summary.test.mjs && node session-summary-browser.mjs",
     "test:dashboard": "node dashboard-browser.mjs",

@@ -646,7 +646,7 @@ document.querySelectorAll("[data-info]").forEach(button => button.addEventListen
   showDialog(eyebrow, `<h2 id="dialogTitle">${title}</h2>${body}`);
 }));
 function applyAppStyle(style) {
-  if (!["dark", "light", "glass"].includes(style)) style = "dark";
+  if (!["dark", "light"].includes(style)) style = "dark";
   document.documentElement.dataset.style = style;
   try { localStorage.setItem("pluggo.style", style); } catch {}
   document.querySelector('meta[name="theme-color"]')?.setAttribute("content", style === "light" ? "#f4f4f6" : "#0b0c0e");
@@ -655,6 +655,16 @@ function applyAppStyle(style) {
 }
 function shadowStrength() { return document.documentElement.dataset.style === "light" ? 0 : 0.85; }
 document.querySelectorAll("[data-app-style]").forEach(option => option.addEventListener("click", () => applyAppStyle(option.dataset.appStyle)));
+// Frosted-glass transparency, 0 (clear) to 100 (frosted). The blur stays 20px; only the tint changes.
+function applyGlass(level, persist = true) {
+  level = Math.min(100, Math.max(0, Math.round(Number(level))));
+  if (!Number.isFinite(level)) level = 60;
+  document.documentElement.style.setProperty("--glass-t", (level / 100).toFixed(2));
+  $("#glassLevel").value = String(level);
+  if (persist) { try { localStorage.setItem("pluggo.glass", String(level)); } catch {} }
+}
+$("#glassLevel").addEventListener("input", event => applyGlass(event.target.value));
+{ let saved = 60; try { const value = parseInt(localStorage.getItem("pluggo.glass"), 10); if (value >= 0 && value <= 100) saved = value; } catch {} applyGlass(saved, false); }
 applyAppStyle(document.documentElement.dataset.style);
 $("#useLocation").onclick = requestDeviceLocation;
 function requestDeviceLocation() {

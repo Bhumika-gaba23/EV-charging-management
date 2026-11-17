@@ -18,14 +18,16 @@
     <link rel="stylesheet" href="wallet.css?v=20261104-server9" />
     <link rel="stylesheet" href="reference-layout.css?v=20261104-summary1" />
     <link rel="stylesheet" href="account.css?v=20261118-live1" />
-    <link rel="stylesheet" href="app-shell.css?v=20261118-fast1" />
+    <link rel="stylesheet" href="app-shell.css?v=20261118-frost1" />
     <script>
-      // Apply the saved style before first paint so the page never flashes the wrong theme.
+      // Apply the saved style and glass level before first paint so the page never flashes the wrong look.
       (function () {
-        var style = "dark";
+        var style = "dark", glass = 60;
         try { style = localStorage.getItem("pluggo.style") || style; } catch (e) {}
-        if (!/^(dark|light|glass)$/.test(style)) style = "dark";
+        try { var g = parseInt(localStorage.getItem("pluggo.glass"), 10); if (g >= 0 && g <= 100) glass = g; } catch (e) {}
+        if (!/^(dark|light)$/.test(style)) style = "dark";
         document.documentElement.dataset.style = style;
+        document.documentElement.style.setProperty("--glass-t", (glass / 100).toFixed(2));
         var meta = document.querySelector('meta[name="theme-color"]');
         if (meta) meta.content = style === "light" ? "#f4f4f6" : "#0b0c0e";
       })();
@@ -56,12 +58,6 @@
     </script>
   </head>
   <body>
-    <svg class="glass-filters" width="0" height="0" aria-hidden="true" focusable="false" style="position:absolute">
-      <filter id="lg-refract" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB">
-        <feImage href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100' preserveAspectRatio='none'><defs><linearGradient id='x' x1='0' x2='1'><stop offset='0' stop-color='rgb(255,0,0)'/><stop offset='.16' stop-color='rgb(128,0,0)'/><stop offset='.84' stop-color='rgb(128,0,0)'/><stop offset='1' stop-color='rgb(0,0,0)'/></linearGradient><linearGradient id='y' x1='0' x2='0' y1='0' y2='1'><stop offset='0' stop-color='rgb(0,255,0)'/><stop offset='.22' stop-color='rgb(0,128,0)'/><stop offset='.78' stop-color='rgb(0,128,0)'/><stop offset='1' stop-color='rgb(0,0,0)'/></linearGradient></defs><rect width='100' height='100' fill='url(%23x)'/><rect width='100' height='100' fill='url(%23y)' style='mix-blend-mode:screen'/></svg>" x="0" y="0" width="100%" height="100%" preserveAspectRatio="none" result="lens"/>
-        <feDisplacementMap in="SourceGraphic" in2="lens" scale="48" xChannelSelector="R" yChannelSelector="G"/>
-      </filter>
-    </svg>
     <a class="skip-link" href="#main">Skip to content</a>
     <div class="ambient" aria-hidden="true"></div>
     <header class="app-header">
@@ -188,7 +184,8 @@
           <h2 class="list-label">Appearance</h2>
           <div class="settings-group">
             <div class="settings-row style-setting"><span translate="no">Language · भाषा</span><div class="style-switch" role="radiogroup" aria-label="App language" translate="no"><button type="button" role="radio" data-app-lang="en" aria-checked="true" lang="en">English</button><button type="button" role="radio" data-app-lang="hi" aria-checked="false" lang="hi">हिन्दी</button></div></div>
-            <div class="settings-row style-setting"><span>Style<small>How Pluggo looks on this device</small></span><div class="style-switch" role="radiogroup" aria-label="App style"><button type="button" role="radio" data-app-style="dark" aria-checked="true">Dark</button><button type="button" role="radio" data-app-style="light" aria-checked="false">Light</button><button type="button" role="radio" data-app-style="glass" aria-checked="false">Glass</button></div></div>
+            <div class="settings-row style-setting"><span>Style<small>How Pluggo looks on this device</small></span><div class="style-switch" role="radiogroup" aria-label="App style"><button type="button" role="radio" data-app-style="dark" aria-checked="true">Dark</button><button type="button" role="radio" data-app-style="light" aria-checked="false">Light</button></div></div>
+            <div class="settings-row range-row"><span>Glass<small>From clear to frosted</small></span><input id="glassLevel" type="range" min="0" max="100" step="5" value="60" aria-label="Glass transparency" /><div class="range-scale" aria-hidden="true"><span>Clear</span><span>Frosted</span></div></div>
             <label class="settings-row motion-setting" for="previewMotion"><span>Animate vehicle preview<small>Slow 360° rotation on Home</small></span><input id="previewMotion" type="checkbox" role="switch" checked /></label>
           </div>
           <h2 class="list-label">Charging &amp; payment</h2>
@@ -257,7 +254,7 @@
       </p></noscript
     >
     <script src="vendor/leaflet.js"></script>
-    <script src="i18n.js?v=20261118-hi4"></script>
-    <script src="chargeflow.js?v=20261118-live7" type="module"></script>
+    <script src="i18n.js?v=20261118-hi5"></script>
+    <script src="chargeflow.js?v=20261118-live8" type="module"></script>
   </body>
 </html>

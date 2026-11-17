@@ -5,11 +5,7 @@
  */
 
 /* ---------------------------------------------------------------- tokens */
-html[data-style="glass"] {
-  --s-bg: #0b0c0e; --s-surface: #ffffff0d; --s-surface-2: #ffffff14; --s-raised: #1b1b1bde;
-  --s-line: #ffffff22; --s-text: #f2f2f3; --s-muted: #9a9ca4; --s-primary: #f2f2f3; --s-on-primary: #0b0c0e;
-  --s-danger: #ff7b76;
-}
+
 html[data-style="dark"] {
   color-scheme: dark;
   --s-bg: #0b0c0e; --s-surface: #16171a; --s-surface-2: #222328; --s-raised: #16171af5;
@@ -77,7 +73,7 @@ details[open] > summary .settings-chevron { rotate: 90deg; }
 .style-switch { display: flex; gap: 3px; padding: 3px; border-radius: 12px; background: var(--s-surface-2); }
 .style-switch button { min-height: 34px; padding: 6px 12px; border: 0; border-radius: 9px; background: transparent; color: var(--s-muted); font: inherit; font-size: 13px; cursor: pointer; }
 .style-switch button[aria-checked="true"] { background: var(--s-surface); color: var(--s-text); box-shadow: 0 1px 4px #0000002a; }
-html[data-style="glass"] .style-switch button[aria-checked="true"] { background: #ffffff26; }
+
 .app-version { margin: 28px 0 8px; text-align: center; font-size: 12px; color: var(--s-muted); }
 
 /* Stations: one search row, one chip row, nothing else over the map. */
@@ -245,120 +241,6 @@ html[lang="hi"] .eyebrow { text-transform: none; }
 html[lang="hi"] body * { letter-spacing: 0 !important; }
 
 /* ======================================================================
- * Liquid Glass (the "Glass" style): dark, deep translucency with a bright
- * specular rim, an inner glow and a coloured backdrop for the glass to bend.
- * ==================================================================== */
-html[data-style="glass"] {
-  --lg-fill: linear-gradient(160deg, rgb(255 255 255 / 13%) 0%, rgb(255 255 255 / 4%) 38%, rgb(255 255 255 / 2%) 62%, rgb(255 255 255 / 7%) 100%);
-  --lg-tint: rgb(18 20 26 / 38%);
-  --lg-tint-strong: rgb(16 18 24 / 58%);
-  --lg-blur: blur(26px) saturate(185%) brightness(1.06);
-  --lg-shadow: inset 0 1px 0 rgb(255 255 255 / 42%), inset 0 -1px 0 rgb(255 255 255 / 8%),
-               inset 0 0 0 1px rgb(255 255 255 / 7%), inset 0 0 26px rgb(255 255 255 / 5%),
-               0 14px 40px rgb(0 0 0 / 38%);
-  --s-surface: rgb(255 255 255 / 7%); --s-surface-2: rgb(255 255 255 / 12%); --s-line: rgb(255 255 255 / 14%);
-  background: #06070a;
-}
-/* A soft colour field behind everything: glass needs something to refract. */
-html[data-style="glass"] body { background: transparent; }
-html[data-style="glass"] .ambient {
-  display: block !important; z-index: -1;
-  background:
-    radial-gradient(42% 32% at 12% 8%, rgb(64 110 255 / 30%), transparent 70%),
-    radial-gradient(38% 30% at 92% 26%, rgb(0 214 160 / 22%), transparent 70%),
-    radial-gradient(46% 34% at 30% 72%, rgb(160 80 255 / 20%), transparent 72%),
-    radial-gradient(40% 30% at 88% 92%, rgb(255 120 70 / 16%), transparent 72%),
-    #06070a !important;
-}
-
-/* Every surface: translucent fill, specular sheen and a deep blur. */
-html[data-style="glass"] :is(.home-widget, #page-home .home-station, .session-card, .summary-stat, .empty-state, .settings-card,
-  .settings-group, .garage-vehicles, .vehicle-menu, .bill-summary, .charge-ring),
-html[data-style="glass"] #page-stations :is(.station-selection, .map-empty) {
-  background: var(--lg-fill), var(--lg-tint) !important;
-  -webkit-backdrop-filter: var(--lg-blur) !important; backdrop-filter: var(--lg-blur) !important;
-  border: 1px solid rgb(255 255 255 / 12%) !important;
-  box-shadow: var(--lg-shadow) !important;
-}
-html[data-style="glass"] .flow-dialog {
-  background: var(--lg-fill), var(--lg-tint-strong) !important;
-  -webkit-backdrop-filter: var(--lg-blur) !important; backdrop-filter: var(--lg-blur) !important;
-  border: 1px solid rgb(255 255 255 / 16%) !important; box-shadow: var(--lg-shadow) !important;
-}
-html[data-style="glass"] .flow-dialog::backdrop { background: rgb(4 5 8 / 45%); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
-html[data-style="glass"] .dialog-actions { background: transparent !important; border-top: 1px solid rgb(255 255 255 / 10%) !important; }
-/* Specular rim: bright top-left edge fading to a softer bottom-right edge. */
-html[data-style="glass"] :is(.home-widget, .home-station, .settings-card, .session-card, .summary-stat, .empty-state, .settings-group,
-  .garage-vehicles, .vehicle-menu, .flow-dialog)::before,
-html[data-style="glass"] #page-stations :is(.station-selection, .map-empty)::before {
-  content: "" !important; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; z-index: 2;
-  border: 1.5px solid rgb(255 255 255 / 55%) !important; background: none !important; filter: none !important; opacity: 1 !important;
-  -webkit-mask: linear-gradient(145deg, #000 0%, transparent 28%, transparent 66%, rgb(0 0 0 / 55%) 100%) !important;
-  mask: linear-gradient(145deg, #000 0%, transparent 28%, transparent 66%, rgb(0 0 0 / 55%) 100%) !important;
-}
-html[data-style="glass"] :is(.summary-stat, .empty-state, .settings-group, .garage-vehicles) { position: relative; }
-
-/* Floating controls and the tab bar: capsule glass. */
-html[data-style="glass"] .glass-nav,
-html[data-style="glass"] body[data-page="stations"] .glass-nav,
-html[data-style="glass"] #page-stations :is(.map-back-button, .search-field, .map-locate, .filter-chip, .station-source,
-  .location-message, .real-station-notice, .map-network-status, .leaflet-control-zoom) {
-  background: var(--lg-fill), var(--lg-tint) !important;
-  -webkit-backdrop-filter: var(--lg-blur) !important; backdrop-filter: var(--lg-blur) !important;
-  border: 1px solid rgb(255 255 255 / 16%) !important; box-shadow: var(--lg-shadow) !important; color: #f4f5f7 !important;
-}
-html[data-style="glass"] .glass-nav::before { opacity: .9 !important; }
-html[data-style="glass"] :is(.glass-nav, body[data-page="stations"] .glass-nav) > a { color: rgb(255 255 255 / 62%) !important; }
-html[data-style="glass"] :is(.glass-nav, body[data-page="stations"] .glass-nav) > a[aria-current] { color: #fff !important; }
-/* The active-tab lens reads as a raised drop of glass. */
-html[data-style="glass"] .nav-lens,
-html[data-style="glass"] body[data-page="stations"] .nav-lens {
-  background: radial-gradient(120% 90% at 30% 0%, rgb(255 255 255 / 30%), rgb(255 255 255 / 8%) 60%, rgb(255 255 255 / 14%)) !important;
-  border: 1px solid rgb(255 255 255 / 34%) !important;
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 60%), inset 0 -2px 6px rgb(255 255 255 / 8%), 0 4px 14px rgb(0 0 0 / 30%) !important;
-  -webkit-backdrop-filter: blur(6px) saturate(160%) !important; backdrop-filter: blur(6px) saturate(160%) !important;
-}
-
-/* Buttons: primary is frosted white glass, secondary is clear glass. */
-html[data-style="glass"] .primary-button,
-html[data-style="glass"] #page-stations .station-sheet-actions .primary-button,
-html[data-style="glass"] #page-stations :is(.station-source button[aria-pressed="true"], .filter-chip[aria-pressed="true"], .real-search-button) {
-  background: linear-gradient(180deg, rgb(255 255 255 / 96%), rgb(232 236 242 / 88%)) !important; color: #0b0c10 !important;
-  border: 1px solid rgb(255 255 255 / 70%) !important;
-  box-shadow: inset 0 1px 0 #fff, inset 0 -2px 6px rgb(0 0 0 / 8%), 0 6px 18px rgb(0 0 0 / 30%) !important;
-}
-html[data-style="glass"] :is(.secondary-button, .icon-button),
-html[data-style="glass"] #page-stations .station-sheet-actions .secondary-button {
-  background: linear-gradient(180deg, rgb(255 255 255 / 16%), rgb(255 255 255 / 6%)) !important; color: #f4f5f7 !important;
-  border: 1px solid rgb(255 255 255 / 18%) !important; box-shadow: inset 0 1px 0 rgb(255 255 255 / 35%) !important;
-}
-html[data-style="glass"] #page-stations .station-source button:not([aria-pressed="true"]) { background: transparent !important; color: rgb(255 255 255 / 70%) !important; border-color: transparent !important; box-shadow: none !important; }
-html[data-style="glass"] :is(.summary-period, .style-switch) {
-  background: rgb(255 255 255 / 7%) !important; border: 1px solid rgb(255 255 255 / 10%) !important; box-shadow: inset 0 1px 0 rgb(255 255 255 / 12%) !important;
-  -webkit-backdrop-filter: var(--lg-blur); backdrop-filter: var(--lg-blur);
-}
-html[data-style="glass"] :is(.summary-period button, .style-switch button) { color: rgb(255 255 255 / 62%) !important; background: transparent !important; border-color: transparent !important; box-shadow: none !important; }
-html[data-style="glass"] :is(.summary-period button[aria-pressed="true"], .style-switch button[aria-checked="true"]) {
-  color: #fff !important; background: linear-gradient(180deg, rgb(255 255 255 / 26%), rgb(255 255 255 / 10%)) !important;
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 50%), 0 2px 8px rgb(0 0 0 / 25%) !important;
-}
-
-/* Text on glass. */
-html[data-style="glass"] :is(.station-sheet-heading h2, .station-sheet-stats dd, .sheet-availability, .sheet-empty-copy, .search-field input, .search-field > .icon, .map-locate, .map-back-button) { color: #f4f5f7 !important; text-shadow: none !important; }
-html[data-style="glass"] #page-stations :is(.station-sheet-heading p, .station-sheet-stats dt) { color: rgb(255 255 255 / 62%) !important; }
-html[data-style="glass"] #page-stations .search-field input::placeholder { color: rgb(255 255 255 / 55%) !important; }
-html[data-style="glass"] #page-stations :is(.sheet-station-icon, .sheet-distance) { background: rgb(255 255 255 / 12%) !important; border-color: rgb(255 255 255 / 18%) !important; color: #fff !important; box-shadow: inset 0 1px 0 rgb(255 255 255 / 30%) !important; }
-html[data-style="glass"] #page-stations .station-sheet-stats > div + div { border-left-color: rgb(255 255 255 / 12%) !important; }
-html[data-style="glass"] #page-stations .station-sheet-handle { background: rgb(255 255 255 / 35%) !important; }
-html[data-style="glass"] .garage-vehicle[aria-pressed="true"] { background: rgb(255 255 255 / 9%) !important; }
-
-/* Stations: a deep, slightly coloured night map so the glass has light to bend. */
-html[data-style="glass"] #page-stations .station-map { background: #0d1016 !important; }
-html[data-style="glass"] #page-stations .leaflet-tile-pane { filter: invert(1) hue-rotate(185deg) saturate(.55) brightness(.82) contrast(.95) !important; }
-html[data-style="glass"] #page-stations .leaflet-control-attribution, html[data-style="glass"] #page-stations .leaflet-control-attribution a { color: rgb(255 255 255 / 45%); }
-html[data-style="glass"] .vehicle-wallet .vehicle-stage::after { display: none; }
-
-/* ======================================================================
  * Light refinements: no heavy black shadows anywhere.
  * ==================================================================== */
 html[data-style="light"] { --s-shadow: 0 4px 18px rgb(17 18 20 / 6%); }
@@ -402,7 +284,7 @@ html[data-style="light"] { --ring-energy: #2a78d6; --ring-spend: #eb6834; --ring
 /* Sessions: live banner */
 #liveBanner { margin: 0 0 16px; }
 .live-banner { display: flex; align-items: center; gap: 14px; width: 100%; padding: 14px 16px; border: 1px solid var(--s-line); border-radius: 20px; background: var(--s-surface); color: var(--s-text); text-align: left; font: inherit; cursor: pointer; position: relative; }
-html[data-style="glass"] .live-banner { background: var(--lg-fill), var(--lg-tint) !important; -webkit-backdrop-filter: var(--lg-blur); backdrop-filter: var(--lg-blur); box-shadow: var(--lg-shadow); }
+
 .live-pulse { width: 12px; height: 12px; border-radius: 50%; background: var(--ring-charges); flex: none; box-shadow: 0 0 0 0 color-mix(in srgb, var(--ring-charges) 60%, transparent); animation: live-pulse 1.8s ease-out infinite; }
 @keyframes live-pulse { to { box-shadow: 0 0 0 12px transparent; } }
 @media (prefers-reduced-motion: reduce) { .live-pulse { animation: none; } }
@@ -415,7 +297,7 @@ html[data-style="glass"] .live-banner { background: var(--lg-fill), var(--lg-tin
 
 /* Sessions: activity rings */
 #page-sessions .activity-card { display: flex; flex-direction: column; gap: 14px; padding: 18px; border: 1px solid var(--s-line); border-radius: 22px; background: var(--s-surface); position: relative; }
-html[data-style="glass"] #page-sessions :is(.activity-card, .week-card) { background: var(--lg-fill), var(--lg-tint) !important; -webkit-backdrop-filter: var(--lg-blur); backdrop-filter: var(--lg-blur); box-shadow: var(--lg-shadow); border-color: rgb(255 255 255 / 12%); }
+
 .activity-rings { display: flex; align-items: center; gap: 18px; }
 .activity-rings svg { width: 132px; height: 132px; flex: none; transform: rotate(-90deg); }
 .ring-track, .ring-fill { fill: none; stroke-width: 12; }
@@ -494,7 +376,6 @@ html[data-style="light"] .garage-stage .vehicle-stage { background: radial-gradi
   background: #111214; color: #fff; font: 600 10px/1.4 var(--font, system-ui); white-space: nowrap; box-shadow: 0 2px 8px #0003; pointer-events: none;
 }
 html[data-style="light"] .pin-price { background: #fff; color: #111214; border: 1px solid #0000001a; }
-html[data-style="glass"] .pin-price { background: rgb(20 22 28 / 70%); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); border: 1px solid rgb(255 255 255 / 25%); }
 
 /* Stations: collapsible card */
 #page-stations .station-sheet-handle {
@@ -502,75 +383,11 @@ html[data-style="glass"] .pin-price { background: rgb(20 22 28 / 70%); -webkit-b
 }
 #page-stations .station-sheet-handle::before { content: ""; position: absolute; left: 50%; top: 9px; width: 36px; height: 4px; margin-left: -18px; border-radius: 9px; background: var(--s-line); }
 html[data-style="light"] #page-stations .station-sheet-handle::before { background: #0000002a; }
-html[data-style="glass"] #page-stations .station-sheet-handle::before { background: rgb(255 255 255 / 40%); }
+
 #page-stations .station-selection.is-collapsed :is(.station-sheet-stats, .station-sheet-actions, .sheet-availability, .sheet-empty-copy) { display: none !important; }
 #page-stations .station-selection.is-collapsed .station-sheet-heading { margin-bottom: 0; }
 #page-stations .location-message { width: fit-content; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 8px 12px !important; }
 html #page-stations .station-selection .station-sheet-handle { background: transparent !important; box-shadow: none !important; border: 0 !important; }
-
-/* ======================================================================
- * Liquid Glass v2: neutral black-to-silver backdrop (no colour), denser
- * glass, and real refraction (SVG displacement) on the large surfaces.
- * Chromium/Android: backdrop-filter takes the url(#lg-refract) lens.
- * Safari/iOS reads -webkit-backdrop-filter and keeps plain frosted glass.
- * ==================================================================== */
-html[data-style="glass"] {
-  --lg-fill: linear-gradient(165deg, rgb(255 255 255 / 16%) 0%, rgb(255 255 255 / 5%) 34%, rgb(255 255 255 / 3%) 64%, rgb(255 255 255 / 9%) 100%);
-  --lg-tint: rgb(30 31 35 / 66%);
-  --lg-tint-strong: rgb(26 27 31 / 82%);
-  --lg-frost: blur(18px) saturate(140%) brightness(1.08);
-  --lg-refract: url(#lg-refract) blur(10px) saturate(140%) brightness(1.08);
-  --lg-shadow: inset 0 1px 0 rgb(255 255 255 / 50%), inset 0 -1px 0 rgb(255 255 255 / 10%),
-               inset 1px 0 0 rgb(255 255 255 / 10%), inset -1px 0 0 rgb(255 255 255 / 6%),
-               inset 0 0 22px rgb(255 255 255 / 6%), 0 16px 40px rgb(0 0 0 / 45%);
-  background: #08090b;
-}
-html[data-style="glass"] .ambient {
-  background:
-    radial-gradient(90% 55% at 50% -12%, rgb(255 255 255 / 16%), transparent 62%),
-    radial-gradient(70% 45% at 100% 105%, rgb(214 216 222 / 10%), transparent 70%),
-    radial-gradient(60% 40% at -10% 60%, rgb(236 236 232 / 6%), transparent 70%),
-    linear-gradient(180deg, #111215 0%, #08090b 55%, #050506 100%) !important;
-}
-
-/* Denser glass everywhere, frosted on Safari, refracting on Chromium. */
-html[data-style="glass"] :is(.home-widget, #page-home .home-station, .session-card, .summary-stat, .empty-state, .settings-card,
-  .settings-group, .garage-vehicles, .vehicle-menu, .bill-summary, .charge-ring, .live-banner),
-html[data-style="glass"] #page-sessions :is(.activity-card, .week-card),
-html[data-style="glass"] #page-stations :is(.station-selection, .map-empty),
-html[data-style="glass"] .glass-nav,
-html[data-style="glass"] body[data-page="stations"] .glass-nav,
-html[data-style="glass"] #page-stations :is(.map-back-button, .search-field, .map-locate, .filter-chip, .station-source,
-  .location-message, .real-station-notice, .map-network-status, .leaflet-control-zoom) {
-  background: var(--lg-fill), var(--lg-tint) !important;
-  -webkit-backdrop-filter: var(--lg-frost) !important;
-  backdrop-filter: var(--lg-refract) !important;
-  border: 1px solid rgb(255 255 255 / 15%) !important;
-  box-shadow: var(--lg-shadow) !important;
-}
-html[data-style="glass"] .flow-dialog {
-  background: var(--lg-fill), var(--lg-tint-strong) !important;
-  -webkit-backdrop-filter: var(--lg-frost) !important; backdrop-filter: var(--lg-refract) !important;
-}
-/* Small controls refract too, but the active-tab lens stays a clean raised drop. */
-html[data-style="glass"] .nav-lens,
-html[data-style="glass"] body[data-page="stations"] .nav-lens {
-  background: radial-gradient(120% 90% at 30% 0%, rgb(255 255 255 / 34%), rgb(255 255 255 / 10%) 60%, rgb(255 255 255 / 16%)) !important;
-  -webkit-backdrop-filter: blur(4px) brightness(1.15) !important; backdrop-filter: url(#lg-refract) blur(2px) brightness(1.15) !important;
-}
-/* Silver specular rim. */
-html[data-style="glass"] :is(.home-widget, .home-station, .settings-card, .session-card, .summary-stat, .empty-state, .settings-group,
-  .garage-vehicles, .vehicle-menu, .flow-dialog)::before,
-html[data-style="glass"] #page-stations :is(.station-selection, .map-empty)::before { border-color: rgb(255 255 255 / 62%) !important; }
-/* Night map stays neutral grey, no colour cast. */
-html[data-style="glass"] #page-stations .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) grayscale(1) brightness(.8) contrast(.95) !important; }
-html[data-style="glass"] #page-stations .station-map { background: #0e0f12 !important; }
-/* Silver pill for pressed controls instead of pure white. */
-html[data-style="glass"] .primary-button,
-html[data-style="glass"] #page-stations .station-sheet-actions .primary-button,
-html[data-style="glass"] #page-stations :is(.station-source button[aria-pressed="true"], .filter-chip[aria-pressed="true"], .real-search-button) {
-  background: linear-gradient(180deg, #fbfbfa, #dcdee2) !important; color: #0b0c10 !important;
-}
 
 /* Light: no shadow or halo under any vehicle. */
 html[data-style="light"] .vehicle-stage,
@@ -597,4 +414,84 @@ html[data-style="light"] .garage-vehicles .garage-vehicle img { filter: none !im
 /* Light is flat: separation comes from hairline borders, never from drop shadows. */
 html[data-style="light"] *, html[data-style="light"] *::before, html[data-style="light"] *::after { box-shadow: none !important; text-shadow: none !important; }
 html[data-style="light"] :is(img, canvas, svg) { filter: none !important; }
-html[data-style="light"] :is(.glass-nav, .home-widget, .home-station, .session-card, .activity-card, .week-card, .live-banner, .settings-group, .garage-vehicles, .station-selection, .flow-dialog, .vehicle-menu) { border: 1px solid rgb(17 18 20 / 10%) !important; }
+
+/* ======================================================================
+ * Frosted glass, iOS 27 style. One 20px blur everywhere; the Settings "Glass" slider only changes
+ * how much tint sits on top, from clear (0) to fully frosted (1). Works in Dark and Light.
+ * No lens refraction and no drop shadows: just blur, tint, a bright top edge and a hairline.
+ * ==================================================================== */
+html { --glass-t: .6; --glass-blur: blur(20px) saturate(165%); }
+html[data-style="dark"] {
+  --glass-rgb: 30 32 38; --glass-alpha: calc(.14 + .74 * var(--glass-t)); --glass-sheet-alpha: calc(.46 + .46 * var(--glass-t));
+  --glass-edge: rgb(255 255 255 / 15%); --glass-sheen: rgb(255 255 255 / 10%); --glass-inner: inset 0 1px 0 rgb(255 255 255 / 24%);
+}
+html[data-style="light"] {
+  --glass-rgb: 255 255 255; --glass-alpha: calc(.3 + .64 * var(--glass-t)); --glass-sheet-alpha: calc(.62 + .34 * var(--glass-t));
+  --glass-edge: rgb(255 255 255 / 92%); --glass-sheen: rgb(255 255 255 / 75%); --glass-inner: none;
+}
+/* Apple's "Reduce Transparency": honour the phone setting by going (nearly) opaque and dropping the blur. */
+@media (prefers-reduced-transparency: reduce) {
+  html[data-style] { --glass-alpha: .94 !important; --glass-sheet-alpha: .97 !important; --glass-blur: none; }
+}
+
+/* The wallpaper the glass blurs: a soft off-white / silver glow on black, or on silver. */
+.ambient { display: block !important; position: fixed; inset: 0; z-index: -1; pointer-events: none; }
+html[data-style="dark"] .ambient {
+  background:
+    radial-gradient(72% 44% at 50% -8%, rgb(255 255 255 / 15%), transparent 62%),
+    radial-gradient(62% 40% at 108% 98%, rgb(196 200 210 / 11%), transparent 70%),
+    radial-gradient(50% 34% at -12% 56%, rgb(228 230 236 / 6%), transparent 70%),
+    linear-gradient(180deg, #121316 0%, #08090b 58%, #050506 100%) !important;
+}
+html[data-style="light"] .ambient {
+  background:
+    radial-gradient(76% 46% at 50% -8%, #ffffff, transparent 62%),
+    radial-gradient(66% 40% at 108% 98%, rgb(196 200 212 / 85%), transparent 72%),
+    radial-gradient(50% 34% at -12% 56%, rgb(240 241 245 / 95%), transparent 70%),
+    linear-gradient(180deg, #f7f7f9 0%, #e7e8ed 60%, #dcdde4 100%) !important;
+}
+html[data-style][data-style] body { background: transparent !important; }
+.vehicle-wallet .vehicle-stage::after { display: none !important; }
+
+/* Every glass surface (specificity raised so it beats the flat Dark/Light skin above). */
+html[data-style][data-style] :is(.home-widget, #page-home .home-station, .session-card, .summary-stat, .empty-state, .settings-card,
+  .settings-group, .garage-vehicles, .bill-summary, .charge-ring, .live-banner, .activity-card, .week-card),
+html[data-style][data-style] #page-stations :is(.station-selection, .map-empty),
+html[data-style][data-style] .glass-nav,
+html[data-style][data-style] body[data-page="stations"] .glass-nav,
+html[data-style][data-style] #page-stations :is(.map-back-button, .search-field, .map-locate, .filter-chip, .station-source,
+  .location-message, .real-station-notice, .map-network-status, .leaflet-control-zoom) {
+  background: linear-gradient(160deg, var(--glass-sheen), transparent 44%), rgb(var(--glass-rgb) / var(--glass-alpha)) !important;
+  -webkit-backdrop-filter: var(--glass-blur) !important; backdrop-filter: var(--glass-blur) !important;
+  border: 1px solid var(--glass-edge) !important;
+  box-shadow: var(--glass-inner) !important;
+}
+/* Sheets and menus carry text on top of anything, so their tint never gets thinner than the floor. */
+html[data-style][data-style] :is(.flow-dialog, .vehicle-menu, #flowDialog, #vehicleMenu),
+html[data-style][data-style] #flowDialog, html[data-style][data-style] #vehicleMenu,
+html[data-style][data-style] #page-stations .station-selection {
+  background: linear-gradient(160deg, var(--glass-sheen), transparent 44%), rgb(var(--glass-rgb) / var(--glass-sheet-alpha)) !important;
+}
+html[data-style][data-style] :is(.flow-dialog, .vehicle-menu, #flowDialog, #vehicleMenu),
+html[data-style][data-style] #flowDialog, html[data-style][data-style] #vehicleMenu {
+  -webkit-backdrop-filter: var(--glass-blur) !important; backdrop-filter: var(--glass-blur) !important;
+  border: 1px solid var(--glass-edge) !important; box-shadow: var(--glass-inner) !important;
+}
+html[data-style][data-style] .dialog-actions { background: transparent !important; border-top: 1px solid var(--s-line) !important; }
+html[data-style="dark"] .flow-dialog::backdrop { background: rgb(4 5 8 / 40%); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
+html[data-style="light"] .flow-dialog::backdrop { background: rgb(240 241 245 / 45%); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
+/* A hairline gives light glass an edge without a shadow. */
+html[data-style="light"] :is(.home-widget, .home-station, .session-card, .summary-stat, .empty-state, .settings-card, .settings-group,
+  .garage-vehicles, .live-banner, .activity-card, .week-card, .glass-nav, .flow-dialog, .vehicle-menu, .station-selection, .map-empty,
+  .search-field, .map-back-button, .map-locate, .filter-chip, .station-source, .location-message) {
+  outline: 1px solid rgb(17 18 20 / 8%); outline-offset: -1px;
+}
+/* Specular-free pills inside glass: segmented controls read as slightly deeper glass. */
+html[data-style="dark"] :is(.summary-period, .style-switch) { background: rgb(0 0 0 / 28%) !important; }
+html[data-style="light"] :is(.summary-period, .style-switch) { background: rgb(17 18 20 / 6%) !important; }
+
+/* Settings: the glass slider. */
+.range-row { flex-direction: column !important; align-items: stretch !important; gap: 10px !important; cursor: default; }
+.range-row > span:first-child { display: flex; flex-direction: column; gap: 3px; }
+.range-row input[type="range"] { width: 100%; min-height: 32px; accent-color: var(--s-text); cursor: pointer; }
+.range-scale { display: flex; justify-content: space-between; font-size: 11px; color: var(--s-muted); margin-top: -4px; }

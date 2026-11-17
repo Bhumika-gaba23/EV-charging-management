@@ -120,7 +120,7 @@
     "Pluggo matches chargers to the vehicle you pick here.": "आप यहाँ जो वाहन चुनते हैं, Pluggo उसी के हिसाब से चार्जर दिखाता है।",
     "Your vehicle": "आपका वाहन", "Appearance": "रूप-रंग", "Style": "स्टाइल",
     "How Pluggo looks on this device": "इस डिवाइस पर Pluggo कैसा दिखे", "App style": "ऐप स्टाइल",
-    "Dark": "डार्क", "Light": "लाइट", "Glass": "ग्लास",
+    "Dark": "डार्क", "Light": "लाइट", "Glass": "ग्लास", "From clear to frosted": "साफ़ से फ्रॉस्टेड तक", "Clear": "साफ़", "Frosted": "फ्रॉस्टेड", "Glass transparency": "ग्लास पारदर्शिता",
     "Language": "भाषा", "App language": "ऐप की भाषा",
     "Animate vehicle preview": "वाहन प्रीव्यू एनिमेट करें", "Slow 360° rotation on Home": "होम पर धीमा 360° घुमाव",
     "Maps": "मैप", "Real charger search": "असली चार्जर खोज", "Connect real charger search": "असली चार्जर खोज जोड़ें",
