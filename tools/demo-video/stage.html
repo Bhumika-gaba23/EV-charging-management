@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Pluggo demo stage</title>
+<style>
+  :root { --bg: #08090b; --text: #f2f2f3; --muted: #9a9ca3; --line: #ffffff1a; --accent: #c4ffe1; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; background: var(--bg); color: var(--text);
+    font-family: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif; }
+  body::before { content: ""; position: absolute; inset: 0; pointer-events: none;
+    background: radial-gradient(900px 600px at 20% 30%, #1b2a2233, transparent 70%), radial-gradient(800px 700px at 85% 80%, #20232b66, transparent 70%); }
+  .brand { position: absolute; left: 64px; top: 48px; display: flex; align-items: center; gap: 12px; font-weight: 700; font-size: 26px; letter-spacing: -0.02em; z-index: 5; transition: opacity .5s; }
+  .brand img { width: 34px; height: 34px; filter: invert(1); }
+  .chapter { position: absolute; right: 64px; top: 52px; font-size: 16px; letter-spacing: .18em; color: var(--muted); text-transform: uppercase; z-index: 5; }
+  .progress { position: absolute; left: 64px; right: 64px; bottom: 40px; display: flex; gap: 8px; z-index: 5; }
+  .progress i { flex: 1; height: 3px; border-radius: 3px; background: #ffffff14; transition: background .6s; }
+  .progress i.on { background: #ffffffb3; }
+
+  .device { position: absolute; border-radius: 58px; padding: 0; background: linear-gradient(160deg, #2a2c31, #141518);
+    box-shadow: 0 40px 120px #000c, inset 0 0 0 1.5px #ffffff22; transition: all .9s cubic-bezier(.22,1,.36,1); }
+  .device iframe { display: block; width: 390px; height: 844px; border: 0; border-radius: 46px; background: #000; }
+  .device .inner { width: 390px; height: 844px; border-radius: 46px; overflow: hidden; transform-origin: 0 0; }
+  .screen { position: absolute; border-radius: 22px; overflow: hidden; box-shadow: 0 30px 100px #000b, 0 0 0 1.5px #ffffff1f; background: #0b0b0d;
+    transition: all .9s cubic-bezier(.22,1,.36,1); }
+  .screen .bar { height: 38px; display: flex; align-items: center; gap: 8px; padding: 0 16px; background: #16171a; border-bottom: 1px solid #ffffff12; font-size: 14px; color: var(--muted); }
+  .screen .bar b { width: 11px; height: 11px; border-radius: 50%; background: #ffffff26; }
+  .screen .bar span { margin-left: 12px; }
+  .screen .inner { width: 1280px; height: 800px; transform-origin: 0 0; }
+  .screen iframe { width: 1280px; height: 800px; border: 0; display: block; }
+
+  .caption { position: absolute; transition: opacity .6s, transform .6s cubic-bezier(.22,1,.36,1); }
+  .caption.hide { opacity: 0; transform: translateY(16px); }
+  .eyebrow { font-size: 18px; letter-spacing: .22em; text-transform: uppercase; color: var(--accent); margin: 0 0 18px; font-weight: 600; }
+  .title { font-size: 68px; line-height: 1.04; letter-spacing: -0.03em; font-weight: 700; margin: 0 0 22px; }
+  .body { font-size: 28px; line-height: 1.45; color: #c9cad0; margin: 0; }
+  .chips { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 30px; }
+  .chips span { padding: 10px 18px; border-radius: 999px; border: 1px solid var(--line); background: #ffffff08; font-size: 21px; color: #e6e7ea; }
+
+  .log { position: absolute; border-radius: 18px; background: #0d0f0e; border: 1px solid #ffffff1c; box-shadow: 0 20px 60px #000a;
+    font-family: "Cascadia Mono", Consolas, monospace; font-size: 15px; line-height: 1.55; padding: 18px 22px; overflow: hidden; transition: opacity .6s; }
+  .log h4 { margin: 0 0 10px; font-family: "Segoe UI", sans-serif; font-size: 14px; letter-spacing: .2em; color: var(--muted); font-weight: 600; }
+  .log div { white-space: nowrap; color: #d6d8dc; animation: line .35s ease-out; }
+  .log div.in { color: #ffd38a; }
+  .log div.out { color: #9fe8c0; }
+  @keyframes line { from { opacity: 0; transform: translateX(-8px); } }
+
+  .card { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; transition: opacity .8s; z-index: 4;
+    background: radial-gradient(1000px 700px at 50% 45%, #15201a, #08090b 70%); }
+  .card.hide { opacity: 0; pointer-events: none; }
+  .card .wrap { max-width: 1400px; }
+  .card .logo { display: inline-flex; align-items: center; gap: 22px; font-size: 120px; font-weight: 800; letter-spacing: -0.05em; }
+  .card .logo img { width: 120px; height: 120px; filter: invert(1); }
+  .card h1 { font-size: 84px; line-height: 1.05; letter-spacing: -0.035em; margin: 0 0 26px; }
+  .card p { font-size: 32px; color: #c9cad0; line-height: 1.5; margin: 0; }
+  .card .sub { margin-top: 36px; font-size: 24px; letter-spacing: .2em; text-transform: uppercase; color: var(--muted); }
+  .card ul { list-style: none; padding: 0; margin: 40px auto 0; display: grid; gap: 20px; text-align: left; width: fit-content; }
+  .card li { font-size: 34px; color: #dcdde1; display: flex; gap: 18px; align-items: baseline; }
+  .card li b { color: var(--accent); font-weight: 700; min-width: 40px; }
+  .hidden { opacity: 0 !important; pointer-events: none; }
+</style>
+</head>
+<body>
+  <div class="brand" id="brand"><img src="/assets/pluggo.svg" alt="">pluggo.</div>
+  <div class="chapter" id="chapter"></div>
+
+  <div class="device hidden" id="device"><div class="inner" id="deviceInner"><iframe id="phone" name="phone" allow="geolocation; camera"></iframe></div></div>
+  <div class="screen hidden" id="screen"><div class="bar"><b></b><b></b><b></b><span>Pluggo · Operations dashboard</span></div><div class="inner" id="screenInner"><iframe id="dash" name="dash"></iframe></div></div>
+  <div class="log hidden" id="log"><h4>CHARGER ⇄ PLUGGO · OCPP 1.6J</h4><div id="logLines"></div></div>
+
+  <div class="caption hide" id="caption"><p class="eyebrow" id="eyebrow"></p><h2 class="title" id="title"></h2><p class="body" id="body"></p><div class="chips" id="chips"></div></div>
+  <div class="card hide" id="card"><div class="wrap" id="cardWrap"></div></div>
+  <div class="progress" id="progress"></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const scenes = 9;
+$('progress').innerHTML = Array.from({length: scenes}, () => '<i></i>').join('');
+function place(el, x, y, scale, w, h) {
+  const pad = el.id === 'device' ? 12 : 0, bar = el.id === 'screen' ? 38 : 0;
+  Object.assign(el.style, {left: x + 'px', top: y + 'px', width: (w * scale + 2 * pad) + 'px', height: (h * scale + 2 * pad + bar) + 'px'});
+  const inner = el.querySelector('.inner');
+  Object.assign(inner.style, {position: 'absolute', left: pad + 'px', top: (pad + bar) + 'px', width: w + 'px', height: h + 'px', transform: `scale(${scale})`});
+}
+window.stage = {
+  chapter(text, index) {
+    $('chapter').textContent = text || '';
+    [...$('progress').children].forEach((bar, i) => bar.classList.toggle('on', i <= index));
+  },
+  layout(name) {
+    const device = $('device'), screen = $('screen'), caption = $('caption'), log = $('log');
+    device.classList.toggle('hidden', name === 'card');
+    screen.classList.toggle('hidden', !['split', 'ocpp'].includes(name));
+    log.classList.toggle('hidden', name !== 'ocpp');
+    if (name === 'phone') {
+      place(device, 330, 70, 1.105, 390, 844);
+      Object.assign(caption.style, {left: '960px', top: '300px', width: '820px'});
+    } else if (name === 'split') {
+      place(device, 110, 120, 0.98, 390, 844);
+      place(screen, 700, 320, 0.8, 1280, 800);
+      Object.assign(caption.style, {left: '590px', top: '110px', width: '1260px'});
+    } else if (name === 'ocpp') {
+      place(device, 110, 120, 0.98, 390, 844);
+      place(screen, 590, 330, 0.56, 1280, 800);
+      Object.assign(caption.style, {left: '590px', top: '110px', width: '1260px'});
+      Object.assign(log.style, {left: '1330px', top: '330px', width: '530px', height: '486px'});
+    }
+  },
+  caption(eyebrow, title, body, chips = [], small = false) {
+    const c = $('caption');
+    c.classList.add('hide');
+    setTimeout(() => {
+      $('eyebrow').textContent = eyebrow; $('title').innerHTML = title; $('body').innerHTML = body || '';
+      $('title').style.fontSize = small ? '50px' : '68px'; $('body').style.fontSize = small ? '24px' : '28px';
+      $('chips').innerHTML = chips.map((t) => `<span>${t}</span>`).join('');
+      c.classList.remove('hide');
+    }, 350);
+  },
+  hideCaption() { $('caption').classList.add('hide'); },
+  card(html) { $('cardWrap').innerHTML = html; $('card').classList.remove('hide'); $('brand').style.opacity = 0; },
+  hideCard() { $('card').classList.add('hide'); $('brand').style.opacity = 1; },
+  log(line) {
+    const div = document.createElement('div');
+    div.className = line.startsWith('IN') ? 'in' : 'out';
+    div.textContent = (line.startsWith('IN') ? '← ' : '→ ') + line.replace(/^(IN|OUT)\s+/, '');
+    $('logLines').append(div);
+    while ($('logLines').children.length > 18) $('logLines').firstChild.remove();
+  },
+};
+</script>
+</body>
+</html>

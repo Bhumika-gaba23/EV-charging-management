@@ -108,7 +108,7 @@ function renderSlots(slots) {
     const soc = Math.max(0,Math.min(100,Number(slot.soc)||0));
     return `<div class="slot-row ${active ? "" : "muted"}">
       <span class="slot-number">${escapeHTML(slot.id)}</span>
-      <div class="vehicle"><strong>${escapeHTML(active ? slot.vehicle : slot.status.toUpperCase())}</strong><small>${escapeHTML(slot.stationName||"")} · ${escapeHTML(slot.connector)} · ${escapeHTML(slot.id)}</small>${active ? `<small>${Number(slot.powerKW).toFixed(1)} kW · ${Number(slot.energyKWh||0).toFixed(2)} kWh · ₹${Number(slot.estimatedCost||0).toFixed(2)}</small>` : ""}</div>
+      <div class="vehicle"><strong>${escapeHTML(active ? slot.vehicle : slot.status.toUpperCase())}</strong><small>${escapeHTML(slot.stationName||"")} · ${escapeHTML(slot.connector)} · ${escapeHTML(slot.id)}${slot.source && slot.source !== "SIMULATOR" ? ` · <b class="slot-ocpp">${escapeHTML(slot.source)}${slot.chargerOnline === false ? " offline" : ""}</b>` : ""}</small>${active ? `<small>${Number(slot.powerKW).toFixed(1)} kW · ${Number(slot.energyKWh||0).toFixed(2)} kWh · ₹${Number(slot.estimatedCost||0).toFixed(2)}</small>` : ""}</div>
       <div class="charge-bar"><i style="width:${soc}%"></i></div>
       <strong>${active ? `${soc.toFixed(1)}%` : "—"}</strong>
       <span class="source ${active ? "solar" : "ready"}">${active ? "CHARGING" : escapeHTML(slot.status.toUpperCase())}</span>
