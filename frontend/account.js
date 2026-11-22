@@ -63,6 +63,22 @@ export async function watchIdToken(config, callback) {
   return sdk.onIdTokenChanged(auth, async (user) => callback(user ? await user.getIdToken() : "", user));
 }
 
+// Milliseconds since the current Firebase user last signed in (Infinity when nobody is).
+export async function firebaseSignInAge(config) {
+  const { auth } = await loadFirebase(config);
+  await auth.authStateReady?.();
+  const user = auth.currentUser;
+  return user ? Date.now() - Date.parse(user.metadata.lastSignInTime) : Infinity;
+}
+
+// Deletes the Firebase phone sign-in record after the Pluggo account itself has been erased.
+export async function deleteFirebaseUser(config) {
+  if (!config) return;
+  const { auth, sdk } = await loadFirebase(config);
+  await auth.authStateReady?.();
+  if (auth.currentUser) await sdk.deleteUser(auth.currentUser);
+}
+
 export async function signOutFirebase(config) {
   if (!config) return;
   try { const { auth, sdk } = await loadFirebase(config); await sdk.signOut(auth); } catch {}

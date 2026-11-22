@@ -8,7 +8,7 @@ try {
  await p.getByRole('link',{name:'Stations',exact:true}).click();await p.waitForFunction(()=>document.querySelector('#locationMessage').textContent.includes('Using your device'));
  assert.equal(await p.evaluate(()=>geoCalls),1);
  await p.getByRole('link',{name:'Home',exact:true}).click();await p.getByRole('link',{name:'Stations',exact:true}).click();assert.equal(await p.evaluate(()=>geoCalls),1);
- await p.locator('#realStationSource').click();assert.match(await p.locator('#realStationNotice').innerText(),/OpenStreetMap/);assert.equal(await p.locator('.compact-station').count(),0);await p.waitForFunction(()=>/\d+ real charging stations/.test(document.querySelector('#resultCount').textContent));assert.ok(await p.locator('.real-marker').count()>0,'real stations near the device location without a Google key');
+ await p.locator('#realStationSource').click();assert.equal(await p.locator('.compact-station').count(),0);await p.waitForFunction(()=>/\d+ real charging stations/.test(document.querySelector('#resultCount').textContent));assert.match(await p.locator('#realStationNotice').innerText(),/OpenStreetMap/);assert.ok(await p.locator('.real-marker').count()>0,'real stations near the device location without a Google key');
  await p.waitForTimeout(400);
  await p.screenshot({path:'docs/ui-audit/after/phone-real-stations-setup.png',fullPage:true});
  await p.locator('#demoStationSource').click();assert.match(await p.locator('#resultCount').textContent(),/5 compatible stations/);

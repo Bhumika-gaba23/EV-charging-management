@@ -165,8 +165,35 @@ def main():
             with sqlite3.connect(db) as connection:
                 statuses = dict(connection.execute('SELECT id,status FROM customer_refunds').fetchall())
             assert statuses == {'rfnd_TEST1': 'processed', 'rfnd_TEST2': 'pending'}, statuses
+            # 5. Account deletion: refused while charging; then removes the phone and history, keeping
+            #    paid receipts only as anonymous accounting entries.
+            customer.call('sessions', 'POST', {'station': 'CP', 'connector': 'CP-01', 'vehicle': 'car', 'target': 80, 'budget': 300}, 'p9')
+            code, refused = customer.call('account/delete', 'POST', {})
+            assert code == 409 and 'Stop charging' in refused['error'], refused
+            active = next(s for s in customer.call('state')[1]['state']['sessions'] if not s['ended'])
+            customer.call(f"sessions/{active['id']}/stop", 'POST', {})
+            due9 = round(session_of(customer, active['id'])['cost'] * 100)
+            assert customer.call('account/delete', 'POST', {})[0] == 409, 'unpaid charge must be settled first'
+            order9 = customer.call(f"sessions/{active['id']}/payment", 'POST', {})[1]
+            if order9.get('orderId'):
+                PAYMENTS[order9['orderId']] = [{'id': 'pay_LAST9', 'status': 'captured', 'amount': due9}]
+                assert customer.call(f"sessions/{active['id']}/payment", 'POST', {})[1]['settled'] is True
+            else:
+                assert customer.call(f"sessions/{active['id']}/checkout", 'POST', {})[0] == 200
+            assert customer.call('account/delete', 'POST', {}, csrf=False)[0] == 403, 'needs the app header'
+            code, gone = customer.call('account/delete', 'POST', {})
+            assert code == 200 and gone['deleted'] and gone['state']['sessions'] == [] and gone['account']['signedIn'] is False, gone
+            assert customer.call('state')[1]['state']['sessions'] == [], 'new empty visitor'
+            with sqlite3.connect(db) as connection:
+                dump = '\n'.join(connection.iterdump())
+                kept = connection.execute("SELECT COUNT(*) FROM customer_sessions WHERE owner='erased'").fetchone()[0]
+                accounts = connection.execute('SELECT COUNT(*) FROM customer_accounts').fetchone()[0]
+            assert '+919876543210' not in dump, 'phone number erased everywhere'
+            assert accounts == 0 and kept >= 3, (accounts, kept)
+            assert operator_call('operator/refund', {'sessionId': sid2, 'amount': 0.1}, ops)[0] == 200, 'anonymous receipts stay refundable'
             print('PASS: paid-then-closed recovery (no second order), authorized capture, signed/replayed/forged/mismatched '
-                  'webhooks, payment.failed, operator-only partial and full refunds with over-refund refused, refund webhooks')
+                  'webhooks, payment.failed, operator-only partial and full refunds with over-refund refused, refund webhooks, '
+                  'account deletion (refused while charging/unpaid, phone erased, paid receipts kept anonymously)')
         finally:
             stop(server)
             fake.shutdown()

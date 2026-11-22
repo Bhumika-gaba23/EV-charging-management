@@ -1,7 +1,7 @@
 import { summarizeSessions, chargingDuration } from "./session-summary.js?v=20261123-pay1";
 import { performanceProfile } from "./performance-profile.js?v=20261104-summary1";
-import { CustomerApi } from "./customer-api.js?v=20261123-stations1";
-import { normalizeIndianPhone, sendOtp, confirmOtp, signOutFirebase, friendlyAuthError, payWithRazorpay } from "./account.js?v=20261118-live2";
+import { CustomerApi } from "./customer-api.js?v=20261123-legal1";
+import { normalizeIndianPhone, sendOtp, confirmOtp, signOutFirebase, friendlyAuthError, payWithRazorpay, firebaseSignInAge, deleteFirebaseUser } from "./account.js?v=20261123-legal1";
 import { findGoogleStations } from "./google-stations.js?v=20261104-server9";
 import {
   vehicles,
@@ -640,8 +640,8 @@ document.querySelectorAll("select[data-pref]").forEach(select => {
 });
 const INFO_PAGES = {
   help: ["HELP & SUPPORT", "How can we help?", `<div class="credits-list info-list"><h3>Start a charge</h3><p>Tap Start charging on Home, or pick a station on the map. Choose a free charger that fits your vehicle, set a target and budget, then start.</p><h3>Stop and pay</h3><p>Stop any time from the live session. Pay with UPI, card or netbanking through Razorpay. Charges under ₹1 are free.</p><h3>Receipts</h3><p>Every finished charge is in Sessions. Open a receipt to share it.</p><h3>Sign in</h3><p>Sign in with your mobile number to keep your charges and receipts on every device. We text a one-time code.</p></div>`],
-  privacy: ["PRIVACY", "Your data, simply.", `<div class="credits-list info-list"><h3>What we keep</h3><p>Your charging sessions and receipts, and your mobile number if you sign in, so your history follows you across devices.</p><h3>Location</h3><p>Your location is used on your phone to sort nearby stations. If you turn on Google Maps search, your search area is sent to Google.</p><h3>Payments</h3><p>Razorpay processes payments. Pluggo never sees your card or UPI details; we keep only the payment ID for your receipt.</p><h3>On this device</h3><p>Your style, language and charging preferences are saved on this phone. Clear my history removes your sessions here.</p></div>`],
-  terms: ["TERMS OF USE", "The short version.", `<div class="credits-list info-list"><h3>Pilot release</h3><p>Pluggo network stations and chargers are simulated while partner chargers are onboarded, and charging runs faster than real time.</p><h3>Payments</h3><p>Payments run in Razorpay test mode during the pilot, so no real money moves.</p><h3>Estimates</h3><p>Range, time and cost estimates are typical values, not guarantees.</p></div>`],
+  privacy: ["PRIVACY", "Your data, simply.", `<div class="credits-list info-list"><h3>What we keep</h3><p>Your charging sessions and receipts, and your mobile number if you sign in, so your history follows you across devices.</p><h3>Location</h3><p>Your location is used on your phone to sort nearby stations. If you turn on Google Maps search, your search area is sent to Google.</p><h3>Payments</h3><p>Razorpay processes payments. Pluggo never sees your card or UPI details; we keep only the payment ID for your receipt.</p><h3>On this device</h3><p>Your style, language and charging preferences are saved on this phone. Clear my history removes your sessions here.</p><h3>Your rights</h3><p>Settings → Delete my account and data erases your number and history at any time.</p><p><a href="privacy.html" target="_blank" rel="noopener">Read the full Privacy Policy ↗</a></p></div>`],
+  terms: ["TERMS OF USE", "The short version.", `<div class="credits-list info-list"><h3>Pilot release</h3><p>Pluggo network stations and chargers are simulated while partner chargers are onboarded, and charging runs faster than real time.</p><h3>Payments</h3><p>Payments run in Razorpay test mode during the pilot, so no real money moves.</p><h3>Estimates</h3><p>Range, time and cost estimates are typical values, not guarantees.</p><p><a href="terms.html" target="_blank" rel="noopener">Read the full Terms of Use ↗</a></p></div>`],
 };
 document.querySelectorAll("[data-info]").forEach(button => button.addEventListener("click", () => {
   const [eyebrow, title, body] = INFO_PAGES[button.dataset.info];
@@ -938,7 +938,8 @@ function directoryPlace(s) {
 async function searchDirectory(query) {
   const params = {limit: 40};
   if (query) params.q = query;
-  if (origin.device) Object.assign(params, {lat: origin.lat, lng: origin.lng, radius: query ? 300 : 25});
+  // Rounded to about 100 m: enough to sort nearby stations, without sending an exact position.
+  if (origin.device) Object.assign(params, {lat: origin.lat.toFixed(3), lng: origin.lng.toFixed(3), radius: query ? 300 : 25});
   const reply = await customerApi.publicStations(params);
   directorySources = reply.sources || [];
   return (reply.stations || []).map(directoryPlace);
@@ -1332,7 +1333,7 @@ function renderAccount() {
   $("#accountLabel").hidden = card.hidden;
   if (card.hidden) return;
   const html = account.signedIn
-    ? `<div class="settings-heading">${icon("shield")}<h2>Signed in</h2></div><p>${account.phone || "Phone account"} · your charges and receipts are saved to this number on every device.</p><button class="secondary-button" id="signOutButton" type="button">Sign out</button>`
+    ? `<div class="settings-heading">${icon("shield")}<h2>Signed in</h2></div><p>${account.phone || "Phone account"} · your charges and receipts are saved to this number on every device.</p><button class="secondary-button" id="signOutButton" type="button">Sign out</button><button class="text-link danger-link" id="deleteAccountButton" type="button">Delete my account and data</button>`
     : `<div class="settings-heading">${icon("shield")}<h2>Sign in</h2></div><p>Use your mobile number to start charging and keep your receipts on every device.</p><button class="primary-button" id="signInButton" type="button">Sign in with phone ${icon("arrow-up-right")}</button>`;
   if (card.innerHTML === html) return;
   card.innerHTML = html;
@@ -1344,12 +1345,39 @@ function renderAccount() {
     renderGarage();
     toast("Signed out.");
   });
+  $("#deleteAccountButton")?.addEventListener("click", () => confirmDeleteAccount());
+}
+// Right to erasure: removes the phone account, preferences and history. Paid receipts are kept
+// for tax records without any link to the person. Firebase requires a recent sign-in to delete
+// the phone sign-in record too, so an older sign-in is verified again first.
+function confirmDeleteAccount() {
+  showDialog(
+    "DELETE ACCOUNT",
+    `<h2 id="dialogTitle">Delete your account?</h2><p class="dialog-subtitle">This removes your mobile number, saved stations, vehicle choice and charging history from Pluggo. Receipts for payments you made are kept only as anonymous accounting records, as tax law requires. This cannot be undone.</p><p class="form-error" id="deleteError" role="alert"></p><button type="button" class="primary-button dialog-full danger-button" id="confirmDelete">Delete my account</button><button type="button" class="text-link" id="cancelDelete">Keep my account</button>`,
+  );
+  $("#cancelDelete").onclick = () => $("#flowDialog").close();
+  $("#confirmDelete").onclick = async () => {
+    const button = $("#confirmDelete");
+    let age = 0;
+    try { age = backendConfig.firebase ? await firebaseSignInAge(backendConfig.firebase) : 0; } catch { /* sign-in service unreachable: still erase Pluggo's data */ }
+    if (age > 4 * 60 * 1000) {
+      toast("For your security, verify your number once more.");
+      openSignIn(() => confirmDeleteAccount());
+      return;
+    }
+    const reply = await backendAction(button, () => customerApi.deleteAccount(), false);
+    if (!reply) return;
+    try { await deleteFirebaseUser(backendConfig.firebase); } catch { await signOutFirebase(backendConfig.firebase); }
+    $("#flowDialog").close();
+    renderGarage();
+    toast("Your account and data were deleted.");
+  };
 }
 function openSignIn(after) {
   if (!backendConfig.firebase) { toast("Phone sign-in is not available right now."); return; }
   showDialog(
     "SIGN IN",
-    `<h2 id="dialogTitle">Your number,<br>your receipts.</h2><p class="dialog-subtitle">We'll text a one-time code to verify your mobile number.</p><form id="phoneForm" class="sign-in-form" novalidate><label for="phoneInput">Mobile number</label><div class="phone-field"><span>+91</span><input id="phoneInput" type="tel" inputmode="numeric" autocomplete="tel-national" maxlength="14" placeholder="98765 43210" required></div><p class="form-error" id="signInError" role="alert"></p><button type="submit" class="primary-button dialog-full" id="sendCode">Send code ${icon("arrow-up-right")}</button></form><div id="recaptchaBox"></div>`,
+    `<h2 id="dialogTitle">Your number,<br>your receipts.</h2><p class="dialog-subtitle">We'll text a one-time code to verify your mobile number.</p><form id="phoneForm" class="sign-in-form" novalidate><label for="phoneInput">Mobile number</label><div class="phone-field"><span>+91</span><input id="phoneInput" type="tel" inputmode="numeric" autocomplete="tel-national" maxlength="14" placeholder="98765 43210" required></div><label class="consent-check"><input type="checkbox" id="consentInput"><span>I agree to the <a href="terms.html" target="_blank" rel="noopener">Terms of Use</a> and <a href="privacy.html" target="_blank" rel="noopener">Privacy Policy</a>, and to Pluggo using my number to sign me in and keep my receipts.</span></label><p class="form-error" id="signInError" role="alert"></p><button type="submit" class="primary-button dialog-full" id="sendCode">Send code ${icon("arrow-up-right")}</button></form><div id="recaptchaBox"></div>`,
     { modal: false },
   );
   $("#phoneInput").focus();
@@ -1357,6 +1385,7 @@ function openSignIn(after) {
     event.preventDefault();
     const phone = normalizeIndianPhone($("#phoneInput").value);
     if (!phone) { $("#signInError").textContent = "Enter a valid 10-digit Indian mobile number."; return; }
+    if (!$("#consentInput").checked) { $("#signInError").textContent = "Please agree to the Terms of Use and Privacy Policy to continue."; return; }
     const button = $("#sendCode");
     button.disabled = true;
     $("#signInError").textContent = "";

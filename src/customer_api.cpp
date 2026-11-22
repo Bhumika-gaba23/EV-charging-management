@@ -202,6 +202,21 @@ public:
     s.paid=due/100.0;s.paymentId=paymentId;}
    s.settled=true;}
   else if(!s.ended){s.ended=nowMs();s.reason="Stopped by you";}persist(s);}
+ // Right to erasure (DPDP Act 2023; Play Store account deletion). Removes the phone account,
+ // preferences, unpaid history and the visitor itself. Paid receipts must be kept for tax
+ // records, so they stay only as anonymous accounting entries, no longer linked to anyone.
+ void eraseAccount(const std::string& owner){
+  if(!query("SELECT id FROM customer_sessions WHERE owner=? AND ended IS NULL",{owner}).empty())throw ApiError(409,"Stop charging before deleting your account");
+  if(!query("SELECT id FROM customer_sessions WHERE owner=? AND settled=0",{owner}).empty())throw ApiError(409,"Finish checkout for your last charge before deleting your account");
+  query("INSERT OR IGNORE INTO customer_visitors(id) VALUES('erased')");
+  for(const auto& s:sessions(owner)){
+   if(!s.paymentId.empty())query("UPDATE customer_sessions SET owner='erased',idem=id WHERE id=?",{s.id});
+   else{query("DELETE FROM customer_refunds WHERE session=?",{s.id});query("DELETE FROM customer_sessions WHERE id=?",{s.id});}
+  }
+  query("DELETE FROM customer_payments WHERE owner=?",{owner});
+  query("DELETE FROM customer_accounts WHERE visitor=?",{owner});
+  query("DELETE FROM customer_visitors WHERE id=?",{owner});
+ }
  void reset(const std::string& owner) {query("DELETE FROM customer_refunds WHERE session IN (SELECT id FROM customer_sessions WHERE owner=?)",{owner});query("DELETE FROM customer_payments WHERE owner=?",{owner});query("DELETE FROM customer_sessions WHERE owner=?",{owner});query("UPDATE customer_visitors SET vehicle='car',saved='[]' WHERE id=?",{owner});}
  Json simulatorSessions() {lastSimulator=nowMs();advance();Json j;j["ok"]=true;j["mode"]=mode;j["speed"]=speed;Json::list values;for(const auto& s:sessions())if(!s.ended){auto item=s.json();item["external"]=real(s.connector);values.push_back(std::move(item));}j["sessions"]=std::move(values);return j;}
  void meter(const Input& body) {lastSimulator=nowMs();const auto id=string(body,"sessionId");auto rows=query("SELECT id,owner,idem,payload,request FROM customer_sessions WHERE id=?",{id});if(rows.empty())throw ApiError(404,"Session not found");auto s=fromRow(rows[0]);if(mode!="meter"&&!real(s.connector))return;const bool lateFinal=s.ended&&real(s.connector)&&!s.settled&&nowMs()-s.ended<120000&&query("SELECT session FROM customer_payments WHERE session=?",{s.id}).empty();if(s.ended&&!lateFinal)return;if(string(body,"connector")!=s.connector)throw ApiError(409,"Meter connector does not match session");const double energy=number(body,"energyKWh",s.energy);if(energy<0)throw ApiError(400,"Energy must be non-negative");s.energy=std::min(s.limit,std::max(s.energy,energy));if(!s.ended)complete(s);persist(s);}
@@ -372,6 +387,11 @@ void registerCustomerApi(crow::SimpleApp& app){initIntegrations();publicDirector
  CROW_ROUTE(app,"/api/customer/auth/logout").methods(crow::HTTPMethod::POST)([](const crow::request& r){
   std::string next;
   auto result=customer(r,false,[&](const std::string&){next=store->newVisitor();return store->snapshot(next);});
+  if(result.code==200)result.set_header("Set-Cookie",cookieFor(next));
+  return result;});
+ CROW_ROUTE(app,"/api/customer/account/delete").methods(crow::HTTPMethod::POST)([](const crow::request& r){
+  std::string next;
+  auto result=customer(r,false,[&](const std::string& owner){if(owner=="erased")throw ApiError(403,"Not allowed");store->eraseAccount(owner);next=store->newVisitor();auto j=store->snapshot(next);j["deleted"]=true;return j;});
   if(result.code==200)result.set_header("Set-Cookie",cookieFor(next));
   return result;});
  CROW_ROUTE(app,"/api/customer/reset").methods(crow::HTTPMethod::POST)([](const crow::request& r){return customer(r,false,[](const std::string& owner){store->reset(owner);return store->snapshot(owner);});});

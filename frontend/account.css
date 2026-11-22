@@ -70,3 +70,39 @@
 #recaptchaBox {
   min-height: 0;
 }
+/* Consent at sign-in (DPDP Act notice) */
+.consent-check {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+  cursor: pointer;
+}
+.consent-check input {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin: 1px 0 0;
+  accent-color: currentColor;
+}
+.consent-check a {
+  color: inherit;
+  text-decoration: underline;
+}
+/* Account deletion */
+.account-card .danger-link {
+  display: block;
+  width: 100%;
+  margin-top: 12px;
+  padding: 8px 0;
+  font-size: 13px;
+  text-align: center;
+  color: var(--s-danger, #ff7b76);
+}
+.danger-button.primary-button {
+  background: var(--s-danger, #ff7b76);
+  border-color: var(--s-danger, #ff7b76);
+  color: #fff;
+}
