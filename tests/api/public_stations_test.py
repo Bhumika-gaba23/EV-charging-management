@@ -32,7 +32,7 @@ def serve(port, folder, extra):
 
 
 def main():
-    assert DATA['count'] == len(DATA['stations']) >= 100 and DATA['sources'][0]['license'] == 'ODbL 1.0'
+    assert DATA['count'] == len(DATA['stations']) >= 100 and DATA['sources'][0]['license'] == 'CC BY 4.0'
     with tempfile.TemporaryDirectory(prefix='pluggo-stations-') as tmp:
         folder = Path(tmp)
         servers = [serve(PORT, folder, {})]
@@ -42,7 +42,7 @@ def main():
             assert code == 200 and near['stations'], near
             distances = [s['distanceKm'] for s in near['stations']]
             assert distances == sorted(distances) and distances[-1] <= 15, distances
-            assert near['sources'][0]['name'] == 'OpenStreetMap contributors' and cache == 'public, max-age=300'
+            assert near['sources'][0]['name'] == 'Open Charge Map contributors' and cache == 'public, max-age=300'
             assert all(s['id'].startswith(('osm:', 'ocm:')) for s in near['stations'])
             assert len(get(PORT, lat=28.6139, lng=77.2090, radius=15, limit=3)[1]['stations']) == 3
             assert len(get(PORT, lat=28.6139, lng=77.2090, radius=99, limit=500)[1]['stations']) <= 100, 'limit capped'

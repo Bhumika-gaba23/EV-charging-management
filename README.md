@@ -20,8 +20,8 @@ CMake is optional on macOS. Data is saved under ignored `data/pluggo.sqlite3`.
 See [backend setup and API guide](docs/customer-backend.md) for tests, ports and
 limitations, and [frontend/README.md](frontend/README.md) for the customer journey.
 
-Real charging stations across India come from OpenStreetMap (and Open Charge Map
-when `OCM_API_KEY` is set) through `tools/import-public-stations.py`, which writes
+Real charging stations across India (about 2,400) come from Open Charge Map's free public data
+export and OpenStreetMap, both without API keys, through `tools/import-public-stations.py`, which writes
 `database/seed/public_stations.json`; the server searches it at
 `/api/customer/public-stations?lat=&lng=&q=`. The app's *All chargers* mode uses it with no
 key and shows OpenStreetMap attribution. A Google Maps browser key is optional and switches

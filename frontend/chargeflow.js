@@ -918,7 +918,7 @@ function setStationSource(source) {
   $("#stationSearch").placeholder = source === "real" ? "City, area, or charger name" : "Search a station or locality";
   $("#realStationNotice").hidden = source === "demo";
   if (source === "real") {
-    showRealNotice(googleMap && !mapsFailed ? "Search chargers within 5 km of your location, or enter a city or station name. Live plug availability is not provided." : "Real charging stations from OpenStreetMap. Search near you, or enter an area, city or operator. Live plug availability is not provided.");
+    showRealNotice(googleMap && !mapsFailed ? "Search chargers within 5 km of your location, or enter a city or station name. Live plug availability is not provided." : "Real charging stations from Open Charge Map and OpenStreetMap. Search near you, or enter an area, city or operator. Live plug availability is not provided.");
   }
   renderStations(); renderMap();
   // Without Google, the directory needs no key: search straight away when the location is known.
@@ -933,6 +933,7 @@ function directoryPlace(s) {
     id: s.id, directory: true, displayName: s.name, operator: s.operator, sockets: s.sockets || [],
     formattedAddress: s.address || [s.city, s.state].filter(Boolean).join(", "),
     location: {lat: s.lat, lng: s.lng}, distanceKm: s.distanceKm, hours: s.hours, capacity: s.capacity,
+    powerKW: s.powerKW, price: s.price, status: s.status, verifiedAt: s.verifiedAt,
   };
 }
 async function searchDirectory(query) {
@@ -963,7 +964,7 @@ $("#stationSearchForm").onsubmit = async event => {
     if (token !== realSearchGeneration || stationSource !== "real") return;
     realPlaces = found; realSearchState = "done"; renderRealStations(); renderRealMap();
     showRealNotice(found.length
-      ? `${directory ? "Stations from OpenStreetMap contributors." : "Google Places results."} Check connector support, prices and availability with the operator. In-app charging and payment work at Pluggo network stations.`
+      ? `${directory ? "Stations from Open Charge Map and OpenStreetMap contributors." : "Google Places results."} Check connector support, prices and availability with the operator. In-app charging and payment work at Pluggo network stations.`
       : directory && !query ? "No mapped chargers within 25 km. Try a city, area or operator name." : "No chargers found. Try a nearby city, locality or charger name.");
   } catch {
     if (token === realSearchGeneration && stationSource === "real") {
@@ -986,7 +987,7 @@ function placeMapsLink(place) {
 function renderRealStations() {
   const directory = usingDirectory();
   $("#resultCount").textContent = realSearchState === "idle" ? "Search for real chargers" : realSearchState === "loading" ? "Searching real chargers…" : `${realPlaces.length} real charging stations`;
-  $("#mapCaption").textContent = directory ? "OpenStreetMap stations · availability unknown" : "Google Places · availability unknown";
+  $("#mapCaption").textContent = directory ? "Open Charge Map & OpenStreetMap · availability unknown" : "Google Places · availability unknown";
   $("#mapEmpty").hidden = true;
   $("#stationSelection").hidden = false;
   if (!realPlaces.some(place => place.id === selectedPlaceId)) selectedPlaceId = realPlaces[0]?.id || null;
@@ -1001,11 +1002,15 @@ function renderRealStations() {
       place.distanceKm != null ? `${place.distanceKm.toFixed(1)} km away` : "",
       place.operator && place.operator !== place.displayName ? place.operator : "",
       place.sockets.length ? place.sockets.join(" · ") : "Connector types not mapped",
+      place.powerKW ? `Up to ${Math.round(place.powerKW)} kW` : "",
       place.capacity ? `${place.capacity} charging point${place.capacity === 1 ? "" : "s"}` : "",
+      place.price ? `Price: ${place.price}` : "",
+      place.status && place.status !== "Operational" ? place.status : "",
+      place.verifiedAt ? `Verified ${place.verifiedAt.slice(0, 7)}` : "",
       place.hours ? `Hours: ${place.hours}` : "",
     ].filter(Boolean);
     const attribution = directorySources.map(s => `© ${s.name} (${s.license})`).join(" · ") || "© OpenStreetMap contributors (ODbL)";
-    $("#stationSelection").innerHTML = `<button type="button" class="station-sheet-handle" aria-label="Show or hide station details"></button><div class="station-sheet-heading"><span class="sheet-station-icon">${icon("station")}</span><div><h2>${escapeText(place.displayName || "Charging station")}</h2><p>${escapeText(place.formattedAddress || "Address not mapped")}</p></div></div><ul class="real-station-facts">${facts.map(f => `<li>${escapeText(f)}</li>`).join("")}</ul><p class="sheet-availability"><span class="availability-dot unknown" aria-hidden="true"></span>Availability and pricing not provided · not a Pluggo network station</p><a class="primary-button real-station" href="${escapeText(stationDirections(place.location))}" target="_blank" rel="noopener noreferrer">Get directions ↗</a><p class="real-station-attribution">${escapeText(attribution)}</p>`;
+    $("#stationSelection").innerHTML = `<button type="button" class="station-sheet-handle" aria-label="Show or hide station details"></button><div class="station-sheet-heading"><span class="sheet-station-icon">${icon("station")}</span><div><h2>${escapeText(place.displayName || "Charging station")}</h2><p>${escapeText(place.formattedAddress || "Address not mapped")}</p></div></div><ul class="real-station-facts">${facts.map(f => `<li>${escapeText(f)}</li>`).join("")}</ul><p class="sheet-availability"><span class="availability-dot unknown" aria-hidden="true"></span>${place.price ? "Live availability not provided" : "Availability and pricing not provided"} · not a Pluggo network station</p><a class="primary-button real-station" href="${escapeText(stationDirections(place.location))}" target="_blank" rel="noopener noreferrer">Get directions ↗</a><p class="real-station-attribution">${escapeText(attribution)}</p>`;
     return;
   }
   $("#stationSelection").innerHTML = `<button type="button" class="station-sheet-handle" aria-label="Show or hide station details"></button><div class="station-sheet-heading"><span class="sheet-station-icon">${icon("station")}</span><div><h2>${escapeText(place.displayName || "Charging station")}</h2><p>${escapeText(place.formattedAddress)}</p></div></div><p class="sheet-availability"><span class="availability-dot unknown" aria-hidden="true"></span>Availability and pricing not provided</p><a class="primary-button real-station" href="${escapeText(placeMapsLink(place))}" target="_blank" rel="noopener noreferrer">View in Google Maps ↗</a>`;
