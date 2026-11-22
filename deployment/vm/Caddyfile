@@ -1,0 +1,13 @@
+# Automatic HTTPS for the domain in PLUGGO_DOMAIN (its DNS A record must point at this VM).
+# Caddy forwards X-Forwarded-Proto, which the app uses for secure cookies, and proxies
+# WebSocket upgrades for chargers without extra configuration.
+{$PLUGGO_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy pluggo:10000
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+}

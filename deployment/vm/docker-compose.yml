@@ -1,0 +1,46 @@
+# Always-on Pluggo server for a VM (Oracle Cloud Always Free, any Ubuntu/Debian host).
+# Caddy terminates HTTPS with automatic Let's Encrypt certificates and proxies everything,
+# including charger WebSockets (/ocpp/...), to the same container Render runs.
+#   cp .env.example .env   # fill it in
+#   docker compose up -d --build
+services:
+  pluggo:
+    build:
+      context: ../..
+      dockerfile: deployment/Dockerfile
+    env_file: .env
+    environment:
+      PORT: "10000"
+      CHARGEFLOW_CUSTOMER_DB: /data/pluggo.sqlite3
+      CHARGEFLOW_COOKIE_SECURE: "1"
+    volumes:
+      - pluggo-data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:10000/api/ready', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "5"}
+
+  caddy:
+    image: caddy:2.8.4
+    depends_on: [pluggo]
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      PLUGGO_DOMAIN: ${PLUGGO_DOMAIN:?Set PLUGGO_DOMAIN in .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    restart: unless-stopped
+
+volumes:
+  pluggo-data:
+  caddy-data:
+  caddy-config:

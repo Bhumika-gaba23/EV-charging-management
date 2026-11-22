@@ -58,6 +58,12 @@ on every build. Android Studio's JDK is automatically selected on macOS if
 integrity using `shasum -a 256 -c pluggo-phone-test.apk.sha256` from
 the APK directory (the checksum file names the APK relative to that directory).
 
+## Always-on hosting
+
+For real users, run the same container on a VM that never sleeps, behind Caddy for HTTPS:
+see [vm/README.md](vm/README.md) (Oracle Cloud Always Free works). CI builds the image and
+smoke-tests it (API, frontend, real-station search, charger WebSocket auth) on every push.
+
 ## Free C++ backend hosting — selected, not deployed
 
 `Dockerfile`, `host.py`, `nginx.conf.template` and `render.yaml` package the customer
