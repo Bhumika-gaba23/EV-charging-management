@@ -73,6 +73,16 @@ without a payment. In Firebase, enable the Phone provider and add the app's doma
 Authentication → Settings → Authorized domains. `tests/api/integrations_test.py` covers
 these flows with local stand-ins for both services.
 
+### Real chargers (OCPP 1.6J)
+
+Physical OCPP 1.6J chargers connect to `wss://<host>/ocpp/<charge-point-id>` with a password.
+The `ocpp-gateway/` service starts them from the app (RemoteStart), bills from their meter
+(MeterValues, every 10 s), stops them at the target or budget (RemoteStop), and ends the
+session if the driver unplugs. Offline or faulted connectors cannot be booked, and the
+simulator leaves real connectors alone. Set `PLUGGO_OCPP_CHARGERS`; see
+[connecting real chargers](docs/ocpp-chargers.md). `tests/api/ocpp16_test.py` covers the flow
+against a schema-validating emulated charger.
+
 ### Payment recovery and refunds
 
 - **Paid but the app closed:** before opening a new payment, the server asks Razorpay

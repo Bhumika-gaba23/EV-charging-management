@@ -4,6 +4,7 @@ When PLUGGO_BACKUP_URL is set, Litestream restores the SQLite database from
 S3-compatible storage (for example Cloudflare R2) before the API starts and then
 streams every change back to it, so restarts and redeploys keep customer data.
 """
+import json
 import os
 import re
 from pathlib import Path
@@ -23,7 +24,12 @@ if not re.fullmatch(r'[A-Za-z0-9_+/=\-]{32,128}',gateway_key):raise SystemExit('
 config=(root/'nginx.conf.template').read_text().replace('__PORT__',str(port)).replace('__GATEWAY_KEY__',gateway_key)
 config_path=Path('/tmp/pluggo-nginx.conf');config_path.write_text(config);config_path.chmod(0o600)
 db_path=Path(os.getenv('CHARGEFLOW_CUSTOMER_DB','/data/pluggo.sqlite3'))
-env={**os.environ,'CHARGEFLOW_PORT':'18080','CHARGEFLOW_BIND_ADDRESS':'127.0.0.1','CHARGEFLOW_SIMULATION_MODE':'meter','CHARGEFLOW_SIMULATOR_KEY':secrets.token_hex(32),'PLUGGO_CUSTOMER_API':'http://127.0.0.1:18080','PLUGGO_CUSTOMER_WS':'ws://127.0.0.1:18080/ocpp/customer','CHARGEFLOW_CUSTOMER_DB':str(db_path)}
+# Physical OCPP 1.6J chargers: {"<charge-point-id>": {"password": "...", "connectors": {"1": "CP-01"}}}.
+# The gateway validates the details; the API only needs to know which connectors are real.
+chargers_raw=os.getenv('PLUGGO_OCPP_CHARGERS','').strip()
+try:real_connectors=sorted(str(c) for cp in (json.loads(chargers_raw) if chargers_raw else {}).values() for c in (cp.get('connectors') or {}).values())
+except (ValueError,AttributeError) as error:raise SystemExit(f'PLUGGO_OCPP_CHARGERS is not valid JSON: {error}')
+env={**os.environ,'CHARGEFLOW_PORT':'18080','CHARGEFLOW_BIND_ADDRESS':'127.0.0.1','CHARGEFLOW_SIMULATION_MODE':'meter','CHARGEFLOW_SIMULATOR_KEY':secrets.token_hex(32),'PLUGGO_CUSTOMER_API':'http://127.0.0.1:18080','PLUGGO_CUSTOMER_WS':'ws://127.0.0.1:18080/ocpp/customer','CHARGEFLOW_CUSTOMER_DB':str(db_path),'PLUGGO_REAL_CONNECTORS':','.join(real_connectors),'PLUGGO_OCPP_PORT':'9016'}
 
 def backup_config():
     """Return the Litestream config path, or None when backups are not configured."""
@@ -72,6 +78,9 @@ try:
     else:raise RuntimeError('Customer database/API not ready')
     if litestream_config:backup=subprocess.Popen(['litestream','replicate','-config',str(litestream_config)],env=env)
     processes.append(subprocess.Popen([sys.executable,str(root/'customer_simulator.py')],env=env))
+    if real_connectors:
+        processes.append(subprocess.Popen([sys.executable,str(root/'gateway.py')],env=env))
+        print(f'OCPP 1.6J gateway on: chargers connect to wss://<host>/ocpp/<charge-point-id> ({", ".join(real_connectors)})',flush=True)
     subprocess.run(['nginx','-t','-c','/tmp/pluggo-nginx.conf'],check=True)
     processes.append(subprocess.Popen(['nginx','-c','/tmp/pluggo-nginx.conf','-g','daemon off;']))
     while all(process.poll() is None for process in processes) and (backup is None or backup.poll() is None):time.sleep(.5)

@@ -26,12 +26,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends nginx python3 p
 COPY --from=litestream /usr/local/bin/litestream /usr/local/bin/litestream
 WORKDIR /app
 COPY ocpp-simulator/requirements.txt /app/requirements.txt
-RUN python3 -m venv /app/venv && /app/venv/bin/pip install --no-cache-dir -r /app/requirements.txt
+COPY ocpp-gateway/requirements.txt /app/gateway-requirements.txt
+RUN python3 -m venv /app/venv && /app/venv/bin/pip install --no-cache-dir -r /app/requirements.txt -r /app/gateway-requirements.txt
 COPY --from=build /build/ev_web_api /app/ev_web_api
 COPY frontend /app/frontend
 COPY database/seed/customer_catalog.json /app/customer_catalog.json
 COPY database/seed/public_stations.json /app/public_stations.json
 COPY ocpp-simulator/customer_simulator.py /app/customer_simulator.py
+COPY ocpp-gateway/gateway.py /app/gateway.py
 COPY deployment/host.py deployment/nginx.conf.template /app/
 ENV CHARGEFLOW_CATALOG_FILE=/app/customer_catalog.json CHARGEFLOW_PUBLIC_STATIONS_FILE=/app/public_stations.json CHARGEFLOW_CUSTOMER_DB=/data/pluggo.sqlite3 CHARGEFLOW_COOKIE_SECURE=1
 EXPOSE 10000

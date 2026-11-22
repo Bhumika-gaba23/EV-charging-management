@@ -28,6 +28,9 @@ services:
       # With Firebase on and this empty, nobody can open live operator data.
       - key: PLUGGO_OPERATOR_PHONES
         sync: false
+      # Physical OCPP 1.6J chargers (see docs/ocpp-chargers.md). Leave unset for simulator only.
+      - key: PLUGGO_OCPP_CHARGERS
+        sync: false
       # Razorpay test or live keys. Leave unset to keep the zero-amount checkout.
       - key: RAZORPAY_KEY_ID
         sync: false

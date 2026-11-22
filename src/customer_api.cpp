@@ -10,6 +10,8 @@
 #include <filesystem>
 #include <fstream>
 #include <memory>
+#include <set>
+#include <map>
 #include <iomanip>
 #include <limits>
 #include <mutex>
@@ -76,7 +78,7 @@ class Store {
  Session fromRow(const Row& row) {const auto j=crow::json::load(row[3]);Session s;s.id=row[0];s.owner=row[1];s.key=row[2];s.request=row[4];s.station=string(j,"station");s.connector=string(j,"connector");s.vehicle=string(j,"vehicle");s.started=static_cast<std::int64_t>(j["started"].d());s.ended=j["ended"].t()==crow::json::type::Null?0:static_cast<std::int64_t>(j["ended"].d());s.target=j["target"].d();s.budget=j["budget"].d();s.power=j["power"].d();s.energy=j["energy"].d();s.capacity=j["capacity"].d();s.rate=j["rate"].d();s.limit=j["limit"].d();s.settled=j["settled"].b();s.reason=string(j,"reason");s.paid=j.has("paid")?j["paid"].d():0;s.refunded=j.has("refunded")?j["refunded"].d():0;s.paymentId=string(j,"paymentId");return s;}
  std::vector<Session> sessions(const std::string& owner="") {std::vector<Session> values;auto rows=query("SELECT id,owner,idem,payload,request FROM customer_sessions"+(owner.empty()?std::string():" WHERE owner=?")+" ORDER BY started DESC",owner.empty()?Row{}:Row{owner});for(const auto& row:rows)values.push_back(fromRow(row));return values;}
  void persist(const Session& s) {query("INSERT INTO customer_sessions(id,owner,idem,request,connector,started,ended,settled,payload) VALUES(?,?,?,?,?,?,NULLIF(?,''),?,?) ON CONFLICT(id) DO UPDATE SET ended=excluded.ended,settled=excluded.settled,payload=excluded.payload",{s.id,s.owner,s.key,s.request,s.connector,std::to_string(s.started),s.ended?std::to_string(s.ended):"",s.settled?"1":"0",s.json().dump()});}
- void advance() {if(mode!="clock")return;for(auto s:sessions()){if(s.ended)continue;const double elapsed=std::max<std::int64_t>(0,nowMs()-s.started)/1000.;s.energy=std::min(s.limit,elapsed*s.power*speed/3600.);complete(s);persist(s);}}
+ void advance() {if(mode!="clock")return;for(auto s:sessions()){if(s.ended||real(s.connector))continue;const double elapsed=std::max<std::int64_t>(0,nowMs()-s.started)/1000.;s.energy=std::min(s.limit,elapsed*s.power*speed/3600.);complete(s);persist(s);}}
  void complete(Session& s) {if(s.energy+1e-9<s.limit)return;s.energy=s.limit;if(!s.ended)s.ended=mode=="clock"?s.started+static_cast<std::int64_t>(s.limit/s.power*3600000./speed):nowMs();s.reason=s.budget/s.rate<=((s.target-25)/100*s.capacity)?"Budget limit reached":"Charge target reached";}
  const Input& profile(const std::string& id) {if(!catalog["vehicles"].has(id))throw ApiError(400,"Unknown vehicle profile");return catalog["vehicles"][id];}
  bool busy(const std::string& id) {return !query("SELECT id FROM customer_sessions WHERE connector=? AND ended IS NULL",{id}).empty();}
@@ -85,10 +87,25 @@ class Store {
  bool compatible(const Input& vehicle,const std::string& type) {for(const auto& c:vehicle["connectors"])if(std::string(c.s())==type)return true;return false;}
  bool simulatorOnline() const {return nowMs()-lastSimulator<15000;}
 public:
+ // Connectors wired to physical OCPP 1.6J chargers (PLUGGO_REAL_CONNECTORS). The OCPP gateway
+ // reports their status; the simulator never meters them and the clock never advances them.
+ struct ExternalState {std::string status="Unknown",error;bool online=false;std::int64_t at=0;};
+ std::set<std::string> realConnectors;std::map<std::string,ExternalState> external;
+ bool real(const std::string& id) const {return realConnectors.count(id)>0;}
+ std::string realProblem(const std::string& id) const {
+  const auto it=external.find(id);
+  if(it==external.end()||!it->second.online||nowMs()-it->second.at>15000)return "This charger is offline right now";
+  if(it->second.status!="Available"&&it->second.status!="Preparing")return "This charger is not ready ("+it->second.status+")";
+  return "";}
+ void connectorStatus(const Input& body){const auto id=string(body,"connector");if(!real(id))throw ApiError(400,"Not a real connector");auto& e=external[id];e.online=body.has("online")&&body["online"].b();e.status=string(body,"status","Unknown");e.error=string(body,"errorCode","");e.at=nowMs();}
+ // The driver stopped at the charger (or it refused to start): finish the session with its final reading.
+ void transactionEnded(const Input& body){lastSimulator=nowMs();const auto id=string(body,"sessionId");auto rows=query("SELECT id,owner,idem,payload,request FROM customer_sessions WHERE id=?",{id});if(rows.empty())throw ApiError(404,"Session not found");auto s=fromRow(rows[0]);if(s.ended)return;if(string(body,"connector")!=s.connector||!real(s.connector))throw ApiError(409,"Connector does not match session");const double energy=number(body,"energyKWh",s.energy);if(energy<0)throw ApiError(400,"Energy must be non-negative");s.energy=std::min(s.limit,std::max(s.energy,energy));s.ended=nowMs();s.reason=string(body,"reason","Stopped at the charger");if(s.reason.size()>120)s.reason.resize(120);persist(s);}
+public:
  std::mutex mutex;std::string mode,key;double speed;std::int64_t lastSimulator=0;
  Store():mode(env("CHARGEFLOW_SIMULATION_MODE","clock")),key(env("CHARGEFLOW_SIMULATOR_KEY","local-simulator-key")),speed(std::stod(env("CHARGEFLOW_SIMULATION_SPEED","60"))) {
   if((mode!="clock"&&mode!="meter")||!std::isfinite(speed)||speed<=0||speed>600)throw std::runtime_error("Invalid simulation configuration");
   std::ifstream input(env("CHARGEFLOW_CATALOG_FILE",EV_CATALOG_FILE));std::ostringstream content;content<<input.rdbuf();catalog=crow::json::load(content.str());if(!catalog||!catalog.has("stations")||!catalog.has("vehicles"))throw std::runtime_error("Cannot load customer catalog");
+  {std::string raw=env("PLUGGO_REAL_CONNECTORS",""),item;for(char& c:raw)if(c==',')c=' ';std::istringstream in(raw);while(in>>item){connector(item);realConnectors.insert(item);}}
   const auto path=env("CHARGEFLOW_CUSTOMER_DB","data/pluggo.sqlite3");if(path!=":memory:"){auto parent=std::filesystem::path(path).parent_path();if(!parent.empty())std::filesystem::create_directories(parent);}
   if(sqlite3_open(path.c_str(),&db)!=SQLITE_OK)throw std::runtime_error("Cannot open customer database");sqlite3_busy_timeout(db,5000);query("PRAGMA journal_mode=WAL");query("PRAGMA foreign_keys=ON");
   query("CREATE TABLE IF NOT EXISTS customer_visitors(id TEXT PRIMARY KEY,vehicle TEXT NOT NULL DEFAULT 'car',saved TEXT NOT NULL DEFAULT '[]')");
@@ -149,7 +166,7 @@ public:
   if(!create)throw ApiError(401,"Open the app again to establish your visitor session");id=randomId();query("INSERT INTO customer_visitors(id) VALUES(?)",{id});fresh=true;return id;
  }
  Json snapshot(const std::string& owner) {advance();Json result;result["ok"]=true;const auto prefs=query("SELECT vehicle,saved FROM customer_visitors WHERE id=?",{owner});if(prefs.empty())throw ApiError(401,"Visitor not found");result["state"]["vehicle"]=prefs[0][0];result["state"]["saved"]=Json(crow::json::load(prefs[0][1]));Json::list list;for(const auto& s:sessions(owner))list.push_back(s.json());result["state"]["sessions"]=std::move(list);result["catalog"]=Json(catalog);
-  int index=0;for(const auto& station:catalog["stations"]){int ci=0;for(const auto& c:station["connectors"]){auto con=connector(std::string(c["id"].s()));result["catalog"]["stations"][index]["connectors"][ci]["available"]=con.enabled&&!busy(con.id)&&(mode=="clock"||simulatorOnline());++ci;}++index;}
+  int index=0;for(const auto& station:catalog["stations"]){int ci=0;for(const auto& c:station["connectors"]){auto con=connector(std::string(c["id"].s()));result["catalog"]["stations"][index]["connectors"][ci]["available"]=con.enabled&&!busy(con.id)&&(real(con.id)?realProblem(con.id).empty():(mode=="clock"||simulatorOnline()));result["catalog"]["stations"][index]["connectors"][ci]["ocpp"]=real(con.id);++ci;}++index;}
   result["account"]["signedIn"]=signedIn(owner);result["account"]["phone"]=phone(owner);
   result["backend"]["authRequired"]=firebase->enabled();if(firebase->enabled()){result["backend"]["firebase"]["projectId"]=firebase->projectId();result["backend"]["firebase"]["apiKey"]=env("PLUGGO_FIREBASE_API_KEY","");result["backend"]["firebase"]["authDomain"]=env("PLUGGO_FIREBASE_AUTH_DOMAIN",firebase->projectId()+".firebaseapp.com");result["backend"]["firebase"]["appId"]=env("PLUGGO_FIREBASE_APP_ID","");}
   result["backend"]["payments"]=payments->enabled()?"razorpay":"none";
@@ -161,16 +178,16 @@ public:
   for(const auto& s:all){energy+=s.energy;cost+=s.energy*s.rate;if(!s.ended)power+=s.power;if(recent.size()<10){auto item=s.json();item["vehicleName"]=string(profile(s.vehicle),"name",s.vehicle);recent.push_back(std::move(item));}}
   for(const auto& station:catalog["stations"])for(const auto& c:station["connectors"]){
    const std::string id=c["id"].s();const Session* active=nullptr;for(const auto& s:all)if(s.connector==id&&!s.ended){active=&s;break;}
-   Json slot;slot["id"]=id;slot["stationName"]=string(station,"name",std::string(station["id"].s()));slot["connector"]=std::string(c["type"].s());slot["source"]="SIMULATOR";
-   slot["status"]=active?"occupied":!c["available"].b()?"disabled":mode=="meter"&&!simulatorOnline()?"offline":"available";
+   Json slot;slot["id"]=id;slot["stationName"]=string(station,"name",std::string(station["id"].s()));slot["connector"]=std::string(c["type"].s());slot["source"]=real(id)?"OCPP 1.6J":"SIMULATOR";if(real(id)){const auto e=external.find(id);slot["chargerStatus"]=e==external.end()?"Unknown":e->second.status;slot["chargerOnline"]=e!=external.end()&&e->second.online&&nowMs()-e->second.at<=15000;}
+   slot["status"]=active?"occupied":!c["available"].b()?"disabled":real(id)?(realProblem(id).empty()?"available":"offline"):mode=="meter"&&!simulatorOnline()?"offline":"available";
    slot["vehicle"]=active?string(profile(active->vehicle),"name",active->vehicle):"";slot["soc"]=active?25+100*active->energy/active->capacity:0;slot["powerKW"]=active?active->power:0;slot["energyKWh"]=active?active->energy:0;slot["estimatedCost"]=active?active->energy*active->rate:0;slots.push_back(std::move(slot));
   }
   j["slots"]=std::move(slots);j["recentSessions"]=std::move(recent);j["activePowerKW"]=power;j["energyKWh"]=energy;j["estimatedCost"]=cost;j["solarShare"]=0;return j;
  }
  void preferences(const std::string& owner,const Input& body) {const auto vehicle=string(body,"vehicle");profile(vehicle);if(!body.has("saved")||body["saved"].t()!=crow::json::type::List||body["saved"].size()>20)throw ApiError(400,"Invalid saved stations");Json::list saved;for(const auto& item:body["saved"]){if(item.t()!=crow::json::type::String)throw ApiError(400,"Invalid station ID");const std::string id=item.s();bool found=false;for(const auto& s:catalog["stations"])if(std::string(s["id"].s())==id)found=true;if(!found)throw ApiError(400,"Unknown saved station");saved.emplace_back(id);}query("UPDATE customer_visitors SET vehicle=?,saved=? WHERE id=?",{vehicle,Json(std::move(saved)).dump(),owner});}
- Json verify(const Input& body) {advance();const auto con=connector(string(body,"connector"));const auto& v=profile(string(body,"vehicle"));if(con.station!=string(body,"station"))throw ApiError(400,"Charger does not belong to this station");if(!compatible(v,con.type))throw ApiError(409,"Connector is incompatible with this vehicle");if(!con.enabled||busy(con.id))throw ApiError(409,"Connector is in use");if(mode=="meter"&&!simulatorOnline())throw ApiError(409,"Charging simulator is offline");Json j;j["ok"]=true;j["connector"]=con.id;return j;}
+ Json verify(const Input& body) {advance();const auto con=connector(string(body,"connector"));const auto& v=profile(string(body,"vehicle"));if(con.station!=string(body,"station"))throw ApiError(400,"Charger does not belong to this station");if(!compatible(v,con.type))throw ApiError(409,"Connector is incompatible with this vehicle");if(!con.enabled||busy(con.id))throw ApiError(409,"Connector is in use");if(real(con.id)){const auto problem=realProblem(con.id);if(!problem.empty())throw ApiError(409,problem);}else if(mode=="meter"&&!simulatorOnline())throw ApiError(409,"Charging simulator is offline");Json j;j["ok"]=true;j["connector"]=con.id;return j;}
  std::string start(const std::string& owner,const Input& body,const std::string& idem) {advance();if(firebase->enabled()&&!signedIn(owner))throw ApiError(403,"Sign in with your phone number to start charging");if(idem.empty()||idem.size()>128)throw ApiError(400,"A valid Idempotency-Key is required");const auto vehicle=string(body,"vehicle"),charger=string(body,"connector");const double target=number(body,"target",80),budget=number(body,"budget",300);if(target<30||target>100||budget<50||budget>1000)throw ApiError(400,"Target must be 30–100 and budget 50–1000");const auto& v=profile(vehicle);const auto c=connector(charger);const auto station=string(body,"station");if(c.station!=station)throw ApiError(400,"Charger does not belong to this station");std::ostringstream normalized;normalized<<std::setprecision(std::numeric_limits<double>::max_digits10)<<vehicle<<'|'<<charger<<'|'<<target<<'|'<<budget;auto previous=query("SELECT id,request FROM customer_sessions WHERE owner=? AND idem=?",{owner,idem});if(!previous.empty()){if(previous[0][1]!=normalized.str())throw ApiError(409,"Idempotency key was used for another request");return previous[0][0];}
-  if(!compatible(v,c.type))throw ApiError(409,"Vehicle and connector are incompatible");if(!c.enabled||busy(c.id))throw ApiError(409,"Charger is no longer available");if(mode=="meter"&&!simulatorOnline())throw ApiError(409,"Charging simulator is offline");if(!query("SELECT id FROM customer_sessions WHERE owner=? AND settled=0",{owner}).empty())throw ApiError(409,"Finish your existing session or checkout first");
+  if(!compatible(v,c.type))throw ApiError(409,"Vehicle and connector are incompatible");if(!c.enabled||busy(c.id))throw ApiError(409,"Charger is no longer available");if(real(c.id)){const auto problem=realProblem(c.id);if(!problem.empty())throw ApiError(409,problem);}else if(mode=="meter"&&!simulatorOnline())throw ApiError(409,"Charging simulator is offline");if(!query("SELECT id FROM customer_sessions WHERE owner=? AND settled=0",{owner}).empty())throw ApiError(409,"Finish your existing session or checkout first");
   Session s;s.id="PG-"+randomId();s.owner=owner;s.station=station;s.connector=charger;s.vehicle=vehicle;s.key=idem;s.request=normalized.str();s.started=nowMs();s.target=target;s.budget=budget;s.capacity=v["capacity"].d();s.power=std::min(v["power"].d(),c.power);s.rate=c.rate;s.limit=std::min((target-25)/100*s.capacity,budget/c.rate);persist(s);return s.id;
  }
  void action(const std::string& owner,const std::string& id,bool checkout,const Input* payment=nullptr) {advance();auto s=owned(owner,id);
@@ -186,8 +203,8 @@ public:
    s.settled=true;}
   else if(!s.ended){s.ended=nowMs();s.reason="Stopped by you";}persist(s);}
  void reset(const std::string& owner) {query("DELETE FROM customer_refunds WHERE session IN (SELECT id FROM customer_sessions WHERE owner=?)",{owner});query("DELETE FROM customer_payments WHERE owner=?",{owner});query("DELETE FROM customer_sessions WHERE owner=?",{owner});query("UPDATE customer_visitors SET vehicle='car',saved='[]' WHERE id=?",{owner});}
- Json simulatorSessions() {lastSimulator=nowMs();advance();Json j;j["ok"]=true;j["mode"]=mode;j["speed"]=speed;Json::list values;for(const auto& s:sessions())if(!s.ended)values.push_back(s.json());j["sessions"]=std::move(values);return j;}
- void meter(const Input& body) {lastSimulator=nowMs();if(mode!="meter")return;const auto id=string(body,"sessionId");auto rows=query("SELECT id,owner,idem,payload,request FROM customer_sessions WHERE id=?",{id});if(rows.empty())throw ApiError(404,"Session not found");auto s=fromRow(rows[0]);if(s.ended)return;if(string(body,"connector")!=s.connector)throw ApiError(409,"Meter connector does not match session");const double energy=number(body,"energyKWh",s.energy);if(energy<0)throw ApiError(400,"Energy must be non-negative");s.energy=std::min(s.limit,std::max(s.energy,energy));complete(s);persist(s);}
+ Json simulatorSessions() {lastSimulator=nowMs();advance();Json j;j["ok"]=true;j["mode"]=mode;j["speed"]=speed;Json::list values;for(const auto& s:sessions())if(!s.ended){auto item=s.json();item["external"]=real(s.connector);values.push_back(std::move(item));}j["sessions"]=std::move(values);return j;}
+ void meter(const Input& body) {lastSimulator=nowMs();const auto id=string(body,"sessionId");auto rows=query("SELECT id,owner,idem,payload,request FROM customer_sessions WHERE id=?",{id});if(rows.empty())throw ApiError(404,"Session not found");auto s=fromRow(rows[0]);if(mode!="meter"&&!real(s.connector))return;const bool lateFinal=s.ended&&real(s.connector)&&!s.settled&&nowMs()-s.ended<120000&&query("SELECT session FROM customer_payments WHERE session=?",{s.id}).empty();if(s.ended&&!lateFinal)return;if(string(body,"connector")!=s.connector)throw ApiError(409,"Meter connector does not match session");const double energy=number(body,"energyKWh",s.energy);if(energy<0)throw ApiError(400,"Energy must be non-negative");s.energy=std::min(s.limit,std::max(s.energy,energy));if(!s.ended)complete(s);persist(s);}
 };
 std::shared_ptr<Store> store;
 crow::response response(Json j,int status=200){crow::response r(status,j.dump());r.set_header("Content-Type","application/json; charset=utf-8");r.set_header("Cache-Control","no-store");return r;}
@@ -257,6 +274,8 @@ void registerCustomerApi(crow::SimpleApp& app){initIntegrations();publicDirector
    if(binary||message.size()>16384)return;
    try {auto packet=crow::json::load(message);if(!packet||packet.t()!=crow::json::type::List||packet.size()!=4||packet[0].i()!=2)return;const std::string id=packet[1].s(),action=packet[2].s();const auto& payload=packet[3];std::lock_guard<std::mutex> lock(store->mutex);store->lastSimulator=nowMs();Json reply;
     if(action=="TransactionEvent"){store->begin();try{store->meter(payload);store->commit();}catch(...){store->rollback();throw;}}
+    else if(action=="TransactionEnded"){store->begin();try{store->transactionEnded(payload);store->commit();}catch(...){store->rollback();throw;}}
+    else if(action=="ConnectorStatus")store->connectorStatus(payload);
     else if(action=="BootNotification"){reply["status"]="Accepted";reply["interval"]=5;}
     Json::list frame;frame.emplace_back(3);frame.emplace_back(id);frame.push_back(std::move(reply));connection.send_text(Json(std::move(frame)).dump());
    }catch(const std::exception&){connection.close("Invalid customer simulator message");}

@@ -15,6 +15,9 @@
 !ocpp-simulator/
 !ocpp-simulator/requirements.txt
 !ocpp-simulator/customer_simulator.py
+!ocpp-gateway/
+!ocpp-gateway/gateway.py
+!ocpp-gateway/requirements.txt
 !deployment/
 !deployment/Dockerfile
 !deployment/host.py

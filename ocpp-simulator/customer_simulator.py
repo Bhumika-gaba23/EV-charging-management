@@ -35,6 +35,7 @@ async def main():
                     state=await asyncio.to_thread(active)
                     current=time.monotonic()
                     for session in state['sessions']:
+                        if session.get('external'):continue  # a physical OCPP charger meters this one
                         previous=last.get(session['id'],current)
                         # Use only elapsed connected time: reconnects cannot fabricate a long meter jump.
                         elapsed=min(2,max(0,current-previous))
