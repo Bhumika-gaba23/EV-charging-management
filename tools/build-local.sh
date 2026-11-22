@@ -16,8 +16,8 @@ else
   task_compiler=${CXX:-clang++}
   "$task_compiler" -std=c++17 -DASIO_STANDALONE -DASIO_NO_DEPRECATED \
     "-DEV_FRONTEND_DIR=\"$repo_root/frontend\"" \
-    "-DEV_CATALOG_FILE=\"$repo_root/database/seed/customer_catalog.json\"" \
+    "-DEV_CATALOG_FILE=\"$repo_root/database/seed/customer_catalog.json\""     "-DEV_PUBLIC_STATIONS_FILE=\"$repo_root/database/seed/public_stations.json\"" \
     -Iinclude -Ibuild-web-demo/_deps/crow-src/include -Ibuild-web-demo/_deps/asio-src/asio/include \
-    src/api_server.cpp src/customer_api.cpp src/ev_system.cpp -lsqlite3 -o build-web-demo/ev_web_api
+    src/api_server.cpp src/customer_api.cpp src/integrations.cpp src/ev_system.cpp -lsqlite3 -lcurl -lcrypto -o build-web-demo/ev_web_api
   "$task_compiler" -std=c++17 -Iinclude tests/ev_tests.cpp src/ev_system.cpp -o build-web-demo/ev_tests
 fi

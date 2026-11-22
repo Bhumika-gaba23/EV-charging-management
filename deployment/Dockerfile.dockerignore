@@ -11,6 +11,7 @@
 !database/
 !database/seed/
 !database/seed/customer_catalog.json
+!database/seed/public_stations.json
 !ocpp-simulator/
 !ocpp-simulator/requirements.txt
 !ocpp-simulator/customer_simulator.py

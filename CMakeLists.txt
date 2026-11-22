@@ -54,6 +54,7 @@ if(EV_BUILD_WEB_API)
     target_compile_definitions(ev_web_api PRIVATE
         EV_FRONTEND_DIR="${CMAKE_SOURCE_DIR}/frontend"
         EV_CATALOG_FILE="${CMAKE_SOURCE_DIR}/database/seed/customer_catalog.json"
+        EV_PUBLIC_STATIONS_FILE="${CMAKE_SOURCE_DIR}/database/seed/public_stations.json"
     )
 endif()
 

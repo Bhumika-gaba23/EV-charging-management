@@ -30,8 +30,9 @@ RUN python3 -m venv /app/venv && /app/venv/bin/pip install --no-cache-dir -r /ap
 COPY --from=build /build/ev_web_api /app/ev_web_api
 COPY frontend /app/frontend
 COPY database/seed/customer_catalog.json /app/customer_catalog.json
+COPY database/seed/public_stations.json /app/public_stations.json
 COPY ocpp-simulator/customer_simulator.py /app/customer_simulator.py
 COPY deployment/host.py deployment/nginx.conf.template /app/
-ENV CHARGEFLOW_CATALOG_FILE=/app/customer_catalog.json CHARGEFLOW_CUSTOMER_DB=/data/pluggo.sqlite3 CHARGEFLOW_COOKIE_SECURE=1
+ENV CHARGEFLOW_CATALOG_FILE=/app/customer_catalog.json CHARGEFLOW_PUBLIC_STATIONS_FILE=/app/public_stations.json CHARGEFLOW_CUSTOMER_DB=/data/pluggo.sqlite3 CHARGEFLOW_COOKIE_SECURE=1
 EXPOSE 10000
 CMD ["/app/venv/bin/python", "/app/host.py"]

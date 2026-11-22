@@ -18,6 +18,7 @@ export class CustomerApi {
     } finally { clearTimeout(timeout); }
   }
   bootstrap() { return this.request("bootstrap"); }
+  publicStations(params) { return this.request(`public-stations?${new URLSearchParams(params)}`); }
   state() { return this.request("state"); }
   preferences(value) { return this.request("preferences",{method:"PUT",body:value}); }
   start(value,key) { return this.request("sessions",{method:"POST",body:value,key}); }

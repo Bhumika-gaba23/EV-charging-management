@@ -20,6 +20,9 @@
 #include <string>
 #include <vector>
 
+#ifndef EV_PUBLIC_STATIONS_FILE
+#define EV_PUBLIC_STATIONS_FILE "database/seed/public_stations.json"
+#endif
 namespace pluggo {
 namespace {
 using Json = crow::json::wvalue;
@@ -32,6 +35,26 @@ struct ApiError : std::runtime_error { int status;ApiError(int code,const std::s
 std::string string(const Input& value,const char* key,std::string fallback="") { if(!value.has(key))return fallback;if(value[key].t()!=crow::json::type::String)throw ApiError(400,std::string(key)+" must be text");return std::string(value[key].s()); }
 double number(const Input& value,const char* key,double fallback) {if(!value.has(key))return fallback;if(value[key].t()!=crow::json::type::Number)throw ApiError(400,std::string(key)+" must be numeric");const double n=value[key].d();if(!std::isfinite(n))throw ApiError(400,"Numbers must be finite");return n;}
 std::unique_ptr<FirebaseVerifier> firebase;
+// Real charging stations from OpenStreetMap / Open Charge Map (tools/import-public-stations.py).
+// Directory data only: no live availability, booking or payment at these stations.
+struct PublicDirectory {
+ crow::json::rvalue root;
+ struct Entry {double lat,lng;std::string search;std::size_t index;};
+ std::vector<Entry> entries;
+ void load(){
+  std::ifstream input(std::getenv("CHARGEFLOW_PUBLIC_STATIONS_FILE")?std::getenv("CHARGEFLOW_PUBLIC_STATIONS_FILE"):EV_PUBLIC_STATIONS_FILE);
+  if(!input){std::cerr<<"public stations: file not found, real-station search is off\n";return;}
+  std::ostringstream content;content<<input.rdbuf();root=crow::json::load(content.str());
+  if(!root||!root.has("stations")||root["stations"].t()!=crow::json::type::List){std::cerr<<"public stations: invalid file\n";root=crow::json::rvalue();return;}
+  for(std::size_t i=0;i<root["stations"].size();++i){const auto& s=root["stations"][i];if(!s.has("lat")||!s.has("lng"))continue;
+   std::string text;for(const char* key:{"name","operator","address","city","state"})if(s.has(key)&&s[key].t()==crow::json::type::String){text+=' ';text+=std::string(s[key].s());}
+   std::transform(text.begin(),text.end(),text.begin(),[](unsigned char c){return static_cast<char>(std::tolower(c));});
+   entries.push_back({s["lat"].d(),s["lng"].d(),std::move(text),i});}
+  std::cerr<<"public stations: "<<entries.size()<<" loaded\n";
+ }
+};
+PublicDirectory publicDirectory;
+double distanceKm(double lat1,double lng1,double lat2,double lng2){constexpr double r=6371,rad=3.14159265358979323846/180;const double dlat=(lat2-lat1)*rad,dlng=(lng2-lng1)*rad;const double h=std::sin(dlat/2)*std::sin(dlat/2)+std::cos(lat1*rad)*std::cos(lat2*rad)*std::sin(dlng/2)*std::sin(dlng/2);return 2*r*std::asin(std::sqrt(std::min(1.0,h)));}
 std::unique_ptr<Razorpay> payments;
 std::int64_t amountPaise(double rupees){return static_cast<std::int64_t>(std::llround(rupees*100));}
 std::string cookieFor(const std::string& id){return "pluggo_guest="+id+"; HttpOnly; SameSite=Strict; Path=/api/customer; Max-Age=31536000"+(env("CHARGEFLOW_COOKIE_SECURE","0")=="1"?std::string("; Secure"):std::string());}
@@ -201,7 +224,32 @@ crow::response operatorAuthInfo(const crow::request& r){
  return response(std::move(j));
 }
 crow::response customerReadiness(){std::lock_guard<std::mutex> lock(store->mutex);try{return response(store->health());}catch(...){Json j;j["ok"]=false;j["error"]="Customer storage is unavailable";return response(std::move(j),503);}}
-void registerCustomerApi(crow::SimpleApp& app){initIntegrations();firebase=std::make_unique<FirebaseVerifier>();payments=std::make_unique<Razorpay>();store=std::make_shared<Store>();
+void registerCustomerApi(crow::SimpleApp& app){initIntegrations();publicDirectory.load();
+ // Real stations near a point and/or matching a search ("Lajpat Nagar", "Tata Power"). Public, read-only.
+ CROW_ROUTE(app,"/api/customer/public-stations")([](const crow::request& r){
+  if(publicDirectory.entries.empty())return failure("Real station data is not available on this server",404);
+  auto param=[&](const char* key){const char* v=r.url_params.get(key);return v?std::string(v):std::string();};
+  std::string q=param("q");if(q.size()>80)return failure("Search is too long",400);
+  std::transform(q.begin(),q.end(),q.begin(),[](unsigned char c){return static_cast<char>(std::tolower(c));});
+  std::vector<std::string> terms;{std::istringstream in(q);std::string t;while(in>>t)terms.push_back(t);}
+  bool located=false;double lat=0,lng=0,radius=25;std::size_t limit=40;
+  try{
+   if(!param("lat").empty()||!param("lng").empty()){lat=std::stod(param("lat"));lng=std::stod(param("lng"));located=std::isfinite(lat)&&std::isfinite(lng)&&std::abs(lat)<=90&&std::abs(lng)<=180;if(!located)throw std::invalid_argument("location");}
+   if(!param("radius").empty())radius=std::stod(param("radius"));
+   if(!param("limit").empty())limit=static_cast<std::size_t>(std::stoul(param("limit")));
+  }catch(const std::exception&){return failure("Invalid location, radius or limit",400);}
+  if(!std::isfinite(radius)||radius<=0)return failure("Invalid radius",400);
+  radius=std::min(radius,terms.empty()?100.0:1000.0);limit=std::clamp<std::size_t>(limit,1,100);
+  if(!located&&terms.empty())return failure("Give a location or a search term",400);
+  std::vector<std::pair<double,std::size_t>> found;
+  for(const auto& e:publicDirectory.entries){
+   if(!std::all_of(terms.begin(),terms.end(),[&](const std::string& t){return e.search.find(t)!=std::string::npos;}))continue;
+   const double d=located?distanceKm(lat,lng,e.lat,e.lng):0;if(located&&d>radius)continue;found.emplace_back(d,e.index);}
+  std::sort(found.begin(),found.end());const auto total=found.size();if(found.size()>limit)found.resize(limit);
+  Json::list stations;for(const auto& [d,i]:found){Json s(publicDirectory.root["stations"][i]);if(located)s["distanceKm"]=std::round(d*10)/10;stations.push_back(std::move(s));}
+  Json j;j["ok"]=true;j["total"]=static_cast<std::int64_t>(total);j["stations"]=std::move(stations);
+  j["sources"]=Json(publicDirectory.root["sources"]);j["updatedAt"]=std::string(publicDirectory.root["updatedAt"].s());
+  auto out=response(std::move(j));out.set_header("Cache-Control","public, max-age=300");return out;});firebase=std::make_unique<FirebaseVerifier>();payments=std::make_unique<Razorpay>();store=std::make_shared<Store>();
  CROW_WEBSOCKET_ROUTE(app,"/ocpp/customer")
   .onaccept([](const crow::request& request,void**){return request.get_header_value("X-Charger-Key")==store->key;})
   .onopen([](crow::websocket::connection&){std::lock_guard<std::mutex> lock(store->mutex);store->lastSimulator=nowMs();})

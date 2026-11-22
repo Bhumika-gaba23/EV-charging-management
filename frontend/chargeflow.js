@@ -1,6 +1,6 @@
 import { summarizeSessions, chargingDuration } from "./session-summary.js?v=20261123-pay1";
 import { performanceProfile } from "./performance-profile.js?v=20261104-summary1";
-import { CustomerApi } from "./customer-api.js?v=20261118-live1";
+import { CustomerApi } from "./customer-api.js?v=20261123-stations1";
 import { normalizeIndianPhone, sendOtp, confirmOtp, signOutFirebase, friendlyAuthError, payWithRazorpay } from "./account.js?v=20261118-live2";
 import { findGoogleStations } from "./google-stations.js?v=20261104-server9";
 import {
@@ -692,7 +692,7 @@ function requestDeviceLocation() {
         device: true,
       };
       reportLocation(
-        stationSource === "real" ? "Using your location · Google charger search." : "Using your device location · distances are straight-line.",
+        stationSource === "real" ? (usingDirectory() ? "Using your location · real station search." : "Using your location · Google charger search.") : "Using your device location · distances are straight-line.",
       );
       renderVehicle();
       renderStations();
@@ -905,7 +905,7 @@ function showRealNotice(message, setup = false) {
 }
 function setStationSource(source) {
   stationSource = source; ++realSearchGeneration; realPlaces = []; realSearchState = "idle";
-  if (origin.device) reportLocation(source === "real" ? "Using your location · Google charger search." : "Using your device location · distances are straight-line.");
+  if (origin.device) reportLocation(source === "real" ? (usingDirectory() ? "Using your location · real station search." : "Using your location · Google charger search.") : "Using your device location · distances are straight-line.");
   $("#realStationSearch").disabled = false; $("#realStationSearch").textContent = "Search nearby";
   $("#stationSelection").removeAttribute("aria-busy");
   $("#demoStationSource").setAttribute("aria-pressed", String(source === "demo"));
@@ -918,30 +918,58 @@ function setStationSource(source) {
   $("#stationSearch").placeholder = source === "real" ? "City, area, or charger name" : "Search a station or locality";
   $("#realStationNotice").hidden = source === "demo";
   if (source === "real") {
-    showRealNotice(googleMap && !mapsFailed ? "Search chargers within 5 km of your location, or enter a city or station name. Live plug availability is not provided." : "Google charger search needs a configured API key. Enable Maps JavaScript API, Places API (New), and billing in My garage.", !googleMap || mapsFailed);
+    showRealNotice(googleMap && !mapsFailed ? "Search chargers within 5 km of your location, or enter a city or station name. Live plug availability is not provided." : "Real charging stations from OpenStreetMap. Search near you, or enter an area, city or operator. Live plug availability is not provided.");
   }
   renderStations(); renderMap();
+  // Without Google, the directory needs no key: search straight away when the location is known.
+  if (source === "real" && usingDirectory() && origin.device && !locationPending) $("#stationSearchForm").requestSubmit();
+}
+// Real stations come from Google Places when a Maps key is configured, otherwise from the
+// server's OpenStreetMap / Open Charge Map directory.
+const usingDirectory = () => !googleMap || mapsFailed;
+let directorySources = [];
+function directoryPlace(s) {
+  return {
+    id: s.id, directory: true, displayName: s.name, operator: s.operator, sockets: s.sockets || [],
+    formattedAddress: s.address || [s.city, s.state].filter(Boolean).join(", "),
+    location: {lat: s.lat, lng: s.lng}, distanceKm: s.distanceKm, hours: s.hours, capacity: s.capacity,
+  };
+}
+async function searchDirectory(query) {
+  const params = {limit: 40};
+  if (query) params.q = query;
+  if (origin.device) Object.assign(params, {lat: origin.lat, lng: origin.lng, radius: query ? 300 : 25});
+  const reply = await customerApi.publicStations(params);
+  directorySources = reply.sources || [];
+  return (reply.stations || []).map(directoryPlace);
 }
 $("#demoStationSource").onclick = () => setStationSource("demo");
 $("#realStationSource").onclick = () => setStationSource("real");
 $("#stationSearchForm").onsubmit = async event => {
   event.preventDefault();
   if (stationSource !== "real") return;
-  if (!googleMap || mapsFailed) { showRealNotice("Configure Google Maps before searching for real chargers.", true); return; }
   if (locationPending) { showRealNotice("Waiting for your location. You can enter a city or area if location is unavailable."); return; }
   if (!origin.device && !$("#stationSearch").value.trim()) { showRealNotice("Allow location or enter a city or locality so the search knows where to look."); return; }
+  const directory = usingDirectory();
   const token = ++realSearchGeneration, button = $("#realStationSearch");
   button.disabled = true; button.textContent = "Searching…";
   $("#stationSelection").setAttribute("aria-busy", "true");
   realPlaces = []; realSearchState = "loading"; renderRealMap(); renderRealStations();
-  showRealNotice("Searching Google Places for charging stations…");
+  showRealNotice(directory ? "Searching real charging stations…" : "Searching Google Places for charging stations…");
   try {
-    const found = await findGoogleStations(google, {query: $("#stationSearch").value, origin});
+    const query = $("#stationSearch").value.trim();
+    const found = directory ? await searchDirectory(query) : await findGoogleStations(google, {query, origin});
     if (token !== realSearchGeneration || stationSource !== "real") return;
     realPlaces = found; realSearchState = "done"; renderRealStations(); renderRealMap();
-    showRealNotice(found.length ? "Google Places results. Check connector support, prices and availability with the operator. In-app charging and payment work at Pluggo network stations." : "No chargers found. Try a nearby city, locality or charger name.");
+    showRealNotice(found.length
+      ? `${directory ? "Stations from OpenStreetMap contributors." : "Google Places results."} Check connector support, prices and availability with the operator. In-app charging and payment work at Pluggo network stations.`
+      : directory && !query ? "No mapped chargers within 25 km. Try a city, area or operator name." : "No chargers found. Try a nearby city, locality or charger name.");
   } catch {
-    if (token === realSearchGeneration && stationSource === "real") { realSearchState = "error"; renderRealStations(); showRealNotice("Google charger search failed. Check Places API (New), key restrictions, billing and quota, then try again.", true); }
+    if (token === realSearchGeneration && stationSource === "real") {
+      realSearchState = "error"; renderRealStations();
+      if (directory) showRealNotice("Real station search is unavailable right now. Check your connection and try again.");
+      else showRealNotice("Google charger search failed. Check Places API (New), key restrictions, billing and quota, then try again.", true);
+    }
   } finally {
     if (token === realSearchGeneration) {
       button.disabled = false; button.textContent = "Search nearby";
@@ -955,22 +983,56 @@ function placeMapsLink(place) {
   return url.href;
 }
 function renderRealStations() {
-  $("#resultCount").textContent = realSearchState === "idle" ? "Search for real chargers" : realSearchState === "loading" ? "Searching Google Places…" : `${realPlaces.length} real charging stations`;
-  $("#mapCaption").textContent = "Google Places · availability unknown";
+  const directory = usingDirectory();
+  $("#resultCount").textContent = realSearchState === "idle" ? "Search for real chargers" : realSearchState === "loading" ? "Searching real chargers…" : `${realPlaces.length} real charging stations`;
+  $("#mapCaption").textContent = directory ? "OpenStreetMap stations · availability unknown" : "Google Places · availability unknown";
   $("#mapEmpty").hidden = true;
   $("#stationSelection").hidden = false;
   if (!realPlaces.some(place => place.id === selectedPlaceId)) selectedPlaceId = realPlaces[0]?.id || null;
   const place = realPlaces.find(place => place.id === selectedPlaceId);
   if (!place) {
-    $("#stationSelection").innerHTML = `<button type="button" class="station-sheet-handle" aria-label="Show or hide station details"></button><h2>Find a real charger.</h2><p class="sheet-empty-copy">${realSearchState === "loading" ? "Searching Google Places…" : realSearchState === "done" ? "No chargers found. Try a city or charger name." : "Search nearby or enter a city above. Real search needs a Google Maps key."}</p><a href="#settings" class="secondary-button">Map settings ↗</a>`;
+    const hint = realSearchState === "loading" ? "Searching real charging stations…" : realSearchState === "done" ? "No chargers found. Try a city, area or operator name." : realSearchState === "error" ? "Search is unavailable right now. Try again in a moment." : "Search nearby or enter a city, area or operator above.";
+    $("#stationSelection").innerHTML = `<button type="button" class="station-sheet-handle" aria-label="Show or hide station details"></button><h2>Find a real charger.</h2><p class="sheet-empty-copy">${hint}</p>${directory ? "" : '<a href="#settings" class="secondary-button">Map settings ↗</a>'}`;
+    return;
+  }
+  if (place.directory) {
+    const facts = [
+      place.distanceKm != null ? `${place.distanceKm.toFixed(1)} km away` : "",
+      place.operator && place.operator !== place.displayName ? place.operator : "",
+      place.sockets.length ? place.sockets.join(" · ") : "Connector types not mapped",
+      place.capacity ? `${place.capacity} charging point${place.capacity === 1 ? "" : "s"}` : "",
+      place.hours ? `Hours: ${place.hours}` : "",
+    ].filter(Boolean);
+    const attribution = directorySources.map(s => `© ${s.name} (${s.license})`).join(" · ") || "© OpenStreetMap contributors (ODbL)";
+    $("#stationSelection").innerHTML = `<button type="button" class="station-sheet-handle" aria-label="Show or hide station details"></button><div class="station-sheet-heading"><span class="sheet-station-icon">${icon("station")}</span><div><h2>${escapeText(place.displayName || "Charging station")}</h2><p>${escapeText(place.formattedAddress || "Address not mapped")}</p></div></div><ul class="real-station-facts">${facts.map(f => `<li>${escapeText(f)}</li>`).join("")}</ul><p class="sheet-availability"><span class="availability-dot unknown" aria-hidden="true"></span>Availability and pricing not provided · not a Pluggo network station</p><a class="primary-button real-station" href="${escapeText(stationDirections(place.location))}" target="_blank" rel="noopener noreferrer">Get directions ↗</a><p class="real-station-attribution">${escapeText(attribution)}</p>`;
     return;
   }
   $("#stationSelection").innerHTML = `<button type="button" class="station-sheet-handle" aria-label="Show or hide station details"></button><div class="station-sheet-heading"><span class="sheet-station-icon">${icon("station")}</span><div><h2>${escapeText(place.displayName || "Charging station")}</h2><p>${escapeText(place.formattedAddress)}</p></div></div><p class="sheet-availability"><span class="availability-dot unknown" aria-hidden="true"></span>Availability and pricing not provided</p><a class="primary-button real-station" href="${escapeText(placeMapsLink(place))}" target="_blank" rel="noopener noreferrer">View in Google Maps ↗</a>`;
 }
+function renderDirectoryMap() {
+  if (!window.L) { $("#mapNetworkStatus").hidden = false; return; }
+  if (!streetMap) renderStreetMap([]);
+  if (!streetMap) return;
+  streetMarkers.clearLayers();
+  $("#mapModeLabel").textContent = "OPENSTREETMAP · REAL STATIONS";
+  for (const place of realPlaces) {
+    const title = place.displayName || "Charging station";
+    const marker = L.marker([place.location.lat, place.location.lng], {
+      icon: L.divIcon({className: "street-marker", html: `<span class="street-marker-core real-marker ${place.id === selectedPlaceId ? "selected" : ""}">${icon("bolt")}</span>`, iconSize: [44, 44], iconAnchor: [22, 22]}),
+      title, alt: title, keyboard: true,
+    }).addTo(streetMarkers);
+    marker.bindTooltip(title, {direction: "top", offset: [0, -22]});
+    marker.on("click", () => { selectedPlaceId = place.id; renderRealStations(); renderDirectoryMap(); });
+  }
+  const points = realPlaces.map(p => [p.location.lat, p.location.lng]);
+  if (origin.device) points.push([origin.lat, origin.lng]);
+  if (points.length > 1) streetMap.fitBounds(points, {paddingTopLeft:[35,150],paddingBottomRight:[35,320],maxZoom:15});
+  else if (points.length === 1) streetMap.setView(points[0], 14);
+}
 function renderRealMap() {
   if (streetMarkers) streetMarkers.clearLayers();
   googleMarkers.forEach(marker => marker.map = null); googleMarkers = [];
-  if (!googleMap || mapsFailed) return;
+  if (!googleMap || mapsFailed) { renderDirectoryMap(); return; }
   $("#mapModeLabel").textContent = "GOOGLE MAPS · REAL STATIONS";
   const bounds = new google.maps.LatLngBounds();
   for (const place of realPlaces) {
