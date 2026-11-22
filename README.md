@@ -46,6 +46,12 @@ as an Android test APK with
 default. Android Back → Connection settings also offers an offline preview.
 The older Flutter app remains separately available under `mobile/`.
 
+For Google Play, `deployment/build-store.sh` builds a signed Trusted Web Activity bundle
+(`com.pluggo.app`, target API 36) and its Digital Asset Links file; see
+[publishing on Google Play](docs/play-store-release.md). The app has a Privacy Policy and Terms
+(`/privacy.html`, `/terms.html`, contact details in `frontend/legal.json`), consent at sign-in,
+and in-app account deletion.
+
 [Deployment instructions](deployment/README.md) cover APK installation and a
 Docker/Render package preserving the C++ backend. The C++ backend is deployed at
 https://pluggo-customer-demo.onrender.com. The selected default

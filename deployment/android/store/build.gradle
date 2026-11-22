@@ -1,0 +1,48 @@
+// Play Store build: a Trusted Web Activity that opens the hosted Pluggo app full-screen in
+// Chrome (with Chrome's UPI and payment handling), verified through Digital Asset Links.
+// Build with deployment/build-store.sh, which also writes the matching assetlinks.json.
+plugins { id 'com.android.application' }
+
+def host = providers.gradleProperty('pluggoHost').getOrElse('pluggo-customer-demo.onrender.com')
+def appId = providers.gradleProperty('pluggoApplicationId').getOrElse('com.pluggo.app')
+// Upload key: environment variables (CI) or deployment/android/keystore.properties (local).
+def keyProps = new Properties()
+def keyFile = rootProject.file('keystore.properties')
+if (keyFile.exists()) keyFile.withInputStream { keyProps.load(it) }
+def signing = { String env, String prop -> System.getenv(env) ?: keyProps.getProperty(prop) }
+def storePath = signing('PLUGGO_KEYSTORE_FILE', 'storeFile')
+
+android {
+    namespace 'com.pluggo.app'
+    compileSdk 36
+    defaultConfig {
+        applicationId appId
+        minSdk 26
+        targetSdk 36
+        versionCode Integer.parseInt(providers.gradleProperty('pluggoVersionCode').getOrElse('1'))
+        versionName providers.gradleProperty('pluggoVersionName').getOrElse('1.0.0')
+        manifestPlaceholders = [host: host, launchUrl: "https://${host}/#home"]
+        // Escaped quotes: Android string resources drop bare ones.
+        resValue 'string', 'asset_statements',
+            '[{\\"relation\\":[\\"delegate_permission/common.handle_all_urls\\"],\\"target\\":{\\"namespace\\":\\"web\\",\\"site\\":\\"https://' + host + '\\"}}]'
+    }
+    signingConfigs {
+        upload {
+            if (storePath) {
+                storeFile file(storePath)
+                storePassword signing('PLUGGO_KEYSTORE_PASSWORD', 'storePassword')
+                keyAlias signing('PLUGGO_KEY_ALIAS', 'keyAlias') ?: 'upload'
+                keyPassword signing('PLUGGO_KEY_PASSWORD', 'keyPassword') ?: signing('PLUGGO_KEYSTORE_PASSWORD', 'storePassword')
+            }
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig storePath ? signingConfigs.upload : null
+        }
+    }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+}
+
+dependencies { implementation 'com.google.androidbrowserhelper:androidbrowserhelper:2.5.0' }

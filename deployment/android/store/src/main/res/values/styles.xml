@@ -1,0 +1,7 @@
+<resources>
+    <color name="pluggo_surface">#0b0c0e</color>
+    <style name="StoreTheme" parent="android:style/Theme.Translucent.NoTitleBar">
+        <item name="android:statusBarColor">@color/pluggo_surface</item>
+        <item name="android:navigationBarColor">@color/pluggo_surface</item>
+    </style>
+</resources>

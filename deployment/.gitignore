@@ -4,3 +4,8 @@ android/**/build/
 android/app/src/main/assets/
 apk/*.apk
 apk/*.sha256
+# Play Store signing: never commit the upload key or its passwords
+android/keystore.properties
+*.jks
+*.keystore
+/store/
