@@ -37,8 +37,8 @@ std::int64_t amountPaise(double rupees){return static_cast<std::int64_t>(std::ll
 std::string cookieFor(const std::string& id){return "pluggo_guest="+id+"; HttpOnly; SameSite=Strict; Path=/api/customer; Max-Age=31536000"+(env("CHARGEFLOW_COOKIE_SECURE","0")=="1"?std::string("; Secure"):std::string());}
 struct Session {
  std::string id,owner,station,connector,vehicle,key,request,reason,paymentId;
- std::int64_t started=0,ended=0;double target=80,budget=300,power=0,energy=0,capacity=40,rate=18,limit=0,paid=0;bool settled=false;
- Json json() const {Json j;j["id"]=id;j["station"]=station;j["connector"]=connector;j["vehicle"]=vehicle;j["started"]=started;j["ended"]=ended?Json(ended):Json(nullptr);j["target"]=target;j["budget"]=budget;j["power"]=power;j["energy"]=energy;j["capacity"]=capacity;j["rate"]=rate;j["cost"]=energy*rate;j["limit"]=limit;j["currentSoc"]=25+100*energy/capacity;j["settled"]=settled;j["reason"]=reason;j["paid"]=paid;j["paymentId"]=paymentId;j["backendOwned"]=true;if(settled){j["receipt"]["id"]="INV-"+id;j["receipt"]["amountCollected"]=paid;j["receipt"]["currency"]="INR";j["receipt"]["paymentId"]=paymentId;j["receipt"]["provider"]=paymentId.empty()?"none":"razorpay";}return j;}
+ std::int64_t started=0,ended=0;double target=80,budget=300,power=0,energy=0,capacity=40,rate=18,limit=0,paid=0,refunded=0;bool settled=false;
+ Json json() const {Json j;j["id"]=id;j["station"]=station;j["connector"]=connector;j["vehicle"]=vehicle;j["started"]=started;j["ended"]=ended?Json(ended):Json(nullptr);j["target"]=target;j["budget"]=budget;j["power"]=power;j["energy"]=energy;j["capacity"]=capacity;j["rate"]=rate;j["cost"]=energy*rate;j["limit"]=limit;j["currentSoc"]=25+100*energy/capacity;j["settled"]=settled;j["reason"]=reason;j["paid"]=paid;j["refunded"]=refunded;j["paymentId"]=paymentId;j["backendOwned"]=true;if(settled){j["receipt"]["id"]="INV-"+id;j["receipt"]["amountCollected"]=paid;j["receipt"]["currency"]="INR";j["receipt"]["paymentId"]=paymentId;j["receipt"]["provider"]=paymentId.empty()?"none":"razorpay";j["receipt"]["refunded"]=refunded;j["receipt"]["netCollected"]=std::max(0.0,paid-refunded);}return j;}
 };
 class Store {
  sqlite3* db=nullptr;Input catalog;
@@ -50,7 +50,7 @@ class Store {
   while((rc=sqlite3_step(raw))==SQLITE_ROW){Row row;for(int i=0;i<sqlite3_column_count(raw);++i){const auto text=sqlite3_column_text(raw,i);row.emplace_back(text?reinterpret_cast<const char*>(text):"");}rows.push_back(std::move(row));}
   if(rc!=SQLITE_DONE)throw std::runtime_error(sqlite3_errmsg(db));return rows;
  }
- Session fromRow(const Row& row) {const auto j=crow::json::load(row[3]);Session s;s.id=row[0];s.owner=row[1];s.key=row[2];s.request=row[4];s.station=string(j,"station");s.connector=string(j,"connector");s.vehicle=string(j,"vehicle");s.started=static_cast<std::int64_t>(j["started"].d());s.ended=j["ended"].t()==crow::json::type::Null?0:static_cast<std::int64_t>(j["ended"].d());s.target=j["target"].d();s.budget=j["budget"].d();s.power=j["power"].d();s.energy=j["energy"].d();s.capacity=j["capacity"].d();s.rate=j["rate"].d();s.limit=j["limit"].d();s.settled=j["settled"].b();s.reason=string(j,"reason");s.paid=j.has("paid")?j["paid"].d():0;s.paymentId=string(j,"paymentId");return s;}
+ Session fromRow(const Row& row) {const auto j=crow::json::load(row[3]);Session s;s.id=row[0];s.owner=row[1];s.key=row[2];s.request=row[4];s.station=string(j,"station");s.connector=string(j,"connector");s.vehicle=string(j,"vehicle");s.started=static_cast<std::int64_t>(j["started"].d());s.ended=j["ended"].t()==crow::json::type::Null?0:static_cast<std::int64_t>(j["ended"].d());s.target=j["target"].d();s.budget=j["budget"].d();s.power=j["power"].d();s.energy=j["energy"].d();s.capacity=j["capacity"].d();s.rate=j["rate"].d();s.limit=j["limit"].d();s.settled=j["settled"].b();s.reason=string(j,"reason");s.paid=j.has("paid")?j["paid"].d():0;s.refunded=j.has("refunded")?j["refunded"].d():0;s.paymentId=string(j,"paymentId");return s;}
  std::vector<Session> sessions(const std::string& owner="") {std::vector<Session> values;auto rows=query("SELECT id,owner,idem,payload,request FROM customer_sessions"+(owner.empty()?std::string():" WHERE owner=?")+" ORDER BY started DESC",owner.empty()?Row{}:Row{owner});for(const auto& row:rows)values.push_back(fromRow(row));return values;}
  void persist(const Session& s) {query("INSERT INTO customer_sessions(id,owner,idem,request,connector,started,ended,settled,payload) VALUES(?,?,?,?,?,?,NULLIF(?,''),?,?) ON CONFLICT(id) DO UPDATE SET ended=excluded.ended,settled=excluded.settled,payload=excluded.payload",{s.id,s.owner,s.key,s.request,s.connector,std::to_string(s.started),s.ended?std::to_string(s.ended):"",s.settled?"1":"0",s.json().dump()});}
  void advance() {if(mode!="clock")return;for(auto s:sessions()){if(s.ended)continue;const double elapsed=std::max<std::int64_t>(0,nowMs()-s.started)/1000.;s.energy=std::min(s.limit,elapsed*s.power*speed/3600.);complete(s);persist(s);}}
@@ -75,6 +75,9 @@ public:
   // A signed-in phone account owns exactly one visitor row, so its history follows it across devices.
   query("CREATE TABLE IF NOT EXISTS customer_accounts(uid TEXT PRIMARY KEY,visitor TEXT NOT NULL UNIQUE REFERENCES customer_visitors(id),phone TEXT NOT NULL DEFAULT '',created INTEGER NOT NULL)");
   query("CREATE TABLE IF NOT EXISTS customer_payments(session TEXT PRIMARY KEY REFERENCES customer_sessions(id),owner TEXT NOT NULL,order_id TEXT NOT NULL UNIQUE,amount INTEGER NOT NULL,created INTEGER NOT NULL)");
+  // Refunds issued by operators, and Razorpay webhook events already handled (each is processed once).
+  query("CREATE TABLE IF NOT EXISTS customer_refunds(id TEXT PRIMARY KEY,session TEXT NOT NULL REFERENCES customer_sessions(id) ON DELETE CASCADE,amount INTEGER NOT NULL,status TEXT NOT NULL,reason TEXT NOT NULL,operator TEXT NOT NULL,created INTEGER NOT NULL)");
+  query("CREATE TABLE IF NOT EXISTS razorpay_events(id TEXT PRIMARY KEY,created INTEGER NOT NULL)");
  }
  bool signedIn(const std::string& owner){return !query("SELECT uid FROM customer_accounts WHERE visitor=?",{owner}).empty();}
  std::string newVisitor(){const auto id=randomId();query("INSERT INTO customer_visitors(id) VALUES(?)",{id});return id;}
@@ -91,6 +94,30 @@ public:
  std::pair<std::int64_t,std::string> paymentQuote(const std::string& owner,const std::string& id){advance();auto s=owned(owner,id);if(!s.ended)throw ApiError(409,"Stop charging before paying");if(s.settled)throw ApiError(409,"This session is already paid");const auto existing=query("SELECT order_id,amount FROM customer_payments WHERE session=?",{id});const auto due=amountPaise(s.energy*s.rate);if(!existing.empty()&&std::stoll(existing[0][1])==due)return {due,existing[0][0]};if(!existing.empty())query("DELETE FROM customer_payments WHERE session=?",{id});return {due,""};}
  void recordOrder(const std::string& owner,const std::string& id,const std::string& order,std::int64_t amount){owned(owner,id);query("INSERT INTO customer_payments(session,owner,order_id,amount,created) VALUES(?,?,?,?,?) ON CONFLICT(session) DO UPDATE SET order_id=excluded.order_id,amount=excluded.amount,created=excluded.created",{id,owner,order,std::to_string(amount),std::to_string(nowMs())});}
  std::string phone(const std::string& owner){const auto rows=query("SELECT phone FROM customer_accounts WHERE visitor=?",{owner});return rows.empty()?std::string():rows[0][0];}
+ bool settledSession(const std::string& owner,const std::string& id){return owned(owner,id).settled;}
+ // Settles the session behind a Razorpay order once Razorpay itself confirms the payment
+ // (webhook or order lookup), so a customer who paid and closed the app is never asked again.
+ // Returns false when the order is unknown here.
+ bool settleFromProvider(const std::string& orderId,const std::string& paymentId,std::int64_t amount){
+  const auto row=query("SELECT session,owner,amount FROM customer_payments WHERE order_id=?",{orderId});if(row.empty())return false;
+  if(std::stoll(row[0][2])!=amount)throw ApiError(409,"Payment amount does not match the order");
+  auto s=owned(row[0][1],row[0][0]);if(s.settled)return true;if(!s.ended)throw ApiError(409,"Session is still charging");
+  s.paid=amount/100.0;s.paymentId=paymentId;s.settled=true;persist(s);return true;}
+ bool eventSeen(const std::string& id){return !query("SELECT id FROM razorpay_events WHERE id=?",{id}).empty();}
+ void markEvent(const std::string& id){query("INSERT OR IGNORE INTO razorpay_events(id,created) VALUES(?,?)",{id,std::to_string(nowMs())});}
+ struct RefundTarget {std::string paymentId;std::int64_t refundable=0;};
+ RefundTarget refundTarget(const std::string& id,std::int64_t amount){
+  const auto rows=query("SELECT id,owner,idem,payload,request FROM customer_sessions WHERE id=?",{id});if(rows.empty())throw ApiError(404,"Session not found");
+  const auto s=fromRow(rows[0]);if(!s.settled||s.paymentId.empty())throw ApiError(409,"Only sessions paid through Razorpay can be refunded");
+  const auto refundable=amountPaise(s.paid)-amountPaise(s.refunded);if(refundable<=0)throw ApiError(409,"This session is already fully refunded");
+  if(amount<=0||amount>refundable)throw ApiError(400,"Refund must be between ₹0.01 and the amount still refundable");
+  return {s.paymentId,refundable};}
+ void recordRefund(const std::string& id,const std::string& refundId,std::int64_t amount,const std::string& reason,const std::string& operatorPhone){
+  const auto rows=query("SELECT id,owner,idem,payload,request FROM customer_sessions WHERE id=?",{id});if(rows.empty())throw ApiError(404,"Session not found");
+  auto s=fromRow(rows[0]);query("INSERT OR IGNORE INTO customer_refunds(id,session,amount,status,reason,operator,created) VALUES(?,?,?,?,?,?,?)",{refundId,id,std::to_string(amount),"pending",reason,operatorPhone,std::to_string(nowMs())});
+  s.refunded=(amountPaise(s.refunded)+amount)/100.0;persist(s);}
+ void refundStatus(const std::string& refundId,const std::string& status){query("UPDATE customer_refunds SET status=? WHERE id=?",{status,refundId});}
+ Json refunds(const std::string& id){Json::list items;for(const auto& r:query("SELECT id,amount,status,reason,created FROM customer_refunds WHERE session=? ORDER BY created",{id})){Json j;j["id"]=r[0];j["amount"]=std::stoll(r[1])/100.0;j["status"]=r[2];j["reason"]=r[3];j["created"]=std::stoll(r[4]);items.push_back(std::move(j));}return Json(std::move(items));}
  ~Store(){if(db)sqlite3_close(db);}
  Json health(){query("SELECT COUNT(*) FROM customer_visitors");Json j;j["ok"]=true;j["database"]="sqlite";j["identityProvider"]=firebase->enabled()?"firebase-phone":"local-visitor-cookie";j["payments"]=payments->enabled()?"razorpay":"none";j["productionOidc"]=false;j["simulationMode"]=mode;j["simulatorConnected"]=simulatorOnline();const char* backup=std::getenv("PLUGGO_BACKUP");j["backup"]=backup&&*backup?backup:"none";return j;}
  void begin(){query("BEGIN IMMEDIATE");}void commit(){query("COMMIT");}void rollback(){try{query("ROLLBACK");}catch(...){}}
@@ -135,7 +162,7 @@ public:
     s.paid=due/100.0;s.paymentId=paymentId;}
    s.settled=true;}
   else if(!s.ended){s.ended=nowMs();s.reason="Stopped by you";}persist(s);}
- void reset(const std::string& owner) {query("DELETE FROM customer_payments WHERE owner=?",{owner});query("DELETE FROM customer_sessions WHERE owner=?",{owner});query("UPDATE customer_visitors SET vehicle='car',saved='[]' WHERE id=?",{owner});}
+ void reset(const std::string& owner) {query("DELETE FROM customer_refunds WHERE session IN (SELECT id FROM customer_sessions WHERE owner=?)",{owner});query("DELETE FROM customer_payments WHERE owner=?",{owner});query("DELETE FROM customer_sessions WHERE owner=?",{owner});query("UPDATE customer_visitors SET vehicle='car',saved='[]' WHERE id=?",{owner});}
  Json simulatorSessions() {lastSimulator=nowMs();advance();Json j;j["ok"]=true;j["mode"]=mode;j["speed"]=speed;Json::list values;for(const auto& s:sessions())if(!s.ended)values.push_back(s.json());j["sessions"]=std::move(values);return j;}
  void meter(const Input& body) {lastSimulator=nowMs();if(mode!="meter")return;const auto id=string(body,"sessionId");auto rows=query("SELECT id,owner,idem,payload,request FROM customer_sessions WHERE id=?",{id});if(rows.empty())throw ApiError(404,"Session not found");auto s=fromRow(rows[0]);if(s.ended)return;if(string(body,"connector")!=s.connector)throw ApiError(409,"Meter connector does not match session");const double energy=number(body,"energyKWh",s.energy);if(energy<0)throw ApiError(400,"Energy must be non-negative");s.energy=std::min(s.limit,std::max(s.energy,energy));complete(s);persist(s);}
 };
@@ -143,6 +170,8 @@ std::shared_ptr<Store> store;
 crow::response response(Json j,int status=200){crow::response r(status,j.dump());r.set_header("Content-Type","application/json; charset=utf-8");r.set_header("Cache-Control","no-store");return r;}
 crow::response failure(const std::string& message,int status){Json j;j["ok"]=false;j["error"]=message;return response(std::move(j),status);}
 Input body(const crow::request& request){if(request.body.size()>16384)throw ApiError(413,"Request is too large");auto value=crow::json::load(request.body);if(!value||value.t()!=crow::json::type::Object)throw ApiError(400,"Invalid JSON object");return value;}
+// Runs a store operation in a transaction without a visitor cookie (webhooks and operator tools).
+crow::response locked(const std::function<Json()>& operation){std::lock_guard<std::mutex> lock(store->mutex);bool transaction=false;try{store->begin();transaction=true;auto value=operation();store->commit();transaction=false;return response(std::move(value));}catch(const ApiError& e){if(transaction)store->rollback();return failure(e.what(),e.status);}catch(const std::exception& e){if(transaction)store->rollback();std::cerr<<"store: "<<e.what()<<'\n';return failure("Storage error",500);}}
 crow::response customer(const crow::request& request,bool bootstrap,const std::function<Json(const std::string&)>& operation){std::lock_guard<std::mutex> lock(store->mutex);bool transaction=false;try{const auto origin=request.get_header_value("Origin"),host=request.get_header_value("Host");if(!origin.empty()&&origin!="http://"+host&&origin!="https://"+host)throw ApiError(403,"Cross-origin request rejected");if(request.method!=crow::HTTPMethod::GET&&request.get_header_value("X-Pluggo-Request")!="1")throw ApiError(403,"Missing application request header");store->begin();transaction=true;bool fresh=false;auto owner=store->visitor(request,bootstrap,fresh);auto value=operation(owner);store->commit();transaction=false;auto r=response(std::move(value));if(fresh)r.set_header("Set-Cookie",cookieFor(owner));return r;}catch(const ApiError& e){if(transaction)store->rollback();Json j;j["ok"]=false;j["error"]=e.what();return response(std::move(j),e.status);}catch(const std::exception& e){if(transaction)store->rollback();std::cerr<<"customer API: "<<e.what()<<'\n';Json j;j["ok"]=false;j["error"]="Backend storage operation failed";return response(std::move(j),500);}}
 }
 crow::response customerOperatorStation(){std::lock_guard<std::mutex> lock(store->mutex);try{return response(store->operatorStation());}catch(const std::exception& e){Json j;j["ok"]=false;j["error"]="Session overview unavailable";return response(std::move(j),503);}}
@@ -151,8 +180,8 @@ crow::response customerOperatorStation(){std::lock_guard<std::mutex> lock(store-
 // on and no list, nobody is let in: the dashboard is never open by accident.
 std::vector<std::string> operatorPhones(){std::vector<std::string> phones;std::string raw=env("PLUGGO_OPERATOR_PHONES",""),item;for(char& c:raw)if(c==','||c==';'||c=='\n'||c=='\r'||c=='\t')c=' ';std::istringstream in(raw);while(in>>item){bool ok=item.size()>=9&&item.size()<=16&&item[0]=='+'&&std::all_of(item.begin()+1,item.end(),[](unsigned char c){return std::isdigit(c);});if(ok)phones.push_back(item);}return phones;}
 bool operatorAuthRequired(){return firebase->enabled()||!operatorPhones().empty();}
-std::optional<crow::response> operatorDenied(const crow::request& r){
- if(!operatorAuthRequired())return std::nullopt;
+std::optional<crow::response> operatorCheck(const crow::request& r,std::string& phone){
+ if(!operatorAuthRequired()){phone="local-operator";return std::nullopt;}
  if(!firebase->enabled())return failure("Operator sign-in needs PLUGGO_FIREBASE_PROJECT_ID on the server",503);
  const auto header=r.get_header_value("Authorization");
  if(header.rfind("Bearer ",0)!=0||header.size()<20)return failure("Operator sign-in required",401);
@@ -161,8 +190,9 @@ std::optional<crow::response> operatorDenied(const crow::request& r){
  const auto phones=operatorPhones();
  if(user.phone.empty()||std::find(phones.begin(),phones.end(),user.phone)==phones.end())return failure("This number is not registered as a Pluggo operator",403);
  if(r.method!=crow::HTTPMethod::GET)CROW_LOG_WARNING<<"operator "<<user.phone<<" "<<crow::method_name(r.method)<<" "<<r.url;
- return std::nullopt;
+ phone=user.phone;return std::nullopt;
 }
+std::optional<crow::response> operatorDenied(const crow::request& r){std::string phone;return operatorCheck(r,phone);}
 crow::response operatorAuthInfo(const crow::request& r){
  Json j;j["ok"]=true;j["required"]=operatorAuthRequired();
  if(firebase->enabled()){j["firebase"]["projectId"]=firebase->projectId();j["firebase"]["apiKey"]=env("PLUGGO_FIREBASE_API_KEY","");j["firebase"]["authDomain"]=env("PLUGGO_FIREBASE_AUTH_DOMAIN",firebase->projectId()+".firebaseapp.com");j["firebase"]["appId"]=env("PLUGGO_FIREBASE_APP_ID","");}
@@ -193,16 +223,74 @@ void registerCustomerApi(crow::SimpleApp& app){initIntegrations();firebase=std::
  // Creates (or reuses) the Razorpay order for an ended session. The provider call runs outside the store lock.
  CROW_ROUTE(app,"/api/customer/sessions/<string>/payment").methods(crow::HTTPMethod::POST)([](const crow::request& r,const std::string& id){
   if(!payments->enabled())return failure("Online payment is not configured",404);
-  std::int64_t due=0;std::string order,phoneNumber;
-  auto quote=customer(r,false,[&](const std::string& owner){const auto q=store->paymentQuote(owner,id);due=q.first;order=q.second;phoneNumber=store->phone(owner);Json j;j["ok"]=true;return j;});
+  std::int64_t due=0;std::string order,phoneNumber;bool settled=false;
+  auto quote=customer(r,false,[&](const std::string& owner){settled=store->settledSession(owner,id);if(!settled){const auto q=store->paymentQuote(owner,id);due=q.first;order=q.second;}phoneNumber=store->phone(owner);Json j;j["ok"]=true;return j;});
   if(quote.code!=200)return quote;
-  if(due<100)return failure("No payment is needed for this session",409);
+  if(!settled&&due<100)return failure("No payment is needed for this session",409);
+  // The earlier order may already be paid (the app closed before checkout reported back).
+  // Ask Razorpay before offering a new payment, so nobody pays twice.
+  if(!settled&&!order.empty()){
+   try{
+    for(const auto& p:payments->orderPayments(order)){
+     if(p.amount!=due||(p.status!="captured"&&p.status!="authorized"))continue;
+     if(p.status=="authorized")payments->capture(p.id,due);
+     auto done=customer(r,false,[&](const std::string&){store->settleFromProvider(order,p.id,due);Json j;j["ok"]=true;return j;});
+     if(done.code!=200)return done;
+     settled=true;break;
+    }
+   }catch(const std::exception& e){
+    // Lookup failed: reusing the same order is still safe, because Razorpay refuses a second payment on a paid order.
+    std::cerr<<"razorpay: order lookup failed, reusing "<<order<<": "<<e.what()<<'\n';
+   }
+  }
+  if(settled)return customer(r,false,[](const std::string& owner){auto j=store->snapshot(owner);j["settled"]=true;return j;});
   if(order.empty()){
    try{order=payments->createOrder(due,id);}catch(const std::exception& e){std::cerr<<"razorpay: "<<e.what()<<'\n';return failure("The payment service is unavailable. Please try again.",502);}
    auto saved=customer(r,false,[&](const std::string& owner){store->recordOrder(owner,id,order,due);Json j;j["ok"]=true;return j;});
    if(saved.code!=200)return saved;
   }
   Json j;j["ok"]=true;j["orderId"]=order;j["amount"]=due;j["currency"]="INR";j["keyId"]=payments->keyId();j["phone"]=phoneNumber;return response(std::move(j));});
+ // Razorpay webhooks (Dashboard → Webhooks; secret in RAZORPAY_WEBHOOK_SECRET). order.paid settles
+ // the session even if the customer never returns; refund events update refund status.
+ CROW_ROUTE(app,"/api/customer/razorpay/webhook").methods(crow::HTTPMethod::POST)([](const crow::request& r){
+  if(!payments->webhookEnabled())return failure("Webhooks are not configured",404);
+  if(!payments->verifyWebhook(r.body,r.get_header_value("X-Razorpay-Signature")))return failure("Invalid webhook signature",400);
+  const auto event=crow::json::load(r.body);
+  if(!event||!event.has("event")||event["event"].t()!=crow::json::type::String||!event.has("payload"))return failure("Invalid webhook body",400);
+  const std::string name=event["event"].s(),eventId=r.get_header_value("X-Razorpay-Event-Id");
+  auto text=[](const crow::json::rvalue& v,const char* key){return v.has(key)&&v[key].t()==crow::json::type::String?std::string(v[key].s()):std::string();};
+  return locked([&]{
+   Json j;j["ok"]=true;
+   if(!eventId.empty()&&store->eventSeen(eventId)){j["duplicate"]=true;return j;}
+   const auto& payload=event["payload"];
+   if((name=="order.paid"||name=="payment.captured")&&payload.has("payment")&&payload["payment"].has("entity")){
+    const auto& p=payload["payment"]["entity"];const auto orderId=text(p,"order_id"),paymentId=text(p,"id");
+    if(!orderId.empty()&&!paymentId.empty()&&p.has("amount")&&p["amount"].t()==crow::json::type::Number){
+     try{j["settled"]=store->settleFromProvider(orderId,paymentId,p["amount"].i());}
+     catch(const ApiError& e){std::cerr<<"razorpay webhook "<<name<<": "<<e.what()<<'\n';j["settled"]=false;}
+    }
+   }else if(name=="payment.failed"&&payload.has("payment")&&payload["payment"].has("entity")){
+    std::cerr<<"razorpay: payment failed for order "<<text(payload["payment"]["entity"],"order_id")<<'\n';
+   }else if(name.rfind("refund.",0)==0&&payload.has("refund")&&payload["refund"].has("entity")){
+    const auto& f=payload["refund"]["entity"];const auto refundId=text(f,"id"),status=text(f,"status");
+    if(!refundId.empty()&&!status.empty())store->refundStatus(refundId,status);
+   }
+   if(!eventId.empty())store->markEvent(eventId);
+   return j;});});
+ // Operator refund of a paid session, in full (no amount) or in part. Needs a signed-in operator.
+ CROW_ROUTE(app,"/api/operator/refund").methods(crow::HTTPMethod::POST)([](const crow::request& r){
+  std::string operatorPhone;if(auto denied=operatorCheck(r,operatorPhone))return std::move(*denied);
+  if(!payments->enabled())return failure("Online payment is not configured",404);
+  std::string id,reason,paymentId;std::int64_t amount=0;
+  try{const auto b=body(r);id=string(b,"sessionId");reason=string(b,"reason","Refund by operator");if(reason.size()>200)reason.resize(200);
+   if(b.has("amount")){if(b["amount"].t()!=crow::json::type::Number)throw ApiError(400,"Invalid refund amount");const double rupees=b["amount"].d();if(!std::isfinite(rupees)||rupees<=0)throw ApiError(400,"Invalid refund amount");amount=amountPaise(rupees);}}
+  catch(const ApiError& e){return failure(e.what(),e.status);}catch(const std::exception&){return failure("Invalid refund request",400);}
+  auto checked=locked([&]{if(amount==0)amount=store->refundTarget(id,1).refundable;paymentId=store->refundTarget(id,amount).paymentId;Json j;j["ok"]=true;return j;});
+  if(checked.code!=200)return checked;
+  std::string refundId;
+  try{refundId=payments->refund(paymentId,amount,reason);}catch(const std::exception& e){std::cerr<<"razorpay: "<<e.what()<<'\n';return failure("Razorpay did not accept the refund. Check the Razorpay dashboard and try again.",502);}
+  CROW_LOG_WARNING<<"operator "<<operatorPhone<<" refunded "<<amount<<" paise on "<<id<<" ("<<refundId<<")";
+  return locked([&]{store->recordRefund(id,refundId,amount,reason,operatorPhone);Json j;j["ok"]=true;j["refundId"]=refundId;j["amount"]=amount/100.0;j["refunds"]=store->refunds(id);return j;});});
  // Exchanges a Firebase phone-auth ID token for this browser's Pluggo account.
  CROW_ROUTE(app,"/api/customer/auth/firebase").methods(crow::HTTPMethod::POST)([](const crow::request& r){
   if(r.get_header_value("X-Pluggo-Request")!="1")return failure("Missing application request header",403);

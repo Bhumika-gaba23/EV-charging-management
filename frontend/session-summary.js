@@ -20,7 +20,7 @@ export function summarizeSessions(sessions,{period='month',now=Date.now(),cost=s
   result.cost+=positive(cost(s));result.energy+=energy;
   result.minutes+=power>0?energy/power*60:0;
   result.completed++;
-  if(s.settled)result.collected+=positive(s.receipt?.amountCollected);
+  if(s.settled)result.collected+=positive(s.receipt?.netCollected??s.receipt?.amountCollected);
  }
  return result;
 }

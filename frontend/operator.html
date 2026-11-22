@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="styles.css">
   <link rel="stylesheet" href="theme.css">
   <link rel="stylesheet" href="portal.css">
-  <link rel="stylesheet" href="dashboard.css?v=20261123-operatorauth">
+  <link rel="stylesheet" href="dashboard.css?v=20261123-refunds">
   <link rel="icon" href="assets/pluggo.svg" type="image/svg+xml">
 </head>
 <body>
@@ -200,9 +200,10 @@
 
   <footer class="dashboard-footer"><span>Pluggo · EV charging management</span><span>Simulation data · no physical charger connected</span><a href="assets/models/CREDITS.md" target="_blank" rel="noopener">Model credits ↗</a></footer>
   <dialog id="operatorInfo" class="operator-info"><div><h2>Station operator</h2><button type="button" id="closeOperatorInfo" aria-label="Close operator details">×</button></div><p>This project dashboard demonstrates scheduling, budget control, priority queues, solar allocation and emergency handling.</p><p id="operatorConnection"></p><p id="operatorAccount"></p><button type="button" id="operatorSignOut" class="operator-gate-link" hidden>Sign out</button></dialog>
+  <dialog id="refundDialog" class="operator-info refund-dialog" aria-labelledby="refundTitle"><form id="refundForm" method="dialog"><div><h2 id="refundTitle">Refund payment</h2></div><p id="refundSummary"></p><label>Amount (₹)<input id="refundAmount" type="number" min="0.01" step="0.01" required inputmode="decimal"></label><label>Reason<input id="refundReason" type="text" maxlength="200" placeholder="Charger fault, overcharge…"></label><div class="refund-actions"><button type="button" id="cancelRefund" class="refund-secondary">Cancel</button><button type="submit" id="confirmRefund" class="operator-gate-button">Refund</button></div></form></dialog>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script src="api-client.js?v=20261123-operatorauth"></script>
-  <script src="portal.js?v=20261123-operatorauth"></script>
-  <script type="module" src="operator-auth.js?v=20261123-operatorauth"></script>
+  <script src="api-client.js?v=20261123-refunds"></script>
+  <script src="portal.js?v=20261123-refunds"></script>
+  <script type="module" src="operator-auth.js?v=20261123-refunds"></script>
 </body>
 </html>

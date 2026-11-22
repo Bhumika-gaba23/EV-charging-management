@@ -10,7 +10,7 @@ const frontend = resolve(dirname(fileURLToPath(import.meta.url)), '../../fronten
 const types = {'.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png'};
 const firebase = {projectId: 'pluggo-test', apiKey: 'AIza-not-a-real-key', authDomain: 'pluggo-test.firebaseapp.com', appId: '1:1:web:1'};
 
-async function open(browser, {required, signedIn = false}) {
+async function open(browser, {required, signedIn = false, station = null, onRefund = null}) {
   const page = await browser.newPage({viewport: {width: 1280, height: 860}});
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
@@ -23,6 +23,9 @@ async function open(browser, {required, signedIn = false}) {
         return route.fulfill({json: {ok: true, required, signedIn: !required || signedIn, ...(required ? {firebase, status: 401, reason: 'Operator sign-in required'} : {})}});
       }
       if (required && !signedIn) return route.fulfill({status: 401, json: {ok: false, error: 'Operator sign-in required'}});
+      if (station && url.pathname === '/api/station') return route.fulfill({json: station});
+      if (station && url.pathname === '/api/queue') return route.fulfill({json: {ok: true, items: []}});
+      if (onRefund && url.pathname === '/api/operator/refund') return route.fulfill({json: onRefund(JSON.parse(route.request().postData()))});
       return route.fulfill({status: 503, json: {ok: false, error: 'offline in this test'}});
     }
     const file = resolve(frontend, '.' + url.pathname);
@@ -74,5 +77,29 @@ try {
     assert.equal(calls.at(-1).auth, 'Bearer test-id-token-value');
     await page.close();
   }
-  console.log('PASS: operator gate hidden when open, shown and focused when protected, phone validation, expiry message, token header, no overflow at 1280/390px in both themes');
+  // Refunds: paid sessions offer a refund dialog; the request carries the chosen amount.
+  {
+    const paid = {id: 'sess-paid-1', vehicle: 'car', vehicleName: 'Tata Nexon EV', station: 'CP', connector: 'CP-01', started: Date.now() - 600000, ended: Date.now() - 60000,
+      target: 80, energy: 4, cost: 72, rate: 18, power: 0, currentSoc: 60, settled: true, paid: 72, refunded: 10, paymentId: 'pay_ABC', reason: 'Charge target reached'};
+    const unpaid = {...paid, id: 'sess-free-2', paymentId: '', paid: 0, refunded: 0};
+    const station = {ok: true, slots: [{id: 'CP-01', stationName: 'Connaught Place', status: 'available', connector: 'CCS2'}], recentSessions: [paid, unpaid], activePowerKW: 0, energyKWh: 4, estimatedCost: 72};
+    let sent = null;
+    const {page, errors} = await open(browser, {required: false, station, onRefund: (body) => { sent = body; return {ok: true, refundId: 'rfnd_1', amount: body.amount, refunds: []}; }});
+    await page.locator('.nav-item[data-target="recent"]').click();
+    await page.locator('[data-refund="sess-paid-1"]').waitFor();
+    assert.equal(await page.locator('[data-refund="sess-free-2"]').count(), 0, 'no refund for unpaid sessions');
+    assert.match(await page.locator('#recentVehicleList').textContent(), /₹72\.00 paid · ₹10\.00 refunded/);
+    await page.locator('[data-refund="sess-paid-1"]').click();
+    assert.equal(await page.locator('#refundAmount').inputValue(), '62.00', 'defaults to the refundable remainder');
+    await page.locator('#refundAmount').fill('20');
+    await page.locator('#refundReason').fill('Charger fault');
+    await page.screenshot({path: 'docs/ui-audit/dashboard/operator-refund-dialog.png'});
+    await page.locator('#confirmRefund').click();
+    await page.waitForFunction(() => document.querySelector('#toast').textContent.includes('rfnd_1'));
+    assert.deepEqual(sent, {sessionId: 'sess-paid-1', amount: 20, reason: 'Charger fault'});
+    assert.equal(await page.locator('#refundDialog').isVisible(), false);
+    assert.deepEqual(errors, []);
+    await page.close();
+  }
+  console.log('PASS: refund dialog for paid sessions only, refundable default, request body; operator gate hidden when open, shown and focused when protected, phone validation, expiry message, token header, no overflow at 1280/390px in both themes');
 } finally { await browser.close(); }

@@ -28,6 +28,8 @@ jobs:
         run: python tests/api/integrations_test.py
       - name: Operator dashboard access tests
         run: python tests/api/operator_auth_test.py
+      - name: Payment recovery, webhook and refund tests
+        run: python tests/api/payments_test.py
 
   web-unit:
     runs-on: ubuntu-latest

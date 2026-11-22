@@ -33,6 +33,9 @@ services:
         sync: false
       - key: RAZORPAY_KEY_SECRET
         sync: false
+      # Razorpay Dashboard → Webhooks secret for https://<host>/api/customer/razorpay/webhook
+      - key: RAZORPAY_WEBHOOK_SECRET
+        sync: false
       # Continuous SQLite backup (Litestream) to S3-compatible storage such as Cloudflare R2.
       # Leave unset to keep the database only on this instance.
       - key: PLUGGO_BACKUP_URL

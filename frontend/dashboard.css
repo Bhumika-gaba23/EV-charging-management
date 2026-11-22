@@ -376,3 +376,13 @@ html[data-theme] .operator-gate .landing-brand small { color: var(--d-muted); }
 /* The row shows focus for the phone field, so the field itself needs no second ring. */
 html[data-theme] .operator-gate-row input, html[data-theme] .operator-gate-row input:focus-visible { border: 0; background: transparent; outline: none; box-shadow: none; padding: 0; }
 html[data-theme] .operator-gate-form > input:focus-visible { outline: none; }
+
+/* Operator refunds */
+html[data-theme] .refund-button { margin-top: 12px; min-height: 40px; padding: 8px 16px; border: 1px solid var(--d-line); border-radius: 999px; background: var(--d-panel); color: var(--d-text); font: inherit; font-size: 13px; cursor: pointer; }
+html[data-theme] .refund-button:hover { background: var(--d-panel-hover); }
+html[data-theme] .refund-dialog form { display: grid; gap: 12px; }
+html[data-theme] .refund-dialog label { display: grid; gap: 6px; font-size: 12px; color: var(--d-muted); }
+html[data-theme] .refund-dialog input { min-height: 44px; padding: 0 12px; border-radius: 12px; }
+html[data-theme] .refund-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 4px; }
+html[data-theme] .refund-actions button { min-width: 110px; padding: 0 18px; }
+html[data-theme] .refund-secondary { min-height: 48px; border: 1px solid var(--d-line); border-radius: 999px; background: transparent; color: var(--d-text); font: inherit; cursor: pointer; }

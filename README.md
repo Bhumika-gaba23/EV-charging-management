@@ -57,6 +57,7 @@ the app keeps anonymous visitors and a zero-amount checkout, and all tests run o
 | `PLUGGO_FIREBASE_PROJECT_ID` | Turns on Firebase phone sign-in; charging then requires a signed-in number |
 | `PLUGGO_FIREBASE_API_KEY`, `PLUGGO_FIREBASE_APP_ID` | Public Firebase web-app config sent to the browser |
 | `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET` | Turns on Razorpay Checkout (use `rzp_test_…` keys for test mode) |
+| `RAZORPAY_WEBHOOK_SECRET` | Turns on the signed Razorpay webhook at `/api/customer/razorpay/webhook` (events: `order.paid`, `payment.captured`, `payment.failed`, `refund.processed`, `refund.failed`) |
 | `PLUGGO_OPERATOR_PHONES` | Comma-separated operator numbers, e.g. `+919876543210,+919812345678`. With Firebase on, the operator dashboard requires one of these numbers; an empty list lets nobody in |
 
 The server verifies every Firebase ID token (RS256 signature against Google's rotating
@@ -66,6 +67,22 @@ account, so its sessions and receipts follow it to other devices. Amounts under 
 without a payment. In Firebase, enable the Phone provider and add the app's domain under
 Authentication → Settings → Authorized domains. `tests/api/integrations_test.py` covers
 these flows with local stand-ins for both services.
+
+### Payment recovery and refunds
+
+- **Paid but the app closed:** before opening a new payment, the server asks Razorpay
+  whether the session's order is already paid (capturing an authorized payment if needed)
+  and settles it. A customer is never charged twice.
+- **Webhooks:** with `RAZORPAY_WEBHOOK_SECRET` set, `order.paid` settles the session even if
+  the customer never returns. Signatures are verified, each event ID is processed once, and
+  amounts must match the order.
+- **Refunds:** signed-in operators refund part or all of a paid session from the dashboard's
+  *Recent vehicles* list. Refunds are recorded with the operator's phone and reason, shown
+  on the customer's receipt, and updated by refund webhooks.
+
+In Razorpay Dashboard → Account & Settings → Webhooks, add
+`https://pluggo-customer-demo.onrender.com/api/customer/razorpay/webhook` with the events
+above and the same secret. `tests/api/payments_test.py` covers these flows.
 
 ### Operator dashboard sign-in
 

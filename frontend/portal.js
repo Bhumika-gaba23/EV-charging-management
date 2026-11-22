@@ -116,6 +116,34 @@ function renderSlots(slots) {
   }).join("");
 }
 let recentVehicleData = {recentSessions:[],slots:[]};
+const refundable = s => s.paymentId ? Math.max(0, Math.round((Number(s.paid)-Number(s.refunded||0))*100)/100) : 0;
+function receiptText(s){
+  if(!s.settled) return "Not checked out";
+  if(!s.paymentId) return "Checkout completed";
+  const refunded=Number(s.refunded||0);
+  return `₹${Number(s.paid).toFixed(2)} paid${refunded>0?` · ₹${refunded.toFixed(2)} refunded`:""}`;
+}
+let refundSession=null;
+$("#recentVehicleList").addEventListener("click",event=>{
+  const id=event.target.closest("[data-refund]")?.dataset.refund;if(!id)return;
+  refundSession=(recentVehicleData.recentSessions||[]).find(s=>s.id===id);if(!refundSession)return;
+  const max=refundable(refundSession);
+  $("#refundSummary").textContent=`${refundSession.vehicleName||refundSession.vehicle} · ${refundSession.id}. Up to ₹${max.toFixed(2)} can be refunded to the customer's original payment method.`;
+  $("#refundAmount").max=String(max);$("#refundAmount").value=max.toFixed(2);$("#refundReason").value="";
+  $("#refundDialog").showModal();
+});
+$("#cancelRefund").addEventListener("click",()=>$("#refundDialog").close());
+$("#refundForm").addEventListener("submit",async event=>{
+  event.preventDefault();if(!refundSession)return;
+  const amount=Number($("#refundAmount").value),button=$("#confirmRefund");
+  if(!(amount>0)||amount>refundable(refundSession)){toast("Enter an amount up to the refundable total.");return;}
+  button.disabled=true;
+  try{
+    const reply=await api.refund({sessionId:refundSession.id,amount,reason:$("#refundReason").value.trim()||"Refund by operator"});
+    $("#refundDialog").close();toast(`Refund of ₹${Number(reply.amount).toFixed(2)} started (${reply.refundId}). Banks usually take 5–7 working days.`);refreshStation();
+  }catch(error){toast(error.message);}
+  finally{button.disabled=false;}
+});
 function renderRecentVehicles() {
   const filter = $("#recentVehicleFilter").value;
   const sessions = (recentVehicleData.recentSessions||[]).filter(s=>filter==="all"||(filter==="finished"?Boolean(s.ended):!s.ended));
@@ -124,7 +152,7 @@ function renderRecentVehicles() {
   $("#recentVehicleList").innerHTML = sessions.map(s=>{
     const station=(recentVehicleData.slots||[]).find(c=>c.id===s.connector)?.stationName||s.station;
     const duration=Math.max(0,Math.round(((s.ended||Date.now())-s.started)/1000));
-    return `<article class="card recent-vehicle-card"><div class="card-heading"><div><p class="eyebrow">${escapeHTML(station)}</p><h2>${escapeHTML(s.vehicleName||s.vehicle)}</h2></div><span class="tag">${s.ended?"FINISHED":"CHARGING"}</span></div><p class="recent-session-id">${escapeHTML(s.id)}</p><dl class="recent-vehicle-details"><div><dt>Connector</dt><dd>${escapeHTML(s.connector)}</dd></div><div><dt>Battery level</dt><dd>${Number(s.currentSoc).toFixed(1)}% / ${Number(s.target)}% target</dd></div><div><dt>Energy delivered</dt><dd>${Number(s.energy).toFixed(2)} kWh</dd></div><div><dt>Estimated cost</dt><dd>₹${Number(s.cost).toFixed(2)}</dd></div><div><dt>Charging power</dt><dd>${Number(s.power).toFixed(1)} kW</dd></div><div><dt>Tariff</dt><dd>₹${Number(s.rate).toFixed(2)}/kWh</dd></div><div><dt>Started</dt><dd>${escapeHTML(time(s.started))}</dd></div><div><dt>Ended</dt><dd>${escapeHTML(time(s.ended))}</dd></div><div><dt>Elapsed time</dt><dd>${Math.floor(duration/60)}m ${duration%60}s</dd></div><div><dt>Receipt</dt><dd>${s.settled?"Checkout completed":"Not checked out"}</dd></div></dl><p class="session-sync-note">${escapeHTML(s.reason||"Charging in progress")} · Simulated charging; no payment collected.</p></article>`;
+    return `<article class="card recent-vehicle-card"><div class="card-heading"><div><p class="eyebrow">${escapeHTML(station)}</p><h2>${escapeHTML(s.vehicleName||s.vehicle)}</h2></div><span class="tag">${s.ended?"FINISHED":"CHARGING"}</span></div><p class="recent-session-id">${escapeHTML(s.id)}</p><dl class="recent-vehicle-details"><div><dt>Connector</dt><dd>${escapeHTML(s.connector)}</dd></div><div><dt>Battery level</dt><dd>${Number(s.currentSoc).toFixed(1)}% / ${Number(s.target)}% target</dd></div><div><dt>Energy delivered</dt><dd>${Number(s.energy).toFixed(2)} kWh</dd></div><div><dt>Estimated cost</dt><dd>₹${Number(s.cost).toFixed(2)}</dd></div><div><dt>Charging power</dt><dd>${Number(s.power).toFixed(1)} kW</dd></div><div><dt>Tariff</dt><dd>₹${Number(s.rate).toFixed(2)}/kWh</dd></div><div><dt>Started</dt><dd>${escapeHTML(time(s.started))}</dd></div><div><dt>Ended</dt><dd>${escapeHTML(time(s.ended))}</dd></div><div><dt>Elapsed time</dt><dd>${Math.floor(duration/60)}m ${duration%60}s</dd></div><div><dt>Receipt</dt><dd>${receiptText(s)}</dd></div></dl><p class="session-sync-note">${escapeHTML(s.reason||"Charging in progress")} · ${s.paymentId?"Paid through Razorpay.":"Simulated charging; no payment collected."}</p>${refundable(s)>0?`<button type="button" class="refund-button" data-refund="${escapeHTML(s.id)}">Refund…</button>`:""}</article>`;
   }).join("")||`<article class="card"><p class="queue-empty">${filter==="finished"?"No finished charging sessions yet.":filter==="active"?"No vehicles are currently charging.":"No recent vehicles yet. Start a session in the connected phone app."}</p></article>`;
 }
 $("#recentVehicleFilter").addEventListener("change",renderRecentVehicles);

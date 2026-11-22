@@ -59,9 +59,26 @@ public:
     bool verifySignature(const std::string& orderId, const std::string& paymentId,
                          const std::string& signature) const;
 
+    struct Payment {
+        std::string id;
+        std::string status;  // created, authorized, captured, refunded, failed
+        std::int64_t amount = 0;
+    };
+    // Every payment attempt made against an order (Orders API). Throws on transport/API failure.
+    std::vector<Payment> orderPayments(const std::string& orderId);
+    // Captures an authorized payment (only needed when the account does not auto-capture).
+    void capture(const std::string& paymentId, std::int64_t amountPaise);
+    // Refunds part or all of a captured payment and returns the refund ID. Throws on failure.
+    std::string refund(const std::string& paymentId, std::int64_t amountPaise, const std::string& note);
+
+    // Webhooks are signed with a separate secret: HMAC-SHA256 of the raw request body.
+    bool webhookEnabled() const { return enabled() && !webhookSecret_.empty(); }
+    bool verifyWebhook(const std::string& body, const std::string& signature) const;
+
 private:
     std::string keyId_;
     std::string secret_;
+    std::string webhookSecret_;
     std::string apiBase_;
 };
 

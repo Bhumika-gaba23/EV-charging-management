@@ -1,6 +1,6 @@
 // Same-origin gateway to the existing C++ domain API. No JS replacement engine.
 const paths=new Map([
- ['health',['GET']],['operator/auth',['GET']],['station',['GET']],['queue',['GET','POST']],
+ ['health',['GET']],['operator/auth',['GET']],['operator/refund',['POST']],['station',['GET']],['queue',['GET','POST']],
  ['plan',['POST']],['budget',['POST']],['queue/serve',['POST']],
  ['solar/simulate',['POST']],['emergency',['POST']],
  ...['A1','A2','B1','B2'].map(id=>['chargers/'+id,['GET']]),

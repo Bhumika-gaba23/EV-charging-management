@@ -221,6 +221,7 @@ FirebaseUser FirebaseVerifier::verify(const std::string& token) {
 Razorpay::Razorpay()
     : keyId_(env("RAZORPAY_KEY_ID")),
       secret_(env("RAZORPAY_KEY_SECRET")),
+      webhookSecret_(env("RAZORPAY_WEBHOOK_SECRET")),
       apiBase_(env("PLUGGO_RAZORPAY_API_BASE", "https://api.razorpay.com")) {}
 
 std::string Razorpay::createOrder(std::int64_t amountPaise, const std::string& receipt) {
@@ -235,6 +236,56 @@ std::string Razorpay::createOrder(std::int64_t amountPaise, const std::string& r
     if (reply.status != 200 || !json || !json.has("id") || json["id"].t() != crow::json::type::String)
         throw std::runtime_error("Razorpay order request failed (HTTP " + std::to_string(reply.status) + ")");
     return std::string(json["id"].s());
+}
+
+namespace {
+bool safeId(const std::string& id) {
+    return !id.empty() && id.size() <= 64 &&
+           std::all_of(id.begin(), id.end(), [](unsigned char c) { return std::isalnum(c) || c == '_'; });
+}
+}  // namespace
+
+std::vector<Razorpay::Payment> Razorpay::orderPayments(const std::string& orderId) {
+    if (!safeId(orderId)) throw std::runtime_error("Invalid Razorpay order ID");
+    const auto reply = httpRequest("GET", apiBase_ + "/v1/orders/" + orderId + "/payments", "", {}, keyId_ + ":" + secret_);
+    const auto json = crow::json::load(reply.body);
+    if (reply.status != 200 || !json || !json.has("items") || json["items"].t() != crow::json::type::List)
+        throw std::runtime_error("Razorpay order payments request failed (HTTP " + std::to_string(reply.status) + ")");
+    std::vector<Payment> payments;
+    for (const auto& item : json["items"]) {
+        if (!item.has("id") || !item.has("status") || !item.has("amount")) continue;
+        payments.push_back({std::string(item["id"].s()), std::string(item["status"].s()), item["amount"].i()});
+    }
+    return payments;
+}
+
+void Razorpay::capture(const std::string& paymentId, std::int64_t amountPaise) {
+    if (!safeId(paymentId)) throw std::runtime_error("Invalid Razorpay payment ID");
+    crow::json::wvalue request;
+    request["amount"] = amountPaise;
+    request["currency"] = "INR";
+    const auto reply = httpRequest("POST", apiBase_ + "/v1/payments/" + paymentId + "/capture", request.dump(),
+                                   {"Content-Type: application/json"}, keyId_ + ":" + secret_);
+    if (reply.status != 200) throw std::runtime_error("Razorpay capture failed (HTTP " + std::to_string(reply.status) + ")");
+}
+
+std::string Razorpay::refund(const std::string& paymentId, std::int64_t amountPaise, const std::string& note) {
+    if (!safeId(paymentId)) throw std::runtime_error("Invalid Razorpay payment ID");
+    crow::json::wvalue request;
+    request["amount"] = amountPaise;
+    request["speed"] = "normal";
+    request["notes"]["reason"] = note.substr(0, 200);
+    const auto reply = httpRequest("POST", apiBase_ + "/v1/payments/" + paymentId + "/refund", request.dump(),
+                                   {"Content-Type: application/json"}, keyId_ + ":" + secret_);
+    const auto json = crow::json::load(reply.body);
+    if (reply.status != 200 || !json || !json.has("id"))
+        throw std::runtime_error("Razorpay refund failed (HTTP " + std::to_string(reply.status) + ")");
+    return std::string(json["id"].s());
+}
+
+bool Razorpay::verifyWebhook(const std::string& body, const std::string& signature) const {
+    if (!webhookEnabled() || signature.size() != 64) return false;
+    return constantTimeEquals(hmacSha256Hex(webhookSecret_, body), signature);
 }
 
 bool Razorpay::verifySignature(const std::string& orderId, const std::string& paymentId,

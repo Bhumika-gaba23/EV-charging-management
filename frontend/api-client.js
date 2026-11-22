@@ -27,6 +27,7 @@ class ChargeFlowApi {
   serveNext() { return this.request("/api/queue/serve", { method: "POST", body: "{}" }); }
   simulateSolar(data) { return this.request("/api/solar/simulate", { method: "POST", body: JSON.stringify(data) }); }
   emergency(data) { return this.request("/api/emergency", { method: "POST", body: JSON.stringify(data) }); }
+  refund(data) { return this.request("/api/operator/refund", { method: "POST", body: JSON.stringify(data) }); }
 }
 
 window.chargeFlowApi = new ChargeFlowApi();

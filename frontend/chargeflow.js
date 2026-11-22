@@ -1,4 +1,4 @@
-import { summarizeSessions, chargingDuration } from "./session-summary.js?v=20261104-summary1";
+import { summarizeSessions, chargingDuration } from "./session-summary.js?v=20261123-pay1";
 import { performanceProfile } from "./performance-profile.js?v=20261104-summary1";
 import { CustomerApi } from "./customer-api.js?v=20261118-live1";
 import { normalizeIndianPhone, sendOtp, confirmOtp, signOutFirebase, friendlyAuthError, payWithRazorpay } from "./account.js?v=20261118-live2";
@@ -1166,7 +1166,7 @@ function openSession(session) {
       : ended
         ? "CHARGE COMPLETE"
         : "LIVE SESSION",
-    `<h2 id="dialogTitle">${station.name}</h2><p class="dialog-subtitle">${session.connector} · ${vehicles[session.vehicle].label}</p>${!session.settled ? `<img class="session-vehicle-preview" src="${vehicles[session.vehicle].image}" alt="${vehicles[session.vehicle].name}">` : ""}${session.settled ? `<div class="receipt-hero"><div class="receipt-symbol">${icon("check")}</div><h3>${paidAmount(session) > 0 ? "Payment received" : "Checkout complete"}</h3><div class="receipt-amount"><small>AMOUNT PAID</small><strong>${currency(paidAmount(session))}</strong></div><p>${session.receipt?.paymentId ? `Paid via Razorpay · ${session.receipt.paymentId}` : "No payment was needed for this charge."}</p></div>` : ""}<div class="charge-ring" id="chargeRing" ${session.settled ? "hidden" : ""}><div>${icon(session.settled ? "check" : ended ? "receipt" : "bolt")}<strong id="liveSoc">${soc(session).toFixed(0)}%</strong><small>BATTERY</small></div></div><div class="bill-summary" id="sessionSummary"></div>${session.settled ? `<details class="receipt-details"><summary>Session details</summary>${billRow("Charging power used", `${session.power} kW`)}${billRow("Completed", session.reason)}<p class="receipt-id">${session.receipt?.id || session.id}<br>${new Intl.DateTimeFormat("en-IN", {dateStyle:"medium",timeStyle:"short",timeZone:"Asia/Kolkata"}).format(new Date(session.started))} IST<br>Pluggo charging receipt</p></details>` : ""}<div id="sessionActions"></div>`,
+    `<h2 id="dialogTitle">${station.name}</h2><p class="dialog-subtitle">${session.connector} · ${vehicles[session.vehicle].label}</p>${!session.settled ? `<img class="session-vehicle-preview" src="${vehicles[session.vehicle].image}" alt="${vehicles[session.vehicle].name}">` : ""}${session.settled ? `<div class="receipt-hero"><div class="receipt-symbol">${icon("check")}</div><h3>${paidAmount(session) > 0 ? "Payment received" : "Checkout complete"}</h3><div class="receipt-amount"><small>AMOUNT PAID</small><strong>${currency(paidAmount(session))}</strong></div><p>${session.receipt?.paymentId ? `Paid via Razorpay · ${session.receipt.paymentId}` : "No payment was needed for this charge."}${refundedAmount(session) > 0 ? ` · ${currency(refundedAmount(session))} refunded to your original payment method` : ""}</p></div>` : ""}<div class="charge-ring" id="chargeRing" ${session.settled ? "hidden" : ""}><div>${icon(session.settled ? "check" : ended ? "receipt" : "bolt")}<strong id="liveSoc">${soc(session).toFixed(0)}%</strong><small>BATTERY</small></div></div><div class="bill-summary" id="sessionSummary"></div>${session.settled ? `<details class="receipt-details"><summary>Session details</summary>${billRow("Charging power used", `${session.power} kW`)}${billRow("Completed", session.reason)}<p class="receipt-id">${session.receipt?.id || session.id}<br>${new Intl.DateTimeFormat("en-IN", {dateStyle:"medium",timeStyle:"short",timeZone:"Asia/Kolkata"}).format(new Date(session.started))} IST<br>Pluggo charging receipt</p></details>` : ""}<div id="sessionActions"></div>`,
   );
   dialogSession = session.id;
   updateSessionDialog();
@@ -1220,7 +1220,8 @@ function updateSessionDialog() {
   }
   layoutDialogActions();
 }
-const paidAmount = (s) => Math.max(0, Number(s.receipt?.amountCollected) || 0);
+const paidAmount = (s) => Math.max(0, Number(s.receipt?.netCollected ?? s.receipt?.amountCollected) || 0);
+const refundedAmount = (s) => Math.max(0, Number(s.receipt?.refunded) || 0);
 function openCheckout(s) {
   if (!s.ended) return;
   const station = stationById(s.station);
@@ -1246,7 +1247,8 @@ function openCheckout(s) {
       button.setAttribute("aria-busy", "true");
       try {
         const order = await customerApi.paymentOrder(s.id);
-        payment = await payWithRazorpay(order, { description: `Charging at ${station.name}` });
+        // Razorpay already has this payment (for example the app closed after paying): no second charge.
+        if (!order.settled) payment = await payWithRazorpay(order, { description: `Charging at ${station.name}` });
       } catch (error) {
         button.disabled = false;
         button.removeAttribute("aria-busy");
@@ -1334,7 +1336,7 @@ async function shareReceipt(session) {
   const station = stationById(session.station);
   const when = new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Kolkata" }).format(new Date(session.started));
   const text = [`Pluggo charging receipt ${session.receipt?.id || session.id}`, `${station.name} · ${session.connector}`, `${when} IST`,
-    `Energy: ${session.energy.toFixed(2)} kWh`, `Total: ${currency(total(session))}`, `Paid: ${currency(paidAmount(session))}${session.receipt?.paymentId ? ` (Razorpay ${session.receipt.paymentId})` : ""}`].join("\n");
+    `Energy: ${session.energy.toFixed(2)} kWh`, `Total: ${currency(total(session))}`, `Paid: ${currency(paidAmount(session))}${session.receipt?.paymentId ? ` (Razorpay ${session.receipt.paymentId})` : ""}${refundedAmount(session) > 0 ? `, after ${currency(refundedAmount(session))} refunded` : ""}`].join("\n");
   try {
     if (navigator.share) { await navigator.share({ title: "Pluggo receipt", text }); return; }
     await navigator.clipboard.writeText(text);
