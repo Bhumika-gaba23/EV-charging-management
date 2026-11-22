@@ -67,9 +67,35 @@ simulator credentials are not exposed. HTTPS termination belongs to the hosting
 provider. Cookies use Secure in this deployment.
 
 **The selected default is Render's free web service plan, with no paid disk.**
-SQLite lives in `/tmp/pluggo/pluggo.sqlite3`; the hosting filesystem is ephemeral,
-so visitor preferences, sessions and receipts can be lost on service restarts or
-redeployment. This is a disposable project demonstration. Run one instance.
+SQLite lives in `/tmp/pluggo/pluggo.sqlite3`; the hosting filesystem is ephemeral.
+Without a backup, visitor preferences, sessions and receipts are lost on service
+restarts or redeployment. Run one instance.
+
+### Keep data across restarts (free, Litestream + Cloudflare R2)
+
+The image includes [Litestream](https://litestream.io) v0.3.13 (checksum-pinned).
+When `PLUGGO_BACKUP_URL` is set, the container restores the database from the
+bucket before the API starts, then streams every change to it within about a
+second. If the restore fails, the container refuses to start rather than come up
+empty. `/api/ready` reports `"backup": "litestream"` (or `"none"`).
+
+1. Cloudflare dashboard → R2 → **Create bucket**, e.g. `pluggo-backup` (free tier: 10 GB).
+2. R2 → **Manage API tokens** → **Create API token** with *Object Read & Write*,
+   limited to that bucket. Copy the Access Key ID, Secret Access Key and the
+   S3 endpoint `https://<account-id>.r2.cloudflarestorage.com`.
+3. Render → `pluggo-customer-demo` → **Environment**, add:
+
+| Variable | Value |
+|---|---|
+| `PLUGGO_BACKUP_URL` | `s3://pluggo-backup/pluggo` |
+| `PLUGGO_BACKUP_ENDPOINT` | `https://<account-id>.r2.cloudflarestorage.com` |
+| `LITESTREAM_ACCESS_KEY_ID` | R2 access key ID |
+| `LITESTREAM_SECRET_ACCESS_KEY` | R2 secret access key |
+
+4. **Manual Deploy → Deploy latest commit**, then check `/api/ready`.
+
+For AWS S3, leave `PLUGGO_BACKUP_ENDPOINT` unset. Never run two instances against
+the same backup path.
 
 The source is prepared locally, but no hosting service has been created. Publishing
 requires an authenticated Render connection and the intended source files pushed

@@ -1,4 +1,9 @@
-"""Container supervisor: public frontend + loopback C++ API + private simulator."""
+"""Container supervisor: public frontend + loopback C++ API + private simulator.
+
+When PLUGGO_BACKUP_URL is set, Litestream restores the SQLite database from
+S3-compatible storage (for example Cloudflare R2) before the API starts and then
+streams every change back to it, so restarts and redeploys keep customer data.
+"""
 import os
 import re
 from pathlib import Path
@@ -17,18 +22,47 @@ gateway_key=os.getenv('PLUGGO_GATEWAY_KEY', '').strip() or secrets.token_hex(32)
 if not re.fullmatch(r'[A-Za-z0-9_+/=\-]{32,128}',gateway_key):raise SystemExit('PLUGGO_GATEWAY_KEY must be a 32–128 character URL-safe/hex/base64 token')
 config=(root/'nginx.conf.template').read_text().replace('__PORT__',str(port)).replace('__GATEWAY_KEY__',gateway_key)
 config_path=Path('/tmp/pluggo-nginx.conf');config_path.write_text(config);config_path.chmod(0o600)
-env={**os.environ,'CHARGEFLOW_PORT':'18080','CHARGEFLOW_BIND_ADDRESS':'127.0.0.1','CHARGEFLOW_SIMULATION_MODE':'meter','CHARGEFLOW_SIMULATOR_KEY':secrets.token_hex(32),'PLUGGO_CUSTOMER_API':'http://127.0.0.1:18080','PLUGGO_CUSTOMER_WS':'ws://127.0.0.1:18080/ocpp/customer'}
+db_path=Path(os.getenv('CHARGEFLOW_CUSTOMER_DB','/data/pluggo.sqlite3'))
+env={**os.environ,'CHARGEFLOW_PORT':'18080','CHARGEFLOW_BIND_ADDRESS':'127.0.0.1','CHARGEFLOW_SIMULATION_MODE':'meter','CHARGEFLOW_SIMULATOR_KEY':secrets.token_hex(32),'PLUGGO_CUSTOMER_API':'http://127.0.0.1:18080','PLUGGO_CUSTOMER_WS':'ws://127.0.0.1:18080/ocpp/customer','CHARGEFLOW_CUSTOMER_DB':str(db_path)}
+
+def backup_config():
+    """Return the Litestream config path, or None when backups are not configured."""
+    url=os.getenv('PLUGGO_BACKUP_URL','').strip()
+    if not url:return None
+    if not re.fullmatch(r's3://[a-z0-9][a-z0-9.\-]{1,62}(/[A-Za-z0-9._\-/]*)?',url):raise SystemExit('PLUGGO_BACKUP_URL must look like s3://bucket-name/pluggo')
+    for name in ('LITESTREAM_ACCESS_KEY_ID','LITESTREAM_SECRET_ACCESS_KEY'):
+        if not os.getenv(name,'').strip():raise SystemExit(f'{name} is required when PLUGGO_BACKUP_URL is set')
+        env[name]=os.environ[name].strip()
+    endpoint=os.getenv('PLUGGO_BACKUP_ENDPOINT','').strip()
+    if endpoint and not re.fullmatch(r'https?://[A-Za-z0-9.\-]+(:\d+)?/?',endpoint):raise SystemExit('PLUGGO_BACKUP_ENDPOINT must be a URL such as https://<account>.r2.cloudflarestorage.com')
+    lines=['dbs:',f'  - path: {db_path}','    replicas:',f'      - url: {url}','        sync-interval: 1s','        snapshot-interval: 6h','        retention: 72h']
+    if endpoint:lines+=[f'        endpoint: {endpoint.rstrip("/")}','        region: auto','        force-path-style: true']
+    path=Path('/tmp/pluggo-litestream.yml');path.write_text('\n'.join(lines)+'\n');path.chmod(0o600)
+    return path
+
 processes=[]
+backup=None
+def stop(process,timeout):
+    if process is None or process.poll() is not None:return
+    process.terminate()
+    try:process.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:process.kill();process.wait()
 def shutdown(*_):
-    for process in reversed(processes):
-        if process.poll() is None:process.terminate()
-    for process in processes:
-        try:process.wait(timeout=5)
-        except subprocess.TimeoutExpired:process.kill();process.wait()
+    for process in reversed(processes):stop(process,5)
+    # Stop replication last so the API's final writes reach the backup.
+    stop(backup,15)
     if _:raise SystemExit(0)
 signal.signal(signal.SIGTERM,shutdown)
 signal.signal(signal.SIGINT,shutdown)
 try:
+    db_path.parent.mkdir(parents=True,exist_ok=True)
+    litestream_config=backup_config()
+    if litestream_config:
+        # A failed restore must stop the boot: starting empty would hide the saved data.
+        subprocess.run(['litestream','restore','-config',str(litestream_config),'-if-db-not-exists','-if-replica-exists',str(db_path)],env=env,check=True)
+        env['PLUGGO_BACKUP']='litestream'
+        print(f'Backups on: {db_path} is restored from and replicated to {os.environ["PLUGGO_BACKUP_URL"].strip()}',flush=True)
+    else:print('Backups off: set PLUGGO_BACKUP_URL to keep data across restarts',flush=True)
     processes.append(subprocess.Popen([str(root/'ev_web_api')],env=env))
     for _ in range(100):
         if processes[0].poll() is not None:raise RuntimeError('Customer API failed to start')
@@ -36,9 +70,10 @@ try:
             with urllib.request.urlopen('http://127.0.0.1:18080/api/ready',timeout=.5):break
         except OSError:time.sleep(.1)
     else:raise RuntimeError('Customer database/API not ready')
+    if litestream_config:backup=subprocess.Popen(['litestream','replicate','-config',str(litestream_config)],env=env)
     processes.append(subprocess.Popen([sys.executable,str(root/'customer_simulator.py')],env=env))
     subprocess.run(['nginx','-t','-c','/tmp/pluggo-nginx.conf'],check=True)
     processes.append(subprocess.Popen(['nginx','-c','/tmp/pluggo-nginx.conf','-g','daemon off;']))
-    while all(process.poll() is None for process in processes):time.sleep(.5)
+    while all(process.poll() is None for process in processes) and (backup is None or backup.poll() is None):time.sleep(.5)
     raise RuntimeError('One of the application services exited')
 finally:shutdown()

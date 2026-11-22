@@ -44,7 +44,8 @@ The older Flutter app remains separately available under `mobile/`.
 [Deployment instructions](deployment/README.md) cover APK installation and a
 Docker/Render package preserving the C++ backend. The C++ backend is deployed at
 https://pluggo-customer-demo.onrender.com. The selected default
-is free demo hosting with an ephemeral SQLite database; saved data can reset.
+is free demo hosting. Its SQLite database survives restarts when the free
+Litestream backup to Cloudflare R2 is configured ([setup](deployment/README.md#keep-data-across-restarts-free-litestream--cloudflare-r2)).
 
 ## Phone sign-in and payments
 

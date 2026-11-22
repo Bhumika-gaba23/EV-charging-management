@@ -8,8 +8,22 @@ COPY tests/ev_tests.cpp ./tests/ev_tests.cpp
 COPY database/seed/customer_catalog.json ./database/seed/customer_catalog.json
 RUN cmake -S . -B /build -DEV_BUILD_WEB_API=ON -DBUILD_TESTING=OFF -DCMAKE_BUILD_TYPE=Release && cmake --build /build -j2 --target ev_web_api
 
+FROM debian:bookworm-slim AS litestream
+ARG LITESTREAM_VERSION=v0.3.13
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates && rm -rf /var/lib/apt/lists/*
+RUN set -eu; arch="$(dpkg --print-architecture)"; \
+    case "$arch" in \
+      amd64) sum=eb75a3de5cab03875cdae9f5f539e6aedadd66607003d9b1e7a9077948818ba0 ;; \
+      arm64) sum=9585f5a508516bd66af2b2376bab4de256a5ef8e2b73ec760559e679628f2d59 ;; \
+      *) echo "Unsupported architecture $arch" >&2; exit 1 ;; \
+    esac; \
+    curl -fsSL -o /tmp/litestream.tgz "https://github.com/benbjohnson/litestream/releases/download/${LITESTREAM_VERSION}/litestream-${LITESTREAM_VERSION}-linux-${arch}.tar.gz"; \
+    echo "$sum  /tmp/litestream.tgz" | sha256sum -c -; \
+    tar -xzf /tmp/litestream.tgz -C /usr/local/bin litestream
+
 FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends nginx python3 python3-venv libsqlite3-0 libcurl4 libssl3 libstdc++6 ca-certificates && rm -rf /var/lib/apt/lists/*
+COPY --from=litestream /usr/local/bin/litestream /usr/local/bin/litestream
 WORKDIR /app
 COPY ocpp-simulator/requirements.txt /app/requirements.txt
 RUN python3 -m venv /app/venv && /app/venv/bin/pip install --no-cache-dir -r /app/requirements.txt
