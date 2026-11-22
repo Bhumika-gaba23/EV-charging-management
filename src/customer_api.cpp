@@ -2,6 +2,7 @@
 #include "integrations.hpp"
 #include <sqlite3.h>
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <cstdint>
 #include <cmath>
@@ -12,6 +13,7 @@
 #include <iomanip>
 #include <limits>
 #include <mutex>
+#include <optional>
 #include <random>
 #include <sstream>
 #include <stdexcept>
@@ -144,6 +146,30 @@ Input body(const crow::request& request){if(request.body.size()>16384)throw ApiE
 crow::response customer(const crow::request& request,bool bootstrap,const std::function<Json(const std::string&)>& operation){std::lock_guard<std::mutex> lock(store->mutex);bool transaction=false;try{const auto origin=request.get_header_value("Origin"),host=request.get_header_value("Host");if(!origin.empty()&&origin!="http://"+host&&origin!="https://"+host)throw ApiError(403,"Cross-origin request rejected");if(request.method!=crow::HTTPMethod::GET&&request.get_header_value("X-Pluggo-Request")!="1")throw ApiError(403,"Missing application request header");store->begin();transaction=true;bool fresh=false;auto owner=store->visitor(request,bootstrap,fresh);auto value=operation(owner);store->commit();transaction=false;auto r=response(std::move(value));if(fresh)r.set_header("Set-Cookie",cookieFor(owner));return r;}catch(const ApiError& e){if(transaction)store->rollback();Json j;j["ok"]=false;j["error"]=e.what();return response(std::move(j),e.status);}catch(const std::exception& e){if(transaction)store->rollback();std::cerr<<"customer API: "<<e.what()<<'\n';Json j;j["ok"]=false;j["error"]="Backend storage operation failed";return response(std::move(j),500);}}
 }
 crow::response customerOperatorStation(){std::lock_guard<std::mutex> lock(store->mutex);try{return response(store->operatorStation());}catch(const std::exception& e){Json j;j["ok"]=false;j["error"]="Session overview unavailable";return response(std::move(j),503);}}
+// Operator routes (dashboard). When phone sign-in is configured, the caller must send a
+// Firebase ID token whose phone number is listed in PLUGGO_OPERATOR_PHONES. With Firebase
+// on and no list, nobody is let in: the dashboard is never open by accident.
+std::vector<std::string> operatorPhones(){std::vector<std::string> phones;std::string raw=env("PLUGGO_OPERATOR_PHONES",""),item;for(char& c:raw)if(c==','||c==';'||c=='\n'||c=='\r'||c=='\t')c=' ';std::istringstream in(raw);while(in>>item){bool ok=item.size()>=9&&item.size()<=16&&item[0]=='+'&&std::all_of(item.begin()+1,item.end(),[](unsigned char c){return std::isdigit(c);});if(ok)phones.push_back(item);}return phones;}
+bool operatorAuthRequired(){return firebase->enabled()||!operatorPhones().empty();}
+std::optional<crow::response> operatorDenied(const crow::request& r){
+ if(!operatorAuthRequired())return std::nullopt;
+ if(!firebase->enabled())return failure("Operator sign-in needs PLUGGO_FIREBASE_PROJECT_ID on the server",503);
+ const auto header=r.get_header_value("Authorization");
+ if(header.rfind("Bearer ",0)!=0||header.size()<20)return failure("Operator sign-in required",401);
+ FirebaseUser user;
+ try{user=firebase->verify(header.substr(7));}catch(const std::exception&){return failure("Your operator sign-in has expired. Sign in again.",401);}
+ const auto phones=operatorPhones();
+ if(user.phone.empty()||std::find(phones.begin(),phones.end(),user.phone)==phones.end())return failure("This number is not registered as a Pluggo operator",403);
+ if(r.method!=crow::HTTPMethod::GET)CROW_LOG_WARNING<<"operator "<<user.phone<<" "<<crow::method_name(r.method)<<" "<<r.url;
+ return std::nullopt;
+}
+crow::response operatorAuthInfo(const crow::request& r){
+ Json j;j["ok"]=true;j["required"]=operatorAuthRequired();
+ if(firebase->enabled()){j["firebase"]["projectId"]=firebase->projectId();j["firebase"]["apiKey"]=env("PLUGGO_FIREBASE_API_KEY","");j["firebase"]["authDomain"]=env("PLUGGO_FIREBASE_AUTH_DOMAIN",firebase->projectId()+".firebaseapp.com");j["firebase"]["appId"]=env("PLUGGO_FIREBASE_APP_ID","");}
+ auto denied=operatorDenied(r);j["signedIn"]=!denied;
+ if(denied){auto parsed=crow::json::load(denied->body);if(parsed&&parsed.has("error"))j["reason"]=std::string(parsed["error"].s());j["status"]=denied->code;}
+ return response(std::move(j));
+}
 crow::response customerReadiness(){std::lock_guard<std::mutex> lock(store->mutex);try{return response(store->health());}catch(...){Json j;j["ok"]=false;j["error"]="Customer storage is unavailable";return response(std::move(j),503);}}
 void registerCustomerApi(crow::SimpleApp& app){initIntegrations();firebase=std::make_unique<FirebaseVerifier>();payments=std::make_unique<Razorpay>();store=std::make_shared<Store>();
  CROW_WEBSOCKET_ROUTE(app,"/ocpp/customer")

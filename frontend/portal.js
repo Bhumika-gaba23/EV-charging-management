@@ -187,7 +187,7 @@ $("#notificationButton").addEventListener("click", event => {
 });
 
 $(".operator-profile").addEventListener("click", () => {
-  $("#operatorConnection").textContent = apiOnline ? "Calculations are connected to the C++ engine. Station telemetry is simulated." : "The C++ backend is unavailable on this host. Browser simulation is active; results are demonstration values.";
+  $("#operatorConnection").textContent = apiOnline ? "Calculations are connected to the C++ engine. Station telemetry comes from the charger simulator." : "The C++ backend is unavailable on this host. Browser simulation is active; results are demonstration values.";
   $("#operatorInfo").showModal();
 });
 $("#closeOperatorInfo").addEventListener("click", () => $("#operatorInfo").close());
@@ -382,3 +382,5 @@ initialButton?.click();
 updateClock(); setInterval(()=>{if(!document.hidden)updateClock();},1000); previewSolar();
 Promise.all([api.health(),api.station(),api.queue()]).then(([_,station,queue])=>{setApiStatus(true);renderStation(station);renderQueue(queue.items);}).catch(()=>{setApiStatus(false);renderSlots(fallback.slots);renderQueue(fallback.queue);});
 setInterval(()=>{ if(!document.hidden){refreshStation();if(apiOnline)refreshQueue();} },3000);
+// Reload live data as soon as an operator signs in (operator-auth.js).
+window.addEventListener("operator-signed-in",()=>{refreshStation();refreshQueue();});

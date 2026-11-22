@@ -3,7 +3,7 @@ import {fileURLToPath} from 'node:url';import {resolve,dirname} from 'node:path'
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 const output=resolve(root,'deployment/vercel-dashboard/dist');
 await rm(output,{recursive:true,force:true});await mkdir(output,{recursive:true});
-for(const file of ['styles.css','theme.css','portal.css','dashboard.css','api-client.js','portal.js'])await copyFile(resolve(root,'frontend',file),resolve(output,file));
+for(const file of ['styles.css','theme.css','portal.css','dashboard.css','api-client.js','portal.js','account.js','operator-auth.js'])await copyFile(resolve(root,'frontend',file),resolve(output,file));
 await copyFile(resolve(root,'frontend/operator.html'),resolve(output,'index.html'));
 await mkdir(resolve(output,'assets/models'),{recursive:true});
 for(const name of ['car','scooter','bike','cargo'])await copyFile(resolve(root,`frontend/assets/models/${name}-poster.png`),resolve(output,`assets/models/${name}-poster.png`));

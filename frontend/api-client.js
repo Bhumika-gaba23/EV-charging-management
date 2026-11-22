@@ -1,17 +1,23 @@
 class ChargeFlowApi {
-  constructor(baseUrl = "") { this.baseUrl = baseUrl; }
+  constructor(baseUrl = "") { this.baseUrl = baseUrl; this.token = ""; }
 
   async request(path, options = {}) {
+    // The operator's Firebase ID token, set by operator-auth.js after phone sign-in.
+    const auth = this.token ? { Authorization: `Bearer ${this.token}` } : {};
     const response = await fetch(`${this.baseUrl}${path}`, {
-      headers: { "Content-Type": "application/json", ...(options.headers || {}) },
-      ...options
+      ...options,
+      headers: { "Content-Type": "application/json", ...auth, ...(options.headers || {}) }
     });
     const payload = await response.json().catch(() => ({ error: "Invalid server response" }));
+    if (response.status === 401 || response.status === 403) {
+      window.dispatchEvent(new CustomEvent("operator-auth-required", { detail: payload }));
+    }
     if (!response.ok || payload.ok === false) throw new Error(payload.error || `Request failed (${response.status})`);
     return payload;
   }
 
   health() { return this.request("/api/health"); }
+  operatorAuth() { return this.request("/api/operator/auth"); }
   station() { return this.request("/api/station"); }
   charger(id) { return this.request(`/api/chargers/${encodeURIComponent(id)}`); }
   plan(data) { return this.request("/api/plan", { method: "POST", body: JSON.stringify(data) }); }

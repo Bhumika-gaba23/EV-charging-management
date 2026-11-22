@@ -57,6 +57,7 @@ the app keeps anonymous visitors and a zero-amount checkout, and all tests run o
 | `PLUGGO_FIREBASE_PROJECT_ID` | Turns on Firebase phone sign-in; charging then requires a signed-in number |
 | `PLUGGO_FIREBASE_API_KEY`, `PLUGGO_FIREBASE_APP_ID` | Public Firebase web-app config sent to the browser |
 | `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET` | Turns on Razorpay Checkout (use `rzp_test_…` keys for test mode) |
+| `PLUGGO_OPERATOR_PHONES` | Comma-separated operator numbers, e.g. `+919876543210,+919812345678`. With Firebase on, the operator dashboard requires one of these numbers; an empty list lets nobody in |
 
 The server verifies every Firebase ID token (RS256 signature against Google's rotating
 certificates, audience, issuer and expiry) and every Razorpay payment signature
@@ -65,6 +66,17 @@ account, so its sessions and receipts follow it to other devices. Amounts under 
 without a payment. In Firebase, enable the Phone provider and add the app's domain under
 Authentication → Settings → Authorized domains. `tests/api/integrations_test.py` covers
 these flows with local stand-ins for both services.
+
+### Operator dashboard sign-in
+
+When Firebase is configured, every operator route (`/api/station`, `/api/queue`, `/api/plan`,
+`/api/budget`, `/api/solar/simulate`, `/api/emergency`, `/api/chargers/…`) requires a Firebase
+ID token whose phone number is in `PLUGGO_OPERATOR_PHONES`. The dashboard shows a phone/OTP
+sign-in screen, sends the token with each request, and the Vercel gateway forwards it.
+Operator actions are logged with the phone number. Without Firebase (local development) the
+dashboard stays open. Add the dashboard's domain (for example `oops-omega.vercel.app`) under
+Firebase → Authentication → Settings → Authorized domains. `tests/api/operator_auth_test.py`
+covers missing, forged, expired, wrong-project and unlisted tokens.
 
 ## Shared phone and dashboard demonstration
 

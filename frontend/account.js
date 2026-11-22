@@ -56,6 +56,13 @@ export async function confirmOtp(code) {
   return credential.user.getIdToken(true);
 }
 
+// Calls back with a fresh ID token whenever the Firebase user signs in, out, or the
+// token is refreshed (about hourly); "" means signed out.
+export async function watchIdToken(config, callback) {
+  const { auth, sdk } = await loadFirebase(config);
+  return sdk.onIdTokenChanged(auth, async (user) => callback(user ? await user.getIdToken() : "", user));
+}
+
 export async function signOutFirebase(config) {
   if (!config) return;
   try { const { auth, sdk } = await loadFirebase(config); await sdk.signOut(auth); } catch {}

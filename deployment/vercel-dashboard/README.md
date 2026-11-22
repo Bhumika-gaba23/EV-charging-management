@@ -1,5 +1,19 @@
 # Existing Vercel operations website
 
+## Operator sign-in — 23 November 2026
+
+The dashboard now requires phone sign-in when the Render backend has Firebase configured.
+Order matters:
+
+1. Render → Environment: set `PLUGGO_OPERATOR_PHONES` (comma-separated `+91…` numbers),
+   then **Manual Deploy → Deploy latest commit**.
+2. Firebase → Authentication → Settings → Authorized domains: add `oops-omega.vercel.app`.
+3. Rebuild and redeploy this site: `node deployment/build-dashboard.mjs`, then from this
+   directory `vercel --prod` (the gateway now forwards the operator's `Authorization` header
+   and the `operator/auth` route).
+
+Until step 3, the old dashboard receives 401 replies and shows its browser simulation only.
+
 ## Active hosting — 4 November 2026
 
 - Operations dashboard: https://oops-omega.vercel.app

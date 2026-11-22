@@ -24,6 +24,10 @@ services:
         sync: false
       - key: PLUGGO_FIREBASE_APP_ID
         sync: false
+      # Operator dashboard: comma-separated phone numbers (+91…) allowed to sign in.
+      # With Firebase on and this empty, nobody can open live operator data.
+      - key: PLUGGO_OPERATOR_PHONES
+        sync: false
       # Razorpay test or live keys. Leave unset to keep the zero-amount checkout.
       - key: RAZORPAY_KEY_ID
         sync: false

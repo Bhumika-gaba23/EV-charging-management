@@ -270,9 +270,12 @@ int main() {
         return jsonResponse(std::move(result));
     });
 
-    CROW_ROUTE(app, "/api/station")([] { return pluggo::customerOperatorStation(); });
+    CROW_ROUTE(app, "/api/operator/auth")([](const crow::request& request) { return pluggo::operatorAuthInfo(request); });
+
+    CROW_ROUTE(app, "/api/station")([](const crow::request& request) { if (auto denied = pluggo::operatorDenied(request)) return std::move(*denied); return pluggo::customerOperatorStation(); });
 
     CROW_ROUTE(app, "/api/plan").methods(crow::HTTPMethod::POST)([](const crow::request& request) {
+        if (auto denied = pluggo::operatorDenied(request)) return std::move(*denied);
         try {
             const auto body = crow::json::load(request.body);
             if (!body) return errorResponse("Invalid JSON body");
@@ -294,6 +297,7 @@ int main() {
     });
 
     CROW_ROUTE(app, "/api/budget").methods(crow::HTTPMethod::POST)([](const crow::request& request) {
+        if (auto denied = pluggo::operatorDenied(request)) return std::move(*denied);
         try {
             const auto body = crow::json::load(request.body);
             if (!body) return errorResponse("Invalid JSON body");
@@ -311,12 +315,14 @@ int main() {
         } catch (const std::exception& error) { return errorResponse(error.what()); }
     });
 
-    CROW_ROUTE(app, "/api/queue")([] {
+    CROW_ROUTE(app, "/api/queue")([](const crow::request& request) {
+        if (auto denied = pluggo::operatorDenied(request)) return std::move(*denied);
         std::lock_guard<std::mutex> lock(stateMutex);
         return jsonResponse(queueJson());
     });
 
     CROW_ROUTE(app, "/api/queue").methods(crow::HTTPMethod::POST)([](const crow::request& request) {
+        if (auto denied = pluggo::operatorDenied(request)) return std::move(*denied);
         try {
             const auto body = crow::json::load(request.body);
             if (!body) return errorResponse("Invalid JSON body");
@@ -331,7 +337,8 @@ int main() {
         } catch (const std::exception& error) { return errorResponse(error.what()); }
     });
 
-    CROW_ROUTE(app, "/api/queue/serve").methods(crow::HTTPMethod::POST)([](const crow::request&) {
+    CROW_ROUTE(app, "/api/queue/serve").methods(crow::HTTPMethod::POST)([](const crow::request& request) {
+        if (auto denied = pluggo::operatorDenied(request)) return std::move(*denied);
         std::lock_guard<std::mutex> lock(stateMutex);
         if (waiting.empty()) return errorResponse("Queue is empty", 409);
         QueueScorePolicy policy;
@@ -346,6 +353,7 @@ int main() {
     });
 
     CROW_ROUTE(app, "/api/solar/simulate").methods(crow::HTTPMethod::POST)([](const crow::request& request) {
+        if (auto denied = pluggo::operatorDenied(request)) return std::move(*denied);
         try {
             const auto body = crow::json::load(request.body);
             if (!body) return errorResponse("Invalid JSON body");
@@ -369,6 +377,7 @@ int main() {
     });
 
     CROW_ROUTE(app, "/api/emergency").methods(crow::HTTPMethod::POST)([](const crow::request& request) {
+        if (auto denied = pluggo::operatorDenied(request)) return std::move(*denied);
         const auto body = crow::json::load(request.body);
         if (!body) return errorResponse("Invalid JSON body");
         crow::json::wvalue result;
@@ -414,7 +423,8 @@ int main() {
         return jsonResponse(std::move(result));
     });
 
-    CROW_ROUTE(app, "/api/chargers/<string>")([](const std::string& id) {
+    CROW_ROUTE(app, "/api/chargers/<string>")([](const crow::request& request, const std::string& id) {
+        if (auto denied = pluggo::operatorDenied(request)) return std::move(*denied);
         const auto match = std::find_if(chargers.begin(), chargers.end(), [&](const Charger& charger) {
             return charger.id() == id;
         });

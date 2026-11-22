@@ -348,3 +348,31 @@ html[data-theme] .recent-vehicle-details {display:grid;grid-template-columns:rep
 html[data-theme] .recent-vehicle-details dt {color:var(--d-muted);font-size:11px;margin-bottom:6px;}
 html[data-theme] .recent-vehicle-details dd {margin:0;font-size:13px;overflow-wrap:anywhere;}
 @media(max-width:850px){html[data-theme] .recent-vehicle-grid {grid-template-columns:minmax(0,1fr);}}
+
+/* Operator sign-in gate */
+.operator-gate { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 16px; background: var(--d-bg); color: var(--d-text); overflow-y: auto; }
+.operator-gate[hidden] { display: none; }
+body.operator-locked { overflow: hidden; }
+.operator-gate-card { width: min(420px, 100%); padding: 28px; border: 1px solid var(--d-line); border-radius: 26px; background: var(--d-panel); box-shadow: var(--d-shadow); }
+.operator-gate-card h1 { margin: 22px 0 6px; font-size: 28px; letter-spacing: -0.02em; }
+.operator-gate-intro { margin: 0 0 20px; color: var(--d-muted); font-size: 14px; line-height: 1.6; }
+.operator-gate-form { display: grid; gap: 10px; }
+.operator-gate-form[hidden] { display: none; }
+.operator-gate-form label { font-size: 12px; color: var(--d-muted); }
+.operator-gate-row { display: flex; align-items: center; gap: 8px; border: 1px solid var(--d-line); border-radius: 14px; background: var(--d-field); padding: 0 12px; }
+.operator-gate-row span { color: var(--d-muted); font-size: 15px; }
+.operator-gate-form input { width: 100%; min-height: 48px; border: 0; background: transparent; color: var(--d-text); font: inherit; font-size: 16px; outline: none; }
+.operator-gate-form > input { border: 1px solid var(--d-line); border-radius: 14px; background: var(--d-field); padding: 0 14px; letter-spacing: 0.2em; }
+.operator-gate-row:focus-within, .operator-gate-form > input:focus { border-color: var(--d-accent); }
+.operator-gate-button { min-height: 48px; border: 0; border-radius: 999px; background: var(--d-accent); color: var(--d-on-accent); font: inherit; font-weight: 600; cursor: pointer; }
+.operator-gate-button:disabled { opacity: 0.5; cursor: wait; }
+.operator-gate-message { min-height: 20px; margin: 14px 0 0; font-size: 13px; line-height: 1.5; color: var(--d-muted); }
+.operator-gate-message[data-tone="error"] { color: #ff8a80; }
+html[data-theme="light"] .operator-gate-message[data-tone="error"] { color: #b3261e; }
+.operator-gate-link { margin-top: 6px; padding: 8px 0; border: 0; background: none; color: var(--d-text); font: inherit; font-size: 13px; text-decoration: underline; cursor: pointer; }
+.operator-gate-link[hidden] { display: none; }
+html[data-theme] .operator-gate .landing-brand, html[data-theme] .operator-gate .landing-brand strong { color: var(--d-text); }
+html[data-theme] .operator-gate .landing-brand small { color: var(--d-muted); }
+/* The row shows focus for the phone field, so the field itself needs no second ring. */
+html[data-theme] .operator-gate-row input, html[data-theme] .operator-gate-row input:focus-visible { border: 0; background: transparent; outline: none; box-shadow: none; padding: 0; }
+html[data-theme] .operator-gate-form > input:focus-visible { outline: none; }

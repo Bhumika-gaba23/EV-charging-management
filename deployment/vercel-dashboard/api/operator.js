@@ -1,10 +1,12 @@
 // Same-origin gateway to the existing C++ domain API. No JS replacement engine.
 const paths=new Map([
- ['health',['GET']],['station',['GET']],['queue',['GET','POST']],
+ ['health',['GET']],['operator/auth',['GET']],['station',['GET']],['queue',['GET','POST']],
  ['plan',['POST']],['budget',['POST']],['queue/serve',['POST']],
  ['solar/simulate',['POST']],['emergency',['POST']],
  ...['A1','A2','B1','B2'].map(id=>['chargers/'+id,['GET']]),
 ]);
+// The operator's Firebase ID token; the C++ API verifies it and checks the phone allowlist.
+function operatorToken(req){const value=String(req.headers?.authorization||'');return /^Bearer [A-Za-z0-9._-]{20,4096}$/.test(value)?value:'';}
 export default async function handler(req,res) {
  res.setHeader('Cache-Control','no-store');
  const url=new URL(req.url,'http://gateway.local');
@@ -20,7 +22,7 @@ export default async function handler(req,res) {
   if(target.protocol!=='https:'||target.username||target.password)throw new Error('Backend origin must be HTTPS');
   const body=req.method==='POST'?(typeof req.body==='string'?req.body:JSON.stringify(req.body||{})):undefined;
   if(body&&Buffer.byteLength(body)>16384)return res.status(413).json({ok:false,error:'Request too large'});
-  const response=await fetch(new URL('/api/'+path,target),{method:req.method,headers:{'Content-Type':'application/json',...(process.env.PLUGGO_GATEWAY_KEY?{'X-Pluggo-Gateway-Key':process.env.PLUGGO_GATEWAY_KEY}:{})},body,redirect:'manual',signal:AbortSignal.timeout(8000)});
+  const response=await fetch(new URL('/api/'+path,target),{method:req.method,headers:{'Content-Type':'application/json',...(process.env.PLUGGO_GATEWAY_KEY?{'X-Pluggo-Gateway-Key':process.env.PLUGGO_GATEWAY_KEY}:{}),...(operatorToken(req)?{'Authorization':operatorToken(req)}:{})},body,redirect:'manual',signal:AbortSignal.timeout(8000)});
   if(!response.headers.get('content-type')?.includes('application/json'))return res.status(502).json({ok:false,error:'C++ backend returned an invalid response'});
   res.status(response.status).json(await response.json());
  }catch {res.status(503).json({ok:false,error:'C++ backend is unavailable. Check the configured host.'});}

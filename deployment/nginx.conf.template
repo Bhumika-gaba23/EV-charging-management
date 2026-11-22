@@ -25,8 +25,9 @@ http {
         }
         location = /api/health { proxy_pass http://127.0.0.1:18080; }
         location = /api/ready { proxy_pass http://127.0.0.1:18080; }
-        # Only Vercel's server-side proxy knows this operator gateway credential.
-        location ~ ^/api/(station|plan|budget|queue(/serve)?|solar/simulate|emergency|chargers/(A1|A2|B1|B2))$ {
+        # Only Vercel's server-side proxy knows this operator gateway credential. The C++ API
+        # additionally requires a signed-in operator phone (Authorization: Bearer <Firebase ID token>).
+        location ~ ^/api/(operator/auth|station|plan|budget|queue(/serve)?|solar/simulate|emergency|chargers/(A1|A2|B1|B2))$ {
             if ($http_x_pluggo_gateway_key != "__GATEWAY_KEY__") { return 401; }
             proxy_pass http://127.0.0.1:18080;
             proxy_set_header Host $http_host;
