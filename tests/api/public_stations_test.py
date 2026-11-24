@@ -49,6 +49,9 @@ def main():
             assert all(s['id'].startswith(('osm:', 'ocm:')) for s in near['stations'])
             assert len(get(PORT, lat=28.6139, lng=77.2090, radius=15, limit=3)[1]['stations']) == 3
             assert len(get(PORT, lat=28.6139, lng=77.2090, radius=99, limit=500)[1]['stations']) <= 100, 'limit capped'
+            # Hill towns: the nearest charger can be ~100 km away, so a point search reaches 300 km (and no further).
+            hills = get(PORT, lat=32.0104, lng=77.3166, radius=900, limit=50)[1]['stations']
+            assert len(hills) >= 5 and max(s['distanceKm'] for s in hills) <= 300, 'hill search radius'
 
             # Text search without a location; every word must match.
             operator = next(s['operator'] for s in DATA['stations'] if len(s['operator']) > 4)

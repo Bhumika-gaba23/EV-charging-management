@@ -7,7 +7,14 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
+import android.view.View;
+import android.view.Window;
+import android.view.WindowInsets;
+import android.view.WindowInsetsController;
+import android.view.WindowManager;
+import android.widget.FrameLayout;
 import android.webkit.*;
 import android.widget.EditText;
 import androidx.webkit.JavaScriptReplyProxy;
@@ -34,6 +41,8 @@ public class MainActivity extends Activity {
     private PermissionRequest cameraRequest;
     private JavaScriptReplyProxy permissionReply;
     private Boolean permissionAnswer;
+    private FrameLayout root;
+    private int cutoutTop;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -51,7 +60,22 @@ public class MainActivity extends Activity {
         web = new WebView(this);
         web.setBackgroundColor(Color.rgb(11,11,11));
         web.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, true);
-        setContentView(web);
+        // Full screen: the status and navigation bars are hidden (swipe from an edge shows them
+        // briefly). The page learns the camera cut-out height, and the keyboard pushes it up.
+        root = new FrameLayout(this);
+        root.setBackgroundColor(Color.BLACK);
+        root.addView(web, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+        setContentView(root);
+        enterFullScreen();
+        root.setOnApplyWindowInsetsListener((view, insets) -> {
+            int top = 0, keyboard = 0;
+            if (Build.VERSION.SDK_INT >= 28 && insets.getDisplayCutout() != null) top = insets.getDisplayCutout().getSafeInsetTop();
+            if (Build.VERSION.SDK_INT >= 30) keyboard = insets.getInsets(WindowInsets.Type.ime()).bottom;
+            view.setPadding(0, 0, 0, keyboard);
+            cutoutTop = Math.round(top / getResources().getDisplayMetrics().density);
+            shareInsets();
+            return insets;
+        });
         WebSettings settings = web.getSettings();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
@@ -67,6 +91,7 @@ public class MainActivity extends Activity {
                 WebResourceResponse bundled = bundledScreen(request);
                 return bundled != null ? bundled : loader.shouldInterceptRequest(request.getUrl());
             }
+            @Override public void onPageFinished(WebView view, String url) { shareInsets(); }
             @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 if (!request.isForMainFrame()) return false;
                 Uri target = request.getUrl();
@@ -125,6 +150,30 @@ public class MainActivity extends Activity {
         installAlertBridge();
         if(state==null || !restoreWebState(state)) web.loadUrl(startUrl);
     }
+    private void enterFullScreen() {
+        Window window = getWindow();
+        if (Build.VERSION.SDK_INT >= 28) {
+            WindowManager.LayoutParams params = window.getAttributes();
+            params.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
+            window.setAttributes(params);
+        }
+        if (Build.VERSION.SDK_INT >= 30) {
+            window.setDecorFitsSystemWindows(false);
+            WindowInsetsController controller = window.getInsetsController();
+            if (controller != null) {
+                controller.hide(WindowInsets.Type.systemBars());
+                controller.setSystemBarsBehavior(WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+            }
+        } else {
+            window.getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY | View.SYSTEM_UI_FLAG_FULLSCREEN
+                | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
+        }
+    }
+    // The camera cut-out height in CSS pixels, so the header and map controls stay clear of it.
+    private void shareInsets() {
+        if (web != null) web.evaluateJavascript("document.documentElement.style.setProperty('--app-top-inset','" + cutoutTop + "px')", null);
+    }
+    @Override public void onWindowFocusChanged(boolean hasFocus) { super.onWindowFocusChanged(hasFocus); if (hasFocus) enterFullScreen(); }
     // Charging alerts: the page posts {type: notify | schedule | cancel | permission} messages.
     private void installAlertBridge() {
         if (web == null || !WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) return;
@@ -186,7 +235,9 @@ public class MainActivity extends Activity {
     }
     @Override public void onTrimMemory(int level) {
         super.onTrimMemory(level);
-        if(level==TRIM_MEMORY_RUNNING_LOW || level==TRIM_MEMORY_RUNNING_CRITICAL || level>=TRIM_MEMORY_BACKGROUND)memoryPressure();
+        // TRIM_MEMORY_BACKGROUND and above arrive every time the app is put away; releasing the 3D view
+        // then left a still picture after returning. Only a running-critical warning releases it.
+        if(level==TRIM_MEMORY_RUNNING_CRITICAL)memoryPressure();
     }
     @Override public void onLowMemory() {super.onLowMemory();memoryPressure();}
     private boolean restoreWebState(Bundle state) {return web.restoreState(state)!=null;}

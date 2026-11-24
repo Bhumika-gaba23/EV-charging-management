@@ -4,6 +4,7 @@ import { CustomerApi } from "./customer-api.js?v=20261124-features1";
 import { normalizeIndianPhone, sendOtp, confirmOtp, signOutFirebase, friendlyAuthError, payWithRazorpay, firebaseSignInAge, deleteFirebaseUser } from "./account.js?v=20261123-legal1";
 import { findGoogleStations } from "./google-stations.js?v=20261104-server9";
 import { greenImpact, BAND_NAMES, bandAt, rateAt, nextOffPeak, BOOKING_MINUTES, bookingSlots, overlaps, istTime, istDay, CITIES, findCity, tripMapsLink } from "./extras.js?v=20261124-features1";
+import { placeName, findPlaces, savedPlace, savePlace, currentPosition, locationAllowed } from "./places.js?v=20261125-places3";
 import { alertsSupported, alertsOn, enableAlerts, disableAlerts, notify, syncSchedule } from "./alerts.js?v=20261124-features1";
 import {
   vehicles,
@@ -105,13 +106,16 @@ try {
 } catch {
   storageOkay = false;
 }
-let origin = { lat: 28.6315, lng: 77.2167, device: false };
+// Where distances, station searches and trips start: the driver's GPS or a place they picked.
+// Until then, Connaught Place in New Delhi (where the Pluggo network stations are).
+let origin = { lat: 28.6315, lng: 77.2167, device: false, name: "New Delhi" };
+{ const place = savedPlace(); if (place) origin = { lat: place.lat, lng: place.lng, device: true, name: place.name, gps: place.gps }; }
 let filters = { available: false, saved: false, search: "", sort: "distance" };
 let page = "home";
 let dialogSession = null;
 let toastTimer;
 let sceneController;
-let modelPosterTimer, posterHideTimer;
+let modelPosterTimer, posterHideTimer, stageLoadingTimer;
 let animationAllowed = !matchMedia("(prefers-reduced-motion: reduce)").matches;
 let mediaStream = null,
   scannerFrame = null,
@@ -195,7 +199,7 @@ function applyBackend(payload, keepPreferences = true) {
   if (catalogChanged || oldVehicle !== state.vehicle) { renderVehicle(); renderStations(); renderMap(); }
   if (oldVehicle !== state.vehicle) { renderGarage(); sceneController?.setVehicle(state.vehicle); }
   renderHomeWidgets();
-  if (oldSessions !== JSON.stringify(state.sessions)) { renderSessions(); updateSessionDialog(); }
+  if (oldSessions !== JSON.stringify(state.sessions)) { renderSessions(); updateSessionDialog(); if (page === "garage") renderGarage(); }
   window.pluggoBackend = {connected:true,storage:payload.backend.storage,simulationMode:payload.backend.simulationMode,simulatorConnected:payload.backend.simulatorConnected};
 }
 // The last reply from the server, kept on this phone so the app opens with your data straight away:
@@ -304,9 +308,11 @@ function navigate() {
   if (page === "stations") {
     renderStations();
     renderMap();
-    if (!locationRequested) { locationRequested = true; requestDeviceLocation(); }
+    // First visit: real public chargers around the driver (the Pluggo chip shows the bookable network).
+    if (!locationRequested) { locationRequested = true; if (!localPreview) setStationSource("real"); if (!origin.device) requestDeviceLocation(); }
   }
   if (page === "sessions") renderSessions();
+  if (page === "garage") renderGarage();
   if (page === "settings" && stationSource === "real") $("#mapSettings").open = true;
   window.scrollTo({ top: 0, behavior: "instant" });
   animatePage($("#page-" + page));
@@ -467,8 +473,10 @@ vehicleDropdown.addEventListener("focusout", event => {
 });
 document.addEventListener("pointerdown", event => { if (vehicleDropdown.open && !vehicleDropdown.contains(event.target)) closeVehicleDropdown(); }, {passive:true});
 function renderHomeWidgets() {
-  const vehicle = vehicles[state.vehicle];
-  const session = state.sessions.find(item => item.vehicle === state.vehicle);
+  // While a charge runs, Home follows the vehicle that is charging, even if another one is selected.
+  const live = activeSession(), shownId = live ? live.vehicle : state.vehicle;
+  const vehicle = vehicles[shownId];
+  const session = state.sessions.find(item => item.vehicle === shownId);
   const level = Math.min(100, Math.max(0, session ? soc(session) : 25));
   const charging = !!session && !session.ended;
   const power = charging ? session.power : 0;
@@ -476,9 +484,10 @@ function renderHomeWidgets() {
   $("#homeBatteryCapacity").textContent = `${(level / 100 * vehicle.capacity).toFixed(1)} of ${vehicle.capacity} kWh`;
   $("#homeBatteryProgress").value = level;
   $("#homeBatteryProgress").textContent = `${Math.round(level)}%`;
+  $("#homeBatteryLabel").textContent = shownId === state.vehicle ? "Battery" : `${vehicle.name} battery`;
   // While charging this widget shows live power; otherwise the more useful estimated range.
   $("#homePowerLabel").textContent = charging ? "Charging power" : "Estimated range";
-  $("#homePowerValue").replaceChildren(document.createTextNode(String(charging ? power : estimatedRange(state.vehicle))), Object.assign(document.createElement("span"), {textContent: charging ? " kW" : " km"}));
+  $("#homePowerValue").replaceChildren(document.createTextNode(String(charging ? power : estimatedRange(shownId))), Object.assign(document.createElement("span"), {textContent: charging ? " kW" : " km"}));
   $("#homePowerStatus").textContent = charging ? "Charging now" : `Typical · charges up to ${vehicle.power} kW`;
   const blocking = activeSession() || pendingSession();
   $("#homeCtaLabel").textContent = activeSession() ? "View live charge" : blocking ? "Pay for your charge" : "Start charging";
@@ -717,54 +726,86 @@ $("#useLocation").onclick = requestDeviceLocation;
 function requestDeviceLocation() {
   if (locationPending) return;
   locationRequested = true;
-  if (!navigator.geolocation) {
-    reportLocation(
-      "Location unavailable · showing Pluggo stations in New Delhi.",
-    );
-    return;
-  }
   const button = $("#useLocation");
   locationPending = true;
   button.disabled = true;
-  button.innerHTML = icon("locate");
   button.setAttribute("aria-busy", "true");
   reportLocation("Finding your location…");
-  navigator.geolocation.getCurrentPosition(
-    (position) => {
-      origin = {
-        lat: position.coords.latitude,
-        lng: position.coords.longitude,
-        device: true,
-      };
-      reportLocation(
-        stationSource === "real" ? (usingDirectory() ? "Using your location · real station search." : "Using your location · Google charger search.") : "Using your device location · distances are straight-line.",
-      );
-      renderVehicle();
-      renderStations();
-      renderMap();
-      streetMap?.setView([origin.lat, origin.lng], 13);
-      googleMap?.setCenter({lat: origin.lat, lng: origin.lng});
-      if (stationSource === "real") { realPlaces = []; realSearchState = "idle"; ++realSearchGeneration; renderRealStations(); renderRealMap(); showRealNotice("Location updated. Search nearby to find chargers around you."); }
-      toast(
-        "Location updated.",
-      );
-      finish();
-    },
-    () => {
-      reportLocation(
-        "Location is off · showing New Delhi",
-      );
-      finish();
-    },
-    { timeout: 12000, maximumAge: 60000 },
-  );
-  function finish() {
+  currentPosition().then(async (position) => {
     locationPending = false;
     button.disabled = false;
     button.removeAttribute("aria-busy");
-    button.innerHTML = icon("locate");
-  }
-};
+    if (!position) {
+      reportLocation(origin.device ? `Location is off · using ${origin.name}` : "Location is off · tap the place name at the top to choose a town");
+      return;
+    }
+    let name = "Your location";
+    try { name = await placeName(position.lat, position.lng); } catch {}
+    setPlace({ ...position, name, gps: true });
+  });
+}
+// The place everything starts from. Saved on this phone; re-centres the map and searches again.
+function setPlace(place) {
+  origin = { lat: place.lat, lng: place.lng, device: true, name: place.name, gps: !!place.gps };
+  savePlace(origin);
+  renderLocationLabel();
+  reportLocation(`Using ${place.gps ? "your location" : place.name} · ${place.name}`);
+  renderVehicle();
+  renderStations();
+  renderMap();
+  streetMap?.setView([origin.lat, origin.lng], 11);
+  googleMap?.setCenter({ lat: origin.lat, lng: origin.lng });
+  if (stationSource === "real" && page === "stations") { $("#stationSearch").value = ""; $("#stationSearchForm").requestSubmit(); }
+}
+function renderLocationLabel() {
+  $("#headerLocation span").textContent = origin.name || "Choose location";
+  $("#headerLocation").setAttribute("aria-label", `Location: ${origin.name || "not set"}. Change location`);
+}
+function openLocationPicker() {
+  showDialog("YOUR LOCATION", `<h2 id="dialogTitle">Where are you?</h2><p class="dialog-subtitle">Pluggo finds chargers and plans trips from here. Now: ${escapeText(origin.name)}.</p><button type="button" class="secondary-button dialog-full" id="pickGps">${icon("locate")} Use my current location</button><form id="placeForm" class="place-form"><label class="field-label" for="placeQuery">Or search a town or area</label><div class="place-search"><input id="placeQuery" class="field-text" placeholder="For example: Kasol" autocomplete="off" enterkeyhint="search"><button type="submit" class="primary-button">Search</button></div></form><div id="placeResults" class="place-results" aria-live="polite"></div><p class="green-note">Place names © OpenStreetMap contributors. Your location is rounded to about 100 m before a name is looked up.</p>`);
+  $("#pickGps").onclick = async () => {
+    const button = $("#pickGps");
+    button.disabled = true; button.setAttribute("aria-busy", "true");
+    const position = await currentPosition();
+    button.disabled = false; button.removeAttribute("aria-busy");
+    if (!position) { toast("Location is off. Allow location for Pluggo, or search a town."); return; }
+    let name = "Your location";
+    try { name = await placeName(position.lat, position.lng); } catch {}
+    $("#flowDialog").close();
+    setPlace({ ...position, name, gps: true });
+    toast(`Location set to ${name}.`);
+  };
+  $("#placeForm").onsubmit = async (event) => {
+    event.preventDefault();
+    const results = $("#placeResults");
+    results.innerHTML = `<p class="dialog-subtitle">Searching…</p>`;
+    try {
+      const places = await findPlaces($("#placeQuery").value);
+      results.innerHTML = places.length
+        ? `<ul class="charger-list">${places.map((p, i) => `<li><button type="button" class="charger-row" data-pick-place="${i}"><span class="row-icon">${icon("pin")}</span><span class="row-main"><strong>${escapeText(p.name)}</strong><small>${escapeText(p.detail)}</small></span></button></li>`).join("")}</ul>`
+        : `<p class="dialog-subtitle">No place found in India with that name. Try a nearby town.</p>`;
+      results.querySelectorAll("[data-pick-place]").forEach((row) => row.onclick = () => {
+        const place = places[Number(row.dataset.pickPlace)];
+        $("#flowDialog").close();
+        setPlace({ ...place, gps: false });
+        toast(`Location set to ${place.name}.`);
+      });
+    } catch { results.innerHTML = `<p class="dialog-subtitle">Place search is unavailable right now. Check your connection and try again.</p>`; }
+  };
+}
+$("#headerLocation").addEventListener("click", (event) => { event.preventDefault(); openLocationPicker(); });
+renderLocationLabel();
+// With location already allowed, refresh the place quietly on start (no prompt).
+locationAllowed().then(async (allowed) => {
+  if (!allowed || (origin.device && !origin.gps)) return;
+  const position = await currentPosition({ timeout: 15000 });
+  if (!position) return;
+  const moved = !origin.device || Math.abs(position.lat - origin.lat) + Math.abs(position.lng - origin.lng) > 0.01;
+  if (!moved) return;
+  let name = origin.name;
+  try { name = await placeName(position.lat, position.lng); } catch {}
+  setPlace({ ...position, name, gps: true });
+});
 function googlePin(station) {
   const pin = document.createElement("div");
   pin.className = `google-charge-pin ${available(station, state.vehicle) ? "is-available" : "is-busy"}`;
@@ -950,8 +991,8 @@ function showRealNotice(message, setup = false) {
 }
 function setStationSource(source) {
   stationSource = source; ++realSearchGeneration; realPlaces = []; realSearchState = "idle";
-  if (origin.device) reportLocation(source === "real" ? (usingDirectory() ? "Using your location · real station search." : "Using your location · Google charger search.") : "Using your device location · distances are straight-line.");
-  $("#realStationSearch").disabled = false; $("#realStationSearch").textContent = "Search nearby";
+  if (origin.device) reportLocation(source === "real" ? `Chargers near ${origin.name}` : `Distances from ${origin.name}`);
+  $("#realStationSearch").disabled = false; $("#realStationSearch").textContent = "Search";
   $("#stationSelection").removeAttribute("aria-busy");
   $("#demoStationSource").setAttribute("aria-pressed", String(source === "demo"));
   $("#realStationSource").setAttribute("aria-pressed", String(source === "real"));
@@ -972,7 +1013,11 @@ function setStationSource(source) {
 // Real stations come from Google Places when a Maps key is configured, otherwise from the
 // server's OpenStreetMap / Open Charge Map directory.
 const usingDirectory = () => !googleMap || mapsFailed;
-let directorySources = [];
+let directorySources = [], searchLabel = "", searchCentre = null, sheetDetail = false;
+const realFilters = new Set();
+const REAL_FILTERS = [["fast", "Fast 25 kW+"], ["CCS2", "CCS2"], ["Type 2", "Type 2"], ["CHAdeMO", "CHAdeMO"], ["3-pin socket", "3-pin"]];
+// Results after the filter chips: every selected filter must match.
+const filteredPlaces = () => realPlaces.filter((p) => [...realFilters].every((f) => f === "fast" ? Number(p.powerKW) >= 25 : (p.sockets || []).includes(f)));
 function directoryPlace(s) {
   return {
     id: s.id, directory: true, displayName: s.name, operator: s.operator, sockets: s.sockets || [],
@@ -981,12 +1026,19 @@ function directoryPlace(s) {
     powerKW: s.powerKW, price: s.price, status: s.status, verifiedAt: s.verifiedAt,
   };
 }
-async function searchDirectory(query) {
-  const params = {limit: 40};
-  if (query) params.q = query;
-  // Rounded to about 100 m: enough to sort nearby stations, without sending an exact position.
-  if (origin.device) Object.assign(params, {lat: origin.lat.toFixed(3), lng: origin.lng.toFixed(3), radius: query ? 300 : 25});
-  const reply = await customerApi.publicStations(params);
+// Chargers around a point. In the hills the nearest charger can be 100 km away, so the search
+// widens (25, 100, then 300 km) until it finds a handful. Positions are rounded to about 100 m.
+async function searchDirectory(query, centre = origin.device ? origin : null) {
+  const radii = query ? [1000] : [25, 100, 300];
+  let reply = { stations: [] };
+  for (const radius of radii) {
+    const params = { limit: 60 };
+    if (query) params.q = query;
+    if (centre) Object.assign(params, { lat: centre.lat.toFixed(3), lng: centre.lng.toFixed(3), radius });
+    if (!query && !centre) break;
+    reply = await customerApi.publicStations(params);
+    if ((reply.stations || []).length >= 5) break;
+  }
   directorySources = reply.sources || [];
   return (reply.stations || []).map(directoryPlace);
 }
@@ -1005,12 +1057,23 @@ $("#stationSearchForm").onsubmit = async event => {
   showRealNotice(directory ? "Searching real charging stations…" : "Searching Google Places for charging stations…");
   try {
     const query = $("#stationSearch").value.trim();
-    const found = directory ? await searchDirectory(query) : await findGoogleStations(google, {query, origin});
+    let found;
+    if (directory) {
+      // A town or area ("Kasol") moves the search there; anything else is matched against charger names.
+      let centre = origin.device ? origin : null, nameQuery = "";
+      searchLabel = origin.device ? origin.name : "";
+      if (query) {
+        const places = await findPlaces(query, 1, { placesOnly: true }).catch(() => []);
+        if (places.length) { centre = places[0]; searchLabel = places[0].name; } else nameQuery = query;
+      }
+      found = await searchDirectory(nameQuery, nameQuery ? (origin.device ? origin : null) : centre);
+      if (centre && !nameQuery) { searchCentre = centre; streetMap?.setView([centre.lat, centre.lng], 11); }
+      if (nameQuery) searchLabel = `“${nameQuery}”`;
+    } else found = await findGoogleStations(google, {query, origin});
     if (token !== realSearchGeneration || stationSource !== "real") return;
-    realPlaces = found; realSearchState = "done"; renderRealStations(); renderRealMap();
-    showRealNotice(found.length
-      ? `${directory ? "Stations from Open Charge Map and OpenStreetMap contributors." : "Google Places results."} Check connector support, prices and availability with the operator. In-app charging and payment work at Pluggo network stations.`
-      : directory && !query ? "No mapped chargers within 25 km. Try a city, area or operator name." : "No chargers found. Try a nearby city, locality or charger name.");
+    realPlaces = found; realSearchState = "done"; sheetDetail = false; renderRealStations(); renderRealMap();
+    if (found.length) $("#realStationNotice").hidden = true;
+    else showRealNotice("No chargers found. Try a nearby town or a charger name.");
   } catch {
     if (token === realSearchGeneration && stationSource === "real") {
       realSearchState = "error"; renderRealStations();
@@ -1019,7 +1082,7 @@ $("#stationSearchForm").onsubmit = async event => {
     }
   } finally {
     if (token === realSearchGeneration) {
-      button.disabled = false; button.textContent = "Search nearby";
+      button.disabled = false; button.textContent = "Search";
       $("#stationSelection").removeAttribute("aria-busy");
     }
   }
@@ -1030,23 +1093,35 @@ function placeMapsLink(place) {
   return url.href;
 }
 function renderRealStations() {
-  const directory = usingDirectory();
-  $("#resultCount").textContent = realSearchState === "idle" ? "Search for real chargers" : realSearchState === "loading" ? "Searching real chargers…" : `${realPlaces.length} real charging stations`;
+  const directory = usingDirectory(), list = directory ? filteredPlaces() : realPlaces;
+  $("#resultCount").textContent = realSearchState === "idle" ? "Search for real chargers" : realSearchState === "loading" ? "Searching real chargers…" : `${list.length} real charging stations`;
   $("#mapCaption").textContent = directory ? "Open Charge Map & OpenStreetMap · availability unknown" : "Google Places · availability unknown";
   $("#mapEmpty").hidden = true;
   $("#stationSelection").hidden = false;
-  if (!realPlaces.some(place => place.id === selectedPlaceId)) selectedPlaceId = realPlaces[0]?.id || null;
-  const place = realPlaces.find(place => place.id === selectedPlaceId);
-  if (!place) {
-    const hint = realSearchState === "loading" ? "Searching real charging stations…" : realSearchState === "done" ? "No chargers found. Try a city, area or operator name." : realSearchState === "error" ? "Search is unavailable right now. Try again in a moment." : "Search nearby or enter a city, area or operator above.";
-    $("#stationSelection").innerHTML = `<button type="button" class="station-sheet-handle" aria-label="Show or hide station details"></button><h2>Find a real charger.</h2><p class="sheet-empty-copy">${hint}</p>${directory ? "" : '<a href="#settings" class="secondary-button">Map settings ↗</a>'}`;
+  if (!list.some(place => place.id === selectedPlaceId)) { selectedPlaceId = list[0]?.id || null; if (!selectedPlaceId) sheetDetail = false; }
+  const place = list.find(place => place.id === selectedPlaceId);
+  const handle = '<button type="button" class="station-sheet-handle" aria-label="Show or hide station details"></button>';
+  if (!place && !(directory && realPlaces.length)) {
+    const hint = realSearchState === "loading" ? "Searching real charging stations…" : realSearchState === "done" ? "No chargers found. Try a nearby town or a charger name." : realSearchState === "error" ? "Search is unavailable right now. Try again in a moment." : "Type a town or area above, or tap the location button.";
+    $("#stationSelection").innerHTML = `${handle}<h2>Find a charger.</h2><p class="sheet-empty-copy">${hint}</p>${directory ? "" : '<a href="#settings" class="secondary-button">Map settings ↗</a>'}`;
     return;
   }
+  // The list: every charger found, nearest first, with filter chips.
+  if (directory && !sheetDetail) {
+    const chips = REAL_FILTERS.map(([key, label]) => `<button type="button" class="filter-chip" data-real-filter="${escapeText(key)}" aria-pressed="${realFilters.has(key)}">${label}</button>`).join("");
+    const rows = list.map((p) => {
+      const sockets = (p.sockets || []).slice(0, 3).join(" · ") || "Plugs not listed";
+      return `<li><button type="button" class="charger-row" data-place="${escapeText(p.id)}"><span class="row-icon">${icon("bolt")}</span><span class="row-main"><strong>${escapeText(p.displayName || "EV charging station")}</strong><small>${escapeText(sockets)}${p.powerKW ? ` · ${Math.round(p.powerKW)} kW` : ""}</small></span><span class="row-side">${p.distanceKm != null ? `<strong>${p.distanceKm < 10 ? p.distanceKm.toFixed(1) : Math.round(p.distanceKm)} km</strong>` : ""}${Number(p.powerKW) >= 25 ? "<small>Fast</small>" : ""}</span></button></li>`;
+    }).join("");
+    $("#stationSelection").innerHTML = `${handle}<div class="sheet-list-head"><h2>${list.length} charger${list.length === 1 ? "" : "s"}${searchLabel ? ` near ${escapeText(searchLabel)}` : ""}</h2></div><div class="sheet-filters" role="group" aria-label="Filter chargers">${chips}</div>${list.length ? `<ul class="charger-list">${rows}</ul>` : `<p class="sheet-empty-copy">No charger matches these filters.</p>`}`;
+    return;
+  }
+  const back = directory ? `<button type="button" class="sheet-back" data-sheet-back>${icon("back")} All chargers</button>` : "";
   if (place.directory) {
     const facts = [
-      place.distanceKm != null ? `${place.distanceKm.toFixed(1)} km away` : "",
+      place.distanceKm != null ? `${place.distanceKm.toFixed(1)} km${searchLabel ? ` from ${searchLabel}` : " away"}` : "",
       place.operator && place.operator !== place.displayName ? place.operator : "",
-      place.sockets.length ? place.sockets.join(" · ") : "Connector types not mapped",
+      place.sockets.length ? place.sockets.join(" · ") : "Plugs not listed",
       place.powerKW ? `Up to ${Math.round(place.powerKW)} kW` : "",
       place.capacity ? `${place.capacity} charging point${place.capacity === 1 ? "" : "s"}` : "",
       place.price ? `Price: ${place.price}` : "",
@@ -1055,30 +1130,52 @@ function renderRealStations() {
       place.hours ? `Hours: ${place.hours}` : "",
     ].filter(Boolean);
     const attribution = directorySources.map(s => `© ${s.name} (${s.license})`).join(" · ") || "© OpenStreetMap contributors (ODbL)";
-    $("#stationSelection").innerHTML = `<button type="button" class="station-sheet-handle" aria-label="Show or hide station details"></button><div class="station-sheet-heading"><span class="sheet-station-icon">${icon("station")}</span><div><h2>${escapeText(place.displayName || "Charging station")}</h2><p>${escapeText(place.formattedAddress || "Address not mapped")}</p></div></div><ul class="real-station-facts">${facts.map(f => `<li>${escapeText(f)}</li>`).join("")}</ul><p class="sheet-availability"><span class="availability-dot unknown" aria-hidden="true"></span>${place.price ? "Live availability not provided" : "Availability and pricing not provided"} · not a Pluggo network station</p><a class="primary-button real-station" href="${escapeText(stationDirections(place.location))}" target="_blank" rel="noopener noreferrer">Get directions ↗</a><p class="real-station-attribution">${escapeText(attribution)}</p>`;
+    $("#stationSelection").innerHTML = `${handle}${back}<div class="station-sheet-heading"><span class="sheet-station-icon">${icon("station")}</span><div><h2>${escapeText(place.displayName || "Charging station")}</h2><p>${escapeText(place.formattedAddress || "Address not mapped")}</p></div></div><ul class="real-station-facts">${facts.map(f => `<li>${escapeText(f)}</li>`).join("")}</ul><p class="sheet-availability"><span class="availability-dot unknown" aria-hidden="true"></span>Live availability not provided · not a Pluggo network station</p><a class="primary-button real-station" href="${escapeText(stationDirections(place.location))}" target="_blank" rel="noopener noreferrer">Get directions ↗</a><p class="real-station-attribution">${escapeText(attribution)}</p>`;
     return;
   }
-  $("#stationSelection").innerHTML = `<button type="button" class="station-sheet-handle" aria-label="Show or hide station details"></button><div class="station-sheet-heading"><span class="sheet-station-icon">${icon("station")}</span><div><h2>${escapeText(place.displayName || "Charging station")}</h2><p>${escapeText(place.formattedAddress)}</p></div></div><p class="sheet-availability"><span class="availability-dot unknown" aria-hidden="true"></span>Availability and pricing not provided</p><a class="primary-button real-station" href="${escapeText(placeMapsLink(place))}" target="_blank" rel="noopener noreferrer">View in Google Maps ↗</a>`;
+  $("#stationSelection").innerHTML = `${handle}<div class="station-sheet-heading"><span class="sheet-station-icon">${icon("station")}</span><div><h2>${escapeText(place.displayName || "Charging station")}</h2><p>${escapeText(place.formattedAddress)}</p></div></div><p class="sheet-availability"><span class="availability-dot unknown" aria-hidden="true"></span>Availability and pricing not provided</p><a class="primary-button real-station" href="${escapeText(placeMapsLink(place))}" target="_blank" rel="noopener noreferrer">View in Google Maps ↗</a>`;
 }
-function renderDirectoryMap() {
+$("#stationSelection").addEventListener("click", (event) => {
+  if (stationSource !== "real") return;
+  const row = event.target.closest("[data-place]");
+  if (row) {
+    selectedPlaceId = row.dataset.place; sheetDetail = true; renderRealStations(); renderDirectoryMap(false);
+    const p = realPlaces.find((x) => x.id === selectedPlaceId);
+    if (p) streetMap?.setView([p.location.lat, p.location.lng], Math.max(streetMap.getZoom(), 13));
+    return;
+  }
+  if (event.target.closest("[data-sheet-back]")) { sheetDetail = false; renderRealStations(); renderDirectoryMap(false); return; }
+  const chip = event.target.closest("[data-real-filter]");
+  if (chip) {
+    const key = chip.dataset.realFilter;
+    if (realFilters.has(key)) realFilters.delete(key); else realFilters.add(key);
+    sheetDetail = false; renderRealStations(); renderDirectoryMap();
+  }
+});
+function renderDirectoryMap(fit = true) {
   if (!window.L) { $("#mapNetworkStatus").hidden = false; return; }
   if (!streetMap) renderStreetMap([]);
   if (!streetMap) return;
   streetMarkers.clearLayers();
   $("#mapModeLabel").textContent = "OPENSTREETMAP · REAL STATIONS";
-  for (const place of realPlaces) {
+  const list = filteredPlaces();
+  if (origin.device) L.marker([origin.lat, origin.lng], { icon: L.divIcon({ className: "street-marker", html: '<span class="you-marker" aria-hidden="true"></span>', iconSize: [18, 18], iconAnchor: [9, 9] }), title: origin.name, keyboard: false, interactive: false }).addTo(streetMarkers);
+  for (const place of list) {
     const title = place.displayName || "Charging station";
     const marker = L.marker([place.location.lat, place.location.lng], {
-      icon: L.divIcon({className: "street-marker", html: `<span class="street-marker-core real-marker ${place.id === selectedPlaceId ? "selected" : ""}">${icon("bolt")}</span>`, iconSize: [44, 44], iconAnchor: [22, 22]}),
+      icon: L.divIcon({className: "street-marker", html: `<span class="street-marker-core real-marker ${place.id === selectedPlaceId && sheetDetail ? "selected" : ""}">${icon("bolt")}</span>`, iconSize: [44, 44], iconAnchor: [22, 22]}),
       title, alt: title, keyboard: true,
     }).addTo(streetMarkers);
     marker.bindTooltip(title, {direction: "top", offset: [0, -22]});
-    marker.on("click", () => { selectedPlaceId = place.id; renderRealStations(); renderDirectoryMap(); });
+    marker.on("click", () => { selectedPlaceId = place.id; sheetDetail = true; setSheetCollapsed(false); renderRealStations(); renderDirectoryMap(false); });
   }
-  const points = realPlaces.map(p => [p.location.lat, p.location.lng]);
-  if (origin.device) points.push([origin.lat, origin.lng]);
-  if (points.length > 1) streetMap.fitBounds(points, {paddingTopLeft:[35,150],paddingBottomRight:[35,320],maxZoom:15});
-  else if (points.length === 1) streetMap.setView(points[0], 14);
+  if (!fit) return;
+  // Frame the nearest few chargers and the search centre, not every result 300 km away.
+  const points = list.slice(0, 6).map(p => [p.location.lat, p.location.lng]);
+  const centre = searchCentre || (origin.device ? origin : null);
+  if (centre) points.push([centre.lat, centre.lng]);
+  if (points.length > 1) streetMap.fitBounds(points, {paddingTopLeft:[35,170],paddingBottomRight:[35,360],maxZoom:14});
+  else if (points.length === 1) streetMap.setView(points[0], 13);
 }
 function renderRealMap() {
   if (streetMarkers) streetMarkers.clearLayers();
@@ -1739,7 +1836,7 @@ function useFallback(permanent = true) {
   $("#vehicleFallback").hidden = false;
   $("#vehicleCanvas").hidden = true;
 }
-(performanceProfile === "poster" ? Promise.reject(new Error("Low-memory poster preview")) : import("./vehicle-scene.js?v=20261118-spin2"))
+(performanceProfile === "poster" ? Promise.reject(new Error("Low-memory poster preview")) : import("./vehicle-scene.js?v=20261125-preload1"))
   .then(({ createShowroom }) => {
     sceneController = createShowroom(
       $("#vehicleCanvas"),
@@ -1750,7 +1847,9 @@ function useFallback(permanent = true) {
         clearTimeout(modelPosterTimer);
         // Swap only after the first 3D frame is drawn; overlapping poster/canvas
         // fades create double outlines as the continuously rotating model moves.
-        $("#stageLoading").hidden = ready;
+        clearTimeout(stageLoadingTimer);
+        if (ready) $("#stageLoading").hidden = true;
+        else stageLoadingTimer = setTimeout(() => { $("#stageLoading").hidden = false; }, 600);
         $("#vehicleFallback").style.opacity = "1";
         clearTimeout(posterHideTimer);
         // The picture stays under the fading-in 3D view and is removed once the 3D view is fully opaque.
@@ -1894,7 +1993,7 @@ function openTrip() {
   const v = vehicles[state.vehicle], level = Math.max(5, Math.round(batteryLevel(state.vehicle) / 5) * 5);
   // Rounded to about 100 m before it leaves the phone, as for the real-station search.
   const from = { lat: Math.round(origin.lat * 1000) / 1000, lng: Math.round(origin.lng * 1000) / 1000 };
-  showDialog("PLAN A TRIP", `<h2 id="dialogTitle">Where to?</h2><p class="dialog-subtitle">From ${origin.device ? "your location" : "Connaught Place, New Delhi"} in your ${v.name}. We find charging stops along the way.</p><form id="tripForm"><label class="field-label" for="tripTo">Destination city</label><input id="tripTo" class="field-text" list="tripCities" autocomplete="off" placeholder="For example: Jaipur" required><datalist id="tripCities">${CITIES.map((c) => `<option value="${c.name}"></option>`).join("")}</datalist><div class="slider-field"><label for="tripBattery">Battery now <output id="tripBatteryOut">${level}%</output></label><input id="tripBattery" type="range" min="5" max="100" step="5" value="${level}"></div><button type="submit" class="primary-button dialog-full">Plan charging stops ${icon("route")}</button></form><div id="tripResult" aria-live="polite"></div>`);
+  showDialog("PLAN A TRIP", `<h2 id="dialogTitle">Where to?</h2><p class="dialog-subtitle">From ${escapeText(origin.name)} in your ${v.name}. We find charging stops along the way.</p><form id="tripForm"><label class="field-label" for="tripTo">Destination city</label><input id="tripTo" class="field-text" list="tripCities" autocomplete="off" placeholder="For example: Jaipur" required><datalist id="tripCities">${CITIES.map((c) => `<option value="${c.name}"></option>`).join("")}</datalist><div class="slider-field"><label for="tripBattery">Battery now <output id="tripBatteryOut">${level}%</output></label><input id="tripBattery" type="range" min="5" max="100" step="5" value="${level}"></div><button type="submit" class="primary-button dialog-full">Plan charging stops ${icon("route")}</button></form><div id="tripResult" aria-live="polite"></div>`);
   $("#tripBattery").oninput = () => { $("#tripBatteryOut").textContent = `${$("#tripBattery").value}%`; };
   $("#tripForm").onsubmit = async (event) => {
     event.preventDefault();

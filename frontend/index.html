@@ -21,7 +21,7 @@
     <link rel="stylesheet" href="app-shell.css?v=20261123-stations1" />
     <link rel="stylesheet" href="features.css?v=20261124-features1" />
     <link rel="preload" href="assets/fonts/inter-variable.woff2" as="font" type="font/woff2" crossorigin />
-    <link rel="stylesheet" href="uber.css?v=20261124-uber2" />
+    <link rel="stylesheet" href="uber.css?v=20261125-polish2" />
     <script>
       // Apply the saved style and glass level before first paint so the page never flashes the wrong look.
       (function () {
@@ -40,7 +40,7 @@
     </script>
     <!-- Start the 3D downloads now instead of after the app script has run (the big win on phones).
          The import map above must come first, and these URLs must match the imports in chargeflow.js. -->
-    <link rel="modulepreload" href="vehicle-scene.js?v=20261118-spin2" />
+    <link rel="modulepreload" href="vehicle-scene.js?v=20261125-preload1" />
     <link rel="modulepreload" href="performance-profile.js?v=20261104-summary1" />
     <link rel="modulepreload" href="vendor/three.module.min.js" />
     <link rel="modulepreload" href="vendor/three.core.min.js" />
@@ -145,7 +145,7 @@
         <div class="map-top-controls">
           <h1 class="visually-hidden">Stations</h1>
           <form class="stations-controls" id="stationSearchForm"><a href="#home" class="icon-button map-back-button" aria-label="Back to Home"><i data-icon="back"></i></a><label class="search-field"><i data-icon="search"></i><input id="stationSearch" placeholder="Search a station or area" type="search" aria-label="Search a station or locality" /></label><button type="button" class="map-locate" id="useLocation" aria-label="Use my location"><i data-icon="locate"></i></button></form>
-          <div class="map-chips"><div class="station-source" role="group" aria-label="Station source"><button type="button" id="demoStationSource" aria-pressed="true">Pluggo</button><button type="button" id="realStationSource" aria-pressed="false" title="Search every charger with Google Places">All chargers</button></div><button class="filter-chip" id="availableFilter" type="button" aria-pressed="false" aria-label="Available now">Available now</button><button class="filter-chip" id="openTripPlanner" type="button">Plan a trip</button><button class="primary-button real-search-button" id="realStationSearch" type="submit" form="stationSearchForm" hidden>Search here</button></div>
+          <div class="map-chips"><div class="station-source" role="group" aria-label="Station source"><button type="button" id="demoStationSource" aria-pressed="true">Pluggo</button><button type="button" id="realStationSource" aria-pressed="false" title="Search every charger with Google Places">All chargers</button></div><button class="filter-chip" id="availableFilter" type="button" aria-pressed="false" aria-label="Available now">Available now</button><button class="filter-chip" id="openTripPlanner" type="button">Plan a trip</button><button class="primary-button real-search-button" id="realStationSearch" type="submit" form="stationSearchForm" hidden>Search</button></div>
           <div id="realStationNotice" class="real-station-notice" role="status" hidden></div>
           <div class="map-settings-footer" hidden><span id="mapModeLabel">OPENSTREETMAP</span><button id="openMapSettings" type="button" class="icon-button" aria-label="Map settings"><i data-icon="settings"></i></button></div>
         </div>
@@ -267,6 +267,6 @@
     >
     <script src="vendor/leaflet.js"></script>
     <script src="i18n.js?v=20261124-uber1"></script>
-    <script src="chargeflow.js?v=20261124-offline1" type="module"></script>
+    <script src="chargeflow.js?v=20261125-polish1" type="module"></script>
   </body>
 </html>

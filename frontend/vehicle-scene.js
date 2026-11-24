@@ -304,7 +304,7 @@ export function createShowroom(container, onFailure, onStatus = () => {}) {
   }
   function pruneCache() {
     for (const [id,pending] of cache) {
-      if (cache.size <= (lite ? 2 : 3)) break;
+      if (cache.size <= Object.keys(files).length) break;
       if (id === selected) continue;
       cache.delete(id);
       pending.then(root => { if (root !== vehicle) disposeModel(root); }).catch(() => {});
@@ -371,6 +371,32 @@ export function createShowroom(container, onFailure, onStatus = () => {}) {
       .toArray();
     return wrapper;
   }
+  function load(id) {
+    if (!cache.has(id)) {
+      const source = id === "cargo"
+        ? import("./cargo-model.js?v=20261104-summary1").then(({createCargoVehicle}) => createCargoVehicle())
+        : loader.loadAsync(files[id].url).then(gltf => gltf.scene);
+      cache.set(id, source.then(root => normalize(root, id)).catch((error) => { cache.delete(id); throw error; }));
+    }
+    return cache.get(id);
+  }
+  // After the first vehicle is on screen, load the others quietly, one at a time, and prepare
+  // their shaders, so switching vehicles is instant instead of showing "Loading 3D".
+  let preloading = false;
+  async function preloadOthers() {
+    if (preloading) return;
+    preloading = true;
+    for (const id of Object.keys(files)) {
+      if (lost) return;
+      if (cache.has(id)) continue;
+      await new Promise((resolve) => (window.requestIdleCallback || setTimeout)(resolve, { timeout: 1500 }));
+      try {
+        const root = await load(id);
+        if (!lost && root !== vehicle) await renderer.compileAsync(root, camera, scene).catch(() => {});
+      } catch {}
+    }
+    stats.cachedModels = cache.size;
+  }
   async function setVehicle(id) {
     selected = Object.hasOwn(files, id) ? id : "car";
     const requested = selected;
@@ -386,19 +412,7 @@ export function createShowroom(container, onFailure, onStatus = () => {}) {
     frameDeltas = [];
     onStatus("loading", requested);
     try {
-      if (!cache.has(requested)) {
-        const source = requested === "cargo"
-          ? import("./cargo-model.js?v=20261104-summary1").then(({createCargoVehicle}) => createCargoVehicle())
-          : loader.loadAsync(files[requested].url).then(gltf => gltf.scene);
-        const pending = source
-          .then(root => normalize(root, requested))
-          .catch((error) => {
-            cache.delete(requested);
-            throw error;
-          });
-        cache.set(requested, pending);
-      }
-      const pending = cache.get(requested);
+      const pending = load(requested);
       cache.delete(requested); cache.set(requested,pending);
       const next = await pending;
       if (token !== generation || lost) return;
@@ -423,6 +437,7 @@ export function createShowroom(container, onFailure, onStatus = () => {}) {
       dirty = true;
       onStatus("ready", requested);
       syncAnimation();
+      preloadOthers();
     } catch {
       if (token === generation) onFailure();
     }

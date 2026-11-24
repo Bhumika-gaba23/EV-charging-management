@@ -452,7 +452,8 @@ void registerCustomerApi(crow::SimpleApp& app){initIntegrations();publicDirector
    if(!param("limit").empty())limit=static_cast<std::size_t>(std::stoul(param("limit")));
   }catch(const std::exception&){return failure("Invalid location, radius or limit",400);}
   if(!std::isfinite(radius)||radius<=0)return failure("Invalid radius",400);
-  radius=std::min(radius,terms.empty()?100.0:1000.0);limit=std::clamp<std::size_t>(limit,1,100);
+  // Up to 300 km around a point: in the hills the nearest charger can be that far.
+  radius=std::min(radius,terms.empty()?300.0:1000.0);limit=std::clamp<std::size_t>(limit,1,100);
   if(!located&&terms.empty())return failure("Give a location or a search term",400);
   std::vector<std::pair<double,std::size_t>> found;
   for(const auto& e:publicDirectory.entries){

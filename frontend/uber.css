@@ -285,3 +285,90 @@
   & .suggestion:active { background: var(--u-raised); }
   & .suggestion:focus-visible, & .where-to:focus-visible { outline: 2px solid var(--u-text); outline-offset: 2px; }
 }
+
+/* ---- Round 2: one-screen Home, tighter type, compact sheets, charger list, location picker ---- */
+:root[data-ui="uber"]:not(#u):not(#v) {
+  /* Full-screen Android app: keep clear of the camera cut-out (the app sets --app-top-inset). */
+  & body { padding-top: var(--app-top-inset, 0px); }
+  & #page-stations .map-top-controls { top: calc(12px + var(--app-top-inset, 0px) + env(safe-area-inset-top, 0px)) !important; }
+
+  /* Type scale: page titles 30, sheet titles 26, body 15. */
+  & .app-title h1 { font-size: 30px; line-height: 36px; margin: 2px 0 16px; }
+  & #dialogTitle { font-size: 26px; line-height: 32px; }
+  & :is(.lower-heading h2, .list-label, .settings-heading h2) { font-size: 19px; line-height: 26px; }
+  & .settings-row > span:first-child { font-size: 15px; }
+  & :is(.primary-button, .home-cta) { min-height: 50px; font-size: 16px !important; }
+  & .dialog-actions :is(.primary-button, .secondary-button) { min-height: 52px; font-size: 16px !important; }
+
+  /* Home fits one screen: compact search, vehicle, stats, action and shortcuts. */
+  & .where-to { min-height: 50px; margin: 0 0 12px; font-size: 17px; }
+  & .home-hero { gap: 4px !important; margin-top: 0 !important; }
+  & .vehicle-picker-caption { font-size: 13px; margin: 0; }
+  & .home-vehicle-picker { font-size: 22px !important; }
+  & .vehicle-wallet .vehicle-stage { height: clamp(150px, 26vh, 230px) !important; min-height: 0 !important; }
+  & .vehicle-pagination { min-height: 40px !important; padding: 2px 4px 6px !important; background: transparent !important; border: 0 !important; }
+  & .home-widgets { gap: 10px !important; margin: 4px 0 12px !important; }
+  & .home-widget { padding: 12px 14px !important; min-height: 0 !important; }
+  & .home-widget .widget-value strong { font-size: 26px !important; line-height: 30px; }
+  & .home-widget :is(small, p) { font-size: 12px !important; }
+  & .home-cta { margin: 0 0 18px !important; }
+  & #page-home .lower-heading { margin: 4px 2px 10px !important; }
+  & .suggestions { gap: 8px; margin-bottom: 20px; }
+  & .suggestion { min-height: 72px; font-size: 12.5px; gap: 6px; }
+  & .suggestion .icon { width: 24px; height: 24px; }
+  & .home-booking { margin: 0 0 14px; }
+
+  /* Sheets: less chrome, smaller secondary controls. */
+  & .flow-dialog #dialogBody { padding-top: 4px; }
+  & .detail-tariff { padding: 14px 16px !important; }
+  & .detail-tariff strong { font-size: 30px; }
+  & .connector-choice { padding: 12px 14px !important; }
+  & .connector-picker { gap: 8px !important; }
+  & .amenities { gap: 6px; }
+  & .amenities .pill { font-size: 12px; padding: 5px 10px; }
+  & .station-extra-actions { gap: 8px; margin: 14px 0 6px; }
+  & .station-extra-actions .secondary-button { min-height: 40px; font-size: 13px !important; padding: 0 12px; }
+  & .dialog-links { gap: 8px; }
+  & .dialog-links .text-link, & #scanConnector { min-height: 40px; font-size: 13px; padding: 8px 14px !important; }
+  & .bill-row { font-size: 14px; }
+
+  /* Stations sheet: list of chargers with filters, then one charger's details. */
+  & #page-stations .station-selection { max-height: min(62vh, 560px); overflow-y: auto; overscroll-behavior: contain; }
+  & .sheet-list-head h2 { margin: 6px 2px 10px; font-size: 18px; font-weight: 700; }
+  & .sheet-filters { display: flex; gap: 8px; overflow-x: auto; padding: 2px 2px 12px; scrollbar-width: none; }
+  & .sheet-filters::-webkit-scrollbar { display: none; }
+  & .sheet-filters .filter-chip { flex: none; min-height: 36px; padding: 0 14px; font-size: 13px !important; box-shadow: none !important; background: var(--u-raised) !important; }
+  & .sheet-filters .filter-chip[aria-pressed="true"] { background: var(--u-primary) !important; color: var(--u-on-primary) !important; }
+  & .charger-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+  & .charger-row {
+    display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: center; width: 100%;
+    padding: 12px 6px; border: 0; border-bottom: 1px solid var(--u-line); background: transparent; color: var(--u-text);
+    text-align: left; font: inherit; cursor: pointer;
+  }
+  & .charger-list li:last-child .charger-row { border-bottom: 0; }
+  & .charger-row:active { background: var(--u-raised); }
+  & .row-icon { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; background: var(--u-raised); }
+  & .row-icon .icon { width: 18px; height: 18px; }
+  & .row-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  & .row-main strong { font-size: 15px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  & .row-main small { font-size: 12.5px; color: var(--u-body); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  & .row-side { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+  & .row-side strong { font-size: 14px; font-weight: 700; }
+  & .row-side small { font-size: 11px; font-weight: 600; color: var(--u-on-primary); background: var(--u-primary); padding: 1px 7px; border-radius: 999px; }
+  & .sheet-back { display: inline-flex; align-items: center; gap: 6px; margin: 2px 0 10px; padding: 8px 12px 8px 8px; border: 0; border-radius: 999px; background: var(--u-raised); color: var(--u-text); font: 600 13px var(--u-font); cursor: pointer; }
+  & .sheet-back .icon { width: 16px; height: 16px; }
+  & .you-marker { display: block; width: 18px; height: 18px; border-radius: 50%; background: #276ef1; border: 3px solid #fff; box-shadow: 0 0 0 6px rgb(39 110 241 / 25%); }
+  & .real-station-facts li { background: var(--u-raised); border: 0 !important; color: var(--u-text) !important; }
+
+  /* Location picker */
+  & .app-header .location-label { cursor: pointer; max-width: 46vw; }
+  & .app-header .location-label span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  & .place-form { margin-top: 18px; }
+  & .place-search { display: flex; gap: 8px; }
+  & .place-search .field-text { flex: 1; min-height: 48px; }
+  & .place-search .primary-button { flex: none; min-height: 48px; padding: 0 18px; }
+  & .place-results { margin-top: 10px; }
+}
+
+/* Stations: "Plan a trip" lives on Home (Trip tile), so the chip row fits Pluggo / All chargers / Search. */
+:root[data-ui="uber"]:not(#u):not(#v) #openTripPlanner { display: none !important; }
