@@ -285,7 +285,8 @@ function updateLens() {
   lens.style.width = `${selected.offsetWidth}px`;
 }
 function navigate() {
-  const next = location.hash.slice(1) || "home";
+  const [next, settingsPage = ""] = (location.hash.slice(1) || "home").split("/");
+  showSettingsPage(next === "settings" ? settingsPage : "");
   page = ["home", "stations", "sessions", "garage", "settings"].includes(next)
     ? next
     : "home";
@@ -592,21 +593,34 @@ function selectMapStation(station) {
   renderStations();
 }
 // The station card collapses to a single row so more of the map shows: tap the handle or swipe it.
-function setSheetCollapsed(collapsed) {
-  $("#stationSelection").classList.toggle("is-collapsed", collapsed);
-  $("#stationSelection .station-sheet-handle")?.setAttribute("aria-expanded", String(!collapsed));
+// The station sheet pulls up over the map like Uber's: "peek" shows the title and a row or two,
+// "half" the list, "full" nearly the whole screen. Drag the handle, or tap it to step up.
+const SHEET_STATES = ["peek", "half", "full"];
+function setSheetState(next) {
+  const sheet = $("#stationSelection");
+  sheet.dataset.sheet = next;
+  sheet.classList.toggle("is-collapsed", next === "peek");
+  sheet.querySelector(".station-sheet-handle")?.setAttribute("aria-expanded", String(next !== "peek"));
+  sheet.querySelector(".station-sheet-handle")?.setAttribute("aria-label", next === "full" ? "Lower the list" : "Pull up the list");
+  if (next !== "full") sheet.scrollTop = 0;
 }
+function setSheetCollapsed(collapsed) { setSheetState(collapsed ? "peek" : "half"); }
+setSheetState("half");
 $("#stationSelection").addEventListener("click", event => {
-  if (event.target.closest(".station-sheet-handle")) setSheetCollapsed(!$("#stationSelection").classList.contains("is-collapsed"));
+  if (!event.target.closest(".station-sheet-handle")) return;
+  const current = SHEET_STATES.indexOf($("#stationSelection").dataset.sheet);
+  setSheetState(SHEET_STATES[(current + 1) % SHEET_STATES.length]);
 });
 let sheetDragStart = null;
 $("#stationSelection").addEventListener("pointerdown", event => {
-  if (event.target.closest(".station-sheet-handle, .station-sheet-heading")) sheetDragStart = event.clientY;
+  if (event.target.closest(".station-sheet-handle, .station-sheet-heading, .sheet-list-head")) sheetDragStart = event.clientY;
 });
 $("#stationSelection").addEventListener("pointerup", event => {
   if (sheetDragStart === null) return;
   const moved = event.clientY - sheetDragStart; sheetDragStart = null;
-  if (Math.abs(moved) > 36) setSheetCollapsed(moved > 0);
+  if (Math.abs(moved) < 36) return;
+  const current = SHEET_STATES.indexOf($("#stationSelection").dataset.sheet);
+  setSheetState(SHEET_STATES[Math.max(0, Math.min(2, current + (moved < 0 ? 1 : -1)))]);
 });
 const sheetResizeObserver = new ResizeObserver(entries => {
   const height = $("#stationSelection").getBoundingClientRect().height;
@@ -892,7 +906,7 @@ let mapsKey = "";
 try {
   mapsKey = sessionStorage.getItem("chargeflow.maps.key") || "";
 } catch {}
-$("#openMapSettings").onclick = () => { location.hash = "settings"; $("#mapSettings").open = true; };
+$("#openMapSettings").onclick = () => { location.hash = "settings/maps"; $("#mapSettings").open = true; };
 $("#mapsKeyForm").onsubmit = (event) => {
   event.preventDefault();
   const key = $("#mapsApiKey").value.trim();
@@ -1497,6 +1511,7 @@ function renderAccount() {
   if (!card) return;
   card.hidden = localPreview || !backendConfig.authRequired;
   $("#accountLabel").hidden = card.hidden;
+  document.querySelector('[data-settings-link="account"]')?.toggleAttribute("hidden", card.hidden);
   if (card.hidden) return;
   const html = account.signedIn
     ? `<div class="settings-heading">${icon("shield")}<h2>Signed in</h2></div><p>${account.phone || "Phone account"} · your charges and receipts are saved to this number on every device.</p><button class="secondary-button" id="signOutButton" type="button">Sign out</button><button class="text-link danger-link" id="deleteAccountButton" type="button">Delete my account and data</button>`
@@ -1830,6 +1845,8 @@ $("#previewMotion").onchange = (event) => {
 // permanent = the 3D view cannot work here (no WebGL, lost context). A slow load is not permanent.
 function useFallback(permanent = true) {
   clearTimeout(modelPosterTimer);
+  // The still picture is only for phones that cannot show 3D; while 3D loads, a spinner shows instead.
+  $("#vehicleStage").classList.add("poster-mode");
   if (permanent !== false) $("#stageLoading").hidden = true;
   $("#vehicleFallback").style.opacity = "1";
   $("#vehicleCanvas").classList.remove("model-ready");
@@ -1849,7 +1866,7 @@ function useFallback(permanent = true) {
         // fades create double outlines as the continuously rotating model moves.
         clearTimeout(stageLoadingTimer);
         if (ready) $("#stageLoading").hidden = true;
-        else stageLoadingTimer = setTimeout(() => { $("#stageLoading").hidden = false; }, 600);
+        else stageLoadingTimer = setTimeout(() => { $("#stageLoading").hidden = false; }, 120);
         $("#vehicleFallback").style.opacity = "1";
         clearTimeout(posterHideTimer);
         // The picture stays under the fading-in 3D view and is removed once the 3D view is fully opaque.
@@ -2045,6 +2062,49 @@ $("#chargingAlerts").addEventListener("change", async (event) => {
   toast("Charging alerts are on.");
 });
 $("#openTripPlanner").onclick = openTrip;
+// Settings is a short menu; each section opens as its own page with a back arrow (#settings/<section>).
+const SETTINGS_SECTIONS = {
+  Account: ["account", "shield", "Phone sign-in and your data"],
+  Appearance: ["appearance", "settings", "Language, style and motion"],
+  "Charging & payment": ["charging", "bolt", "Defaults, budgets, wallet and alerts"],
+  Advanced: ["maps", "map", "Google Maps search"],
+  About: ["about", "receipt", "Help, privacy, terms and credits"],
+};
+(function buildSettingsMenu() {
+  const root = $("#page-settings .garage-settings");
+  const labels = [...root.querySelectorAll(":scope > h2.list-label")];
+  const menu = document.createElement("nav");
+  menu.className = "settings-group settings-menu";
+  menu.setAttribute("aria-label", "Settings sections");
+  for (const label of labels) {
+    const title = label.textContent.trim();
+    const [id, iconName, summary] = SETTINGS_SECTIONS[title] || [title.toLowerCase().replace(/\W+/g, "-"), "settings", ""];
+    const section = document.createElement("section");
+    section.className = "settings-sub";
+    section.dataset.sub = id;
+    section.hidden = true;
+    section.innerHTML = `<header class="settings-sub-head"><a href="#settings" class="icon-button" aria-label="Back to Settings">${icon("back")}</a><h2>${title}</h2></header>`;
+    label.before(section);
+    // Move the heading and everything up to the next heading into the section.
+    let node = label;
+    while (node && !(node !== label && node.matches?.("h2.list-label, .app-version"))) { const following = node.nextElementSibling; section.append(node); node = following; }
+    const link = document.createElement("a");
+    link.className = "settings-row settings-link";
+    link.href = `#settings/${id}`;
+    link.dataset.settingsLink = id;
+    link.innerHTML = `<span class="settings-link-icon">${icon(iconName)}</span><span>${title}<small>${summary}</small></span><span class="settings-chevron" aria-hidden="true">›</span>`;
+    if (id === "account") link.hidden = label.hidden;
+    menu.append(link);
+  }
+  root.prepend(menu);
+})();
+function showSettingsPage(id) {
+  const known = id && $(`.settings-sub[data-sub="${id}"]`);
+  $$(".settings-sub").forEach((section) => { section.hidden = section.dataset.sub !== id; });
+  $(".settings-menu").hidden = !!known;
+  $(".app-version").hidden = !!known;
+  $("#page-settings").toggleAttribute("data-sub", !!known);
+}
 // Home: "Where to charge?" opens the station search; the suggestion tiles are one-tap shortcuts.
 $("#whereTo").addEventListener("click", (event) => {
   event.preventDefault();
