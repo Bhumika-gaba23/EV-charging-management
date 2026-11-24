@@ -39,8 +39,12 @@ def backup_config():
     for name in ('LITESTREAM_ACCESS_KEY_ID','LITESTREAM_SECRET_ACCESS_KEY'):
         if not os.getenv(name,'').strip():raise SystemExit(f'{name} is required when PLUGGO_BACKUP_URL is set')
         env[name]=os.environ[name].strip()
-    endpoint=os.getenv('PLUGGO_BACKUP_ENDPOINT','').strip()
-    if endpoint and not re.fullmatch(r'https?://[A-Za-z0-9.\-]+(:\d+)?/?',endpoint):raise SystemExit('PLUGGO_BACKUP_ENDPOINT must be a URL such as https://<account>.r2.cloudflarestorage.com')
+    endpoint=os.getenv('PLUGGO_BACKUP_ENDPOINT','').strip().strip('"\'')
+    # Cloudflare's bucket page shows the endpoint with the bucket name after it
+    # (https://<account>.r2.cloudflarestorage.com/pluggo-backup); only the host part is needed.
+    match=re.fullmatch(r'(https?://[A-Za-z0-9.\-]+(?::\d+)?)(/[A-Za-z0-9._\-/]*)?',endpoint) if endpoint else None
+    if endpoint and not match:raise SystemExit('PLUGGO_BACKUP_ENDPOINT must be a URL such as https://<account>.r2.cloudflarestorage.com')
+    if match:endpoint=match.group(1)
     lines=['dbs:',f'  - path: {db_path}','    replicas:',f'      - url: {url}','        sync-interval: 1s','        snapshot-interval: 6h','        retention: 72h']
     if endpoint:lines+=[f'        endpoint: {endpoint.rstrip("/")}','        region: auto','        force-path-style: true']
     path=Path('/tmp/pluggo-litestream.yml');path.write_text('\n'.join(lines)+'\n');path.chmod(0o600)
@@ -65,7 +69,9 @@ try:
     litestream_config=backup_config()
     if litestream_config:
         # A failed restore must stop the boot: starting empty would hide the saved data.
-        subprocess.run(['litestream','restore','-config',str(litestream_config),'-if-db-not-exists','-if-replica-exists',str(db_path)],env=env,check=True)
+        if subprocess.run(['litestream','restore','-config',str(litestream_config),'-if-db-not-exists','-if-replica-exists',str(db_path)],env=env).returncode:
+            raise SystemExit('Backup restore failed. Check LITESTREAM_ACCESS_KEY_ID / LITESTREAM_SECRET_ACCESS_KEY (an R2 token with '
+                             'Object Read & Write on the bucket), PLUGGO_BACKUP_URL (s3://<bucket>/pluggo) and PLUGGO_BACKUP_ENDPOINT.')
         env['PLUGGO_BACKUP']='litestream'
         print(f'Backups on: {db_path} is restored from and replicated to {os.environ["PLUGGO_BACKUP_URL"].strip()}',flush=True)
     else:print('Backups off: set PLUGGO_BACKUP_URL to keep data across restarts',flush=True)
