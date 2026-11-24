@@ -30,6 +30,7 @@
     "Swipe to choose a vehicle": "वाहन चुनने के लिए स्वाइप करें", "Select your vehicle": "अपना वाहन चुनें",
     "Car": "कार", "Scooter": "स्कूटर", "Bike": "बाइक", "Cargo": "कार्गो",
     "Find a charger": "चार्जर खोजें",
+    "Where to charge?": "कहाँ चार्ज करें?", "Now": "अभी", "Suggestions": "सुझाव", "Charge": "चार्ज", "Book": "बुक करें", "Trip": "यात्रा", "Wallet": "वॉलेट",
 
     // Stations
     "Charging stations": "चार्जिंग स्टेशन", "Back to Home": "होम पर वापस",

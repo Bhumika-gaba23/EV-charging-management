@@ -1,0 +1,287 @@
+/* ===========================================================================================
+ * Pluggo "Uber" design layer (docs: DESIGN-uber.md, adapted to a black canvas).
+ * Black page, flat grey cards (16 px), pill buttons and chips (999 px), bold sentence-case
+ * headings in Inter, no glass, blur, gradients or glow. Loaded last; everything is scoped under
+ * html[data-ui="uber"] with two ID-strength :not() guards so it outranks the older layers.
+ * ========================================================================================= */
+@font-face {
+  font-family: Inter;
+  src: url("assets/fonts/inter-variable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* ---- Tokens ------------------------------------------------------------------------------- */
+:root[data-ui="uber"] {
+  --u-radius: 16px;
+  --u-pill: 999px;
+  --u-font: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --u-green: #06c167;
+  --u-red: #e11900;
+}
+:root[data-ui="uber"][data-style="dark"] {
+  --u-bg: #000000;          /* page */
+  --u-card: #1a1a1a;        /* cards on the page */
+  --u-raised: #2e2e2e;      /* chips, inputs, secondary pills, cards inside sheets */
+  --u-pressed: #3a3a3a;
+  --u-sheet: #141414;       /* bottom sheets and dialogs */
+  --u-line: #2a2a2a;        /* dividers */
+  --u-text: #ffffff;
+  --u-body: #cbcbcb;        /* secondary text */
+  --u-mute: #8d8d8d;        /* fine print, inactive tabs */
+  --u-primary: #ffffff;     /* the one conversion colour: a white pill on black */
+  --u-on-primary: #000000;
+  --u-shadow: 0 4px 16px rgb(0 0 0 / 60%);
+  color-scheme: dark;
+}
+:root[data-ui="uber"][data-style="light"] {
+  --u-bg: #ffffff;
+  --u-card: #f3f3f3;
+  --u-raised: #e8e8e8;
+  --u-pressed: #e2e2e2;
+  --u-sheet: #ffffff;
+  --u-line: #e2e2e2;
+  --u-text: #000000;
+  --u-body: #5e5e5e;
+  --u-mute: #8a8a8a;
+  --u-primary: #000000;
+  --u-on-primary: #ffffff;
+  --u-shadow: 0 4px 16px rgb(0 0 0 / 16%);
+  color-scheme: light;
+}
+/* Older layers read these names; point them at the new palette and switch glass off. */
+:root[data-ui="uber"][data-style] {
+  --s-bg: var(--u-bg); --s-surface: var(--u-card); --s-surface-2: var(--u-raised); --s-raised: var(--u-card);
+  --s-line: var(--u-line); --s-text: var(--u-text); --s-muted: var(--u-body); --s-primary: var(--u-primary);
+  --s-on-primary: var(--u-on-primary); --s-shadow: none;
+  --glass-blur: none; --glass-sheen: transparent; --glass-edge: transparent; --glass-inner: none;
+  --band-std: var(--u-body); --star: var(--u-text);
+}
+
+:root[data-ui="uber"]:not(#u):not(#v) {
+  /* ---- Page, type and the end of glass --------------------------------------------------- */
+  & body {
+    background: var(--u-bg) !important;
+    color: var(--u-text);
+    font-family: var(--u-font) !important;
+    -webkit-font-smoothing: antialiased;
+    letter-spacing: 0;
+  }
+  & :is(button, input, select, textarea) { font-family: inherit; letter-spacing: 0; }
+  & .ambient, & .glass-nav::before, & .nav-lens { display: none !important; }
+  & *, & *::before, & *::after { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
+  & :is(h1, h2, h3) { font-family: var(--u-font); letter-spacing: 0 !important; color: var(--u-text); }
+  & .app-title h1 { font-size: 36px; line-height: 44px; font-weight: 700; margin: 4px 0 20px; }
+  & :is(.lower-heading h2, .list-label, .settings-heading h2) {
+    font-size: 20px; line-height: 28px; font-weight: 700; color: var(--u-text) !important; letter-spacing: 0; text-transform: none;
+  }
+  & .list-label { margin: 28px 4px 10px; }
+  & :is(.eyebrow, .dialog-eyebrow, #dialogEyebrow) { letter-spacing: .06em; color: var(--u-mute) !important; font-weight: 600; font-size: 11px; }
+  & :is(p, small, .dialog-subtitle) { letter-spacing: 0; }
+  & .dialog-subtitle { color: var(--u-body) !important; font-size: 14px; line-height: 20px; }
+
+  /* ---- Header and the bottom tab bar ------------------------------------------------------ */
+  & .app-header {
+    background: var(--u-bg) !important; border: 0 !important; box-shadow: none !important;
+  }
+  & .brand { color: var(--u-text) !important; font-weight: 800; letter-spacing: -.02em; }
+  & .brand-dot { color: var(--u-text) !important; }
+  & .app-header .location-label { color: var(--u-body); background: var(--u-raised); padding: 8px 12px; margin-right: 0; }
+  & .nav-position { transform: none !important; }
+  & .glass-nav,
+  & body[data-page="stations"] .glass-nav {
+    position: fixed !important; left: 0 !important; right: 0 !important; bottom: 0 !important; top: auto !important;
+    width: 100% !important; max-width: none !important; margin: 0 !important; transform: none !important;
+    border-radius: 0 !important; border: 0 !important; border-top: 1px solid var(--u-line) !important;
+    background: var(--u-bg) !important; box-shadow: none !important;
+    padding: 6px 4px calc(6px + env(safe-area-inset-bottom)) !important; min-height: 64px; z-index: 50;
+  }
+  & .glass-nav > a,
+  & body[data-page="stations"] .glass-nav > a {
+    color: var(--u-mute) !important; background: none !important; border-radius: 12px !important;
+    font-size: 11px !important; font-weight: 500; gap: 4px; min-height: 52px;
+  }
+  & .glass-nav > a[aria-current],
+  & body[data-page="stations"] .glass-nav > a[aria-current] { color: var(--u-text) !important; font-weight: 700; }
+  & .glass-nav > a .icon { width: 24px; height: 24px; stroke-width: 1.9; }
+  & .glass-nav > a[aria-current] .icon { stroke-width: 2.4; }
+  & main { padding-bottom: calc(96px + env(safe-area-inset-bottom)); }
+
+  /* ---- Cards: flat grey, 16 px, no border, no shadow -------------------------------------- */
+  & :is(.home-widget, #page-home .home-station, .session-card, .summary-stat, .empty-state, .settings-card, .settings-group,
+       .garage-vehicles, .live-banner, .activity-card, .week-card, .booking-card, .map-empty, .account-card) {
+    background: var(--u-card) !important; background-image: none !important;
+    border: 0 !important; outline: 0 !important; box-shadow: none !important; border-radius: var(--u-radius) !important;
+  }
+  & .home-widget { padding: 16px !important; }
+  & .home-widget .widget-heading { color: var(--u-body); }
+  & .home-widget .widget-value strong { font-weight: 700; letter-spacing: -.01em; }
+  & progress { accent-color: var(--u-text); }
+  & .vehicle-wallet, & .vehicle-stage { background: transparent !important; border: 0 !important; box-shadow: none !important; }
+
+  /* Settings and list groups: rows divided by hairlines, like a native list. */
+  & .settings-group { padding: 0 !important; overflow: hidden; }
+  & .settings-row { border-color: var(--u-line) !important; min-height: 60px; }
+  & .settings-row > span:first-child { font-weight: 500; }
+  & .settings-row small { color: var(--u-body) !important; }
+  & .settings-chevron { color: var(--u-mute); }
+  & .danger-row span, & .danger-link { color: var(--u-red) !important; }
+  & .range-row { display: none !important; }  /* the glass slider: nothing to tune without glass */
+
+  /* ---- Buttons ---------------------------------------------------------------------------- */
+  & :is(.primary-button, .home-cta) {
+    background: var(--u-primary) !important; background-image: none !important; color: var(--u-on-primary) !important;
+    border: 0 !important; box-shadow: none !important; border-radius: var(--u-pill) !important;
+    min-height: 52px; font-size: 16px !important; font-weight: 600 !important; letter-spacing: 0 !important;
+  }
+  & :is(.primary-button, .home-cta)::before, & :is(.primary-button, .home-cta)::after,
+  & .secondary-button::before, & .secondary-button::after { display: none !important; }
+  & :is(.primary-button, .home-cta):active { transform: scale(.985); filter: brightness(.9); }
+  & :is(.primary-button, .home-cta) .icon { color: currentColor; }
+  & :is(.primary-button, .home-cta)[disabled] { opacity: .35; }
+  & .secondary-button {
+    background: var(--u-raised) !important; background-image: none !important; color: var(--u-text) !important;
+    border: 0 !important; box-shadow: none !important; border-radius: var(--u-pill) !important; font-weight: 500 !important;
+  }
+  & .secondary-button:active { background: var(--u-pressed) !important; }
+  & .text-link { color: var(--u-text) !important; font-weight: 600; }
+  & :is(.icon-button, .map-back-button, .map-locate) {
+    background: var(--u-raised) !important; color: var(--u-text) !important; border: 0 !important; box-shadow: none !important;
+  }
+
+  /* Chips and segmented controls: grey pill, the selected one turns white. */
+  & :is(.filter-chip, .station-source, .summary-period, .style-switch) {
+    background: var(--u-raised) !important; background-image: none !important; border: 0 !important; box-shadow: none !important;
+  }
+  & :is(.station-source, .summary-period, .style-switch) { padding: 4px !important; }
+  & :is(.station-source button, .summary-period button, .style-switch button) {
+    background: transparent !important; color: var(--u-body) !important; font-weight: 600; border: 0 !important; box-shadow: none !important;
+  }
+  & :is(.station-source button[aria-pressed="true"], .summary-period button[aria-pressed="true"], .style-switch button[aria-checked="true"], .filter-chip[aria-pressed="true"]) {
+    background: var(--u-primary) !important; color: var(--u-on-primary) !important;
+  }
+  & .filter-chip { color: var(--u-text) !important; font-weight: 600 !important; }
+
+  /* Inputs: filled grey, no border. */
+  & :is(.search-field, .phone-field, .key-input input, .field-select, .field-text, #codeInput, #chargerCode, .code-input input) {
+    background: var(--u-raised) !important; border: 0 !important; box-shadow: none !important; color: var(--u-text) !important;
+  }
+  & :is(.field-select, .field-text) { border-radius: 10px !important; }
+  & .select-row select { background: var(--u-raised) !important; border: 0 !important; color: var(--u-text) !important; font-weight: 600; }
+  & input[type="range"] { accent-color: var(--u-text); }
+  & input[type="checkbox"][role="switch"] { accent-color: var(--u-green); }
+
+  /* ---- Stations map: floating controls are solid cards with a small drop -------------------- */
+  & #page-stations :is(.search-field, .map-back-button, .map-locate, .filter-chip, .station-source, .location-message,
+       .real-station-notice, .map-network-status, .leaflet-control-zoom) {
+    background: var(--u-card) !important; background-image: none !important; border: 0 !important;
+    box-shadow: var(--u-shadow) !important; color: var(--u-text) !important;
+  }
+  & #page-stations .station-source button[aria-pressed="true"],
+  & #page-stations .filter-chip[aria-pressed="true"] { background: var(--u-primary) !important; color: var(--u-on-primary) !important; }
+  & #page-stations :is(.station-selection, .map-empty) {
+    background: var(--u-sheet) !important; background-image: none !important; border: 0 !important; outline: 0 !important;
+    border-radius: 20px !important; box-shadow: var(--u-shadow) !important;
+  }
+  & .sheet-station-icon, & .session-symbol { background: var(--u-raised) !important; color: var(--u-text) !important; border: 0 !important; }
+  & .station-sheet-stats { border-color: var(--u-line) !important; }
+  & .station-sheet-stats dt { color: var(--u-mute) !important; }
+  & .station-sheet-stats dd { font-weight: 700; }
+
+  /* ---- Sheets and dialogs ----------------------------------------------------------------- */
+  & :is(.flow-dialog, #flowDialog, .vehicle-menu, #vehicleMenu) {
+    background: var(--u-sheet) !important; background-image: none !important; border: 0 !important; outline: 0 !important;
+    box-shadow: 0 -8px 32px rgb(0 0 0 / 50%) !important; color: var(--u-text);
+  }
+  & .flow-dialog { border-radius: 20px 20px 0 0 !important; }
+  & .flow-dialog::backdrop { background: rgb(0 0 0 / 62%) !important; }
+  & #dialogScrim { background: rgb(0 0 0 / 62%) !important; }
+  & #dialogTitle { font-size: 28px; line-height: 34px; font-weight: 700; }
+  & .dialog-actions { background: var(--u-sheet) !important; border-top: 1px solid var(--u-line) !important; }
+  & .dialog-actions :is(.primary-button, .secondary-button) { min-height: 56px; border-radius: 14px !important; font-size: 17px !important; }
+  & #closeDialog { background: var(--u-raised) !important; border: 0 !important; color: var(--u-text) !important; }
+  /* Cards inside a sheet sit one step lighter than the sheet. */
+  & .flow-dialog :is(.bill-summary, .detail-tariff, .charge-ring, .receipt-details, .review-list blockquote, .trip-stops li, .green-grid span) {
+    background: var(--u-raised) !important; background-image: none !important; border: 0 !important; box-shadow: none !important;
+    border-radius: 14px !important;
+  }
+  & .bill-summary { border-radius: 14px !important; }
+  & .bill-row { border-color: rgb(255 255 255 / 8%) !important; }
+  & .bill-row.total { font-weight: 700; }
+  & .connector-choice {
+    background: var(--u-raised) !important; border: 2px solid transparent !important; border-radius: 14px !important; box-shadow: none !important;
+  }
+  & .connector-choice:has(:checked) { border-color: var(--u-text) !important; }
+  & .connector-choice.unavailable { opacity: .45; }
+  & .connector-choice input[type="radio"] { accent-color: var(--u-text); }
+  & .amenities .pill { background: var(--u-raised); border: 0 !important; color: var(--u-body); font-weight: 500; }
+  & .dialog-links .text-link, & #scanConnector { background: var(--u-raised) !important; border: 0 !important; color: var(--u-text) !important; }
+  & .dialog-note { background: var(--u-raised) !important; border: 0 !important; color: var(--u-body) !important; border-radius: 12px !important; }
+  & .receipt-symbol { background: var(--u-raised) !important; border: 0 !important; color: var(--u-text) !important; }
+  & .vehicle-menu > button { background: transparent !important; }
+  & .vehicle-menu > button[aria-checked="true"] { background: var(--u-raised) !important; }
+
+  /* ---- Sessions ------------------------------------------------------------------------- */
+  & .live-banner { background: var(--u-primary) !important; color: var(--u-on-primary) !important; }
+  & .live-banner :is(small, span, strong) { color: var(--u-on-primary) !important; }
+  & .live-pulse { background: var(--u-green) !important; }
+  & .session-card .eyebrow { color: var(--u-body) !important; }
+  & .week-fill { fill: var(--u-text) !important; }
+  & .week-peak, & .week-day { fill: var(--u-body) !important; }
+  & .ring-energy { --ring: #ffffff; }
+  & .month-label { color: var(--u-body); font-weight: 700; text-transform: none; letter-spacing: 0; }
+
+  /* ---- Feature pieces (features.css) in monochrome ----------------------------------------- */
+  & .band-chip.band-off-peak { background: var(--u-primary); color: var(--u-on-primary) !important; border-color: var(--u-primary); }
+  & .band-chip.band-standard { color: var(--u-body) !important; border-color: var(--u-pressed); }
+  & .band-chip.band-peak { background: var(--u-pressed); color: var(--u-text) !important; border-color: var(--u-pressed); }
+  & .tariff-tip { background: var(--u-raised); color: var(--u-text); border-radius: 14px; }
+  & .tariff-tip .icon, & .green-card .week-head .icon { color: var(--u-green); }
+  & .duration-choice span { background: var(--u-raised); border: 0; }
+  & .duration-choice input:checked + span { background: var(--u-primary); color: var(--u-on-primary); }
+  & .booking-icon, & .trip-index { background: var(--u-raised); color: var(--u-text); }
+  & .issue-flag { color: #ffc043 !important; }
+  & .availability-dot:not(.busy):not(.unknown), & .status-pip { background: var(--u-green) !important; }
+
+  /* ---- Toast -------------------------------------------------------------------------------- */
+  & #toast, & .toast {
+    background: var(--u-primary) !important; color: var(--u-on-primary) !important; border: 0 !important;
+    border-radius: 14px !important; box-shadow: var(--u-shadow) !important; font-weight: 500;
+  }
+  & .backend-banner { background: var(--u-card) !important; border: 0 !important; }
+}
+
+/* ---- Small fixes found in review --------------------------------------------------------------- */
+:root[data-ui="uber"]:not(#u):not(#v) {
+  & .home-vehicle-picker { font-weight: 700 !important; font-size: 26px !important; letter-spacing: 0 !important; }
+  & .vehicle-picker-caption { color: var(--u-body) !important; font-weight: 500; }
+  & .station-sheet-actions :is(.primary-button, .secondary-button) { font-size: 16px !important; min-height: 50px; }
+  & .station-sheet-heading h2 { font-weight: 700; }
+}
+
+/* ---- New Home pieces: "Where to charge?" bar and suggestion tiles ------------------------------ */
+:root[data-ui="uber"]:not(#u):not(#v) {
+  & .where-to {
+    display: flex; align-items: center; gap: 12px; min-height: 56px; margin: 4px 0 18px; padding: 0 8px 0 18px;
+    border-radius: var(--u-pill); background: var(--u-raised); color: var(--u-text); text-decoration: none;
+    font-size: 18px; font-weight: 600;
+  }
+  & .where-to > .icon { width: 22px; height: 22px; flex: none; }
+  & .where-to > span:nth-of-type(1) { flex: 1; }
+  & .where-to-chip {
+    display: inline-flex; align-items: center; gap: 6px; padding: 9px 14px; border-radius: var(--u-pill);
+    background: var(--u-card); font-size: 14px; font-weight: 600;
+  }
+  & .where-to-chip .icon { width: 15px; height: 15px; }
+  & .where-to:active { background: var(--u-pressed); }
+  & .suggestions { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 2px 0 26px; }
+  & .suggestion {
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+    min-height: 88px; padding: 12px 4px; border: 0; border-radius: 14px; background: var(--u-card);
+    color: var(--u-text); font: 600 13px/16px var(--u-font); cursor: pointer;
+  }
+  & .suggestion .icon { width: 28px; height: 28px; stroke-width: 1.7; }
+  & .suggestion:active { background: var(--u-raised); }
+  & .suggestion:focus-visible, & .where-to:focus-visible { outline: 2px solid var(--u-text); outline-offset: 2px; }
+}

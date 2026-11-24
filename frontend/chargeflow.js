@@ -676,7 +676,7 @@ function applyAppStyle(style) {
   if (!["dark", "light"].includes(style)) style = "dark";
   document.documentElement.dataset.style = style;
   try { localStorage.setItem("pluggo.style", style); } catch {}
-  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", style === "light" ? "#f4f4f6" : "#0b0c0e");
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", style === "light" ? "#ffffff" : "#000000");
   document.querySelectorAll("[data-app-style]").forEach(option => option.setAttribute("aria-checked", String(option.dataset.appStyle === style)));
   sceneController?.setShadowStrength(shadowStrength());
 }
@@ -1926,6 +1926,21 @@ $("#chargingAlerts").addEventListener("change", async (event) => {
   toast("Charging alerts are on.");
 });
 $("#openTripPlanner").onclick = openTrip;
+// Home: "Where to charge?" opens the station search; the suggestion tiles are one-tap shortcuts.
+$("#whereTo").addEventListener("click", (event) => {
+  event.preventDefault();
+  location.hash = "stations";
+  setTimeout(() => $("#stationSearch")?.focus(), 350);
+});
+document.querySelectorAll("[data-quick]").forEach((tile) => tile.addEventListener("click", () => {
+  const nearest = () => stations.filter((s) => compatible(s, state.vehicle)).sort((a, b) => distance(a, origin) - distance(b, origin))[0];
+  ({
+    charge: () => $("#homeStartCharging").click(),
+    book: () => { const station = nearest(); if (station) openBooking(station); else toast("No Pluggo station fits your vehicle yet."); },
+    trip: openTrip,
+    wallet: () => localPreview ? toast("The wallet needs the live Pluggo app.") : $("#walletButton").click(),
+  })[tile.dataset.quick]();
+}));
 document.addEventListener("click", async (event) => {
   const start = event.target.closest("[data-booking-start]");
   if (start) {

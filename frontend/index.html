@@ -1,12 +1,12 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-ui="uber">
   <head>
     <meta charset="utf-8" />
     <meta
       name="viewport"
       content="width=device-width,initial-scale=1,viewport-fit=cover"
     />
-    <meta name="theme-color" content="#0b0c0e" />
+    <meta name="theme-color" content="#000000" />
     <meta
       name="description"
       content="Pluggo — smart EV charging for India. Find a compatible charger, charge within your budget and pay in the app."
@@ -20,6 +20,8 @@
     <link rel="stylesheet" href="account.css?v=20261123-legal1" />
     <link rel="stylesheet" href="app-shell.css?v=20261123-stations1" />
     <link rel="stylesheet" href="features.css?v=20261124-features1" />
+    <link rel="preload" href="assets/fonts/inter-variable.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="stylesheet" href="uber.css?v=20261124-uber2" />
     <script>
       // Apply the saved style and glass level before first paint so the page never flashes the wrong look.
       (function () {
@@ -30,7 +32,7 @@
         document.documentElement.dataset.style = style;
         document.documentElement.style.setProperty("--glass-t", (glass / 100).toFixed(2));
         var meta = document.querySelector('meta[name="theme-color"]');
-        if (meta) meta.content = style === "light" ? "#f4f4f6" : "#0b0c0e";
+        if (meta) meta.content = style === "light" ? "#ffffff" : "#000000";
       })();
     </script>
     <script type="importmap">
@@ -94,6 +96,7 @@
     <aside id="backendBanner" class="backend-banner" role="status"><span id="backendMessage">Connecting to the local charging server…</span><button id="retryBackend" type="button">Retry</button></aside>
     <main id="main" tabindex="-1">
       <section id="page-home" class="page active" aria-label="Home">
+        <a href="#stations" class="where-to" id="whereTo"><i data-icon="search"></i><span>Where to charge?</span><span class="where-to-chip"><i data-icon="bolt"></i>Now</span></a>
         <div class="home-hero">
           <div class="hero-copy home-vehicle-heading"><div><p class="vehicle-picker-caption">Pick your vehicle</p><details id="vehicleDropdown" class="vehicle-dropdown"><summary class="home-vehicle-picker" aria-label="Pick your vehicle" aria-haspopup="menu" aria-controls="vehicleMenu" aria-expanded="false"><span id="selectedVehicleName" aria-live="polite">Tesla Model 3</span><span aria-hidden="true">⌄</span></summary><div id="vehicleMenu" class="vehicle-menu" role="menu" aria-label="Vehicles"><button type="button" role="menuitemradio" aria-checked="true" data-choose-vehicle="car"><i data-icon="car"></i><span><strong>Tesla Model 3</strong><small>Electric car · 40 kWh</small></span><span class="vehicle-option-check" aria-hidden="true">✓</span></button><button type="button" role="menuitemradio" aria-checked="false" data-choose-vehicle="scooter"><i data-icon="scooter"></i><span><strong>Urban Scooter</strong><small>Electric scooter · 3 kWh</small></span><span class="vehicle-option-check" aria-hidden="true">✓</span></button><button type="button" role="menuitemradio" aria-checked="false" data-choose-vehicle="bike"><i data-icon="bike"></i><span><strong>Concept Bike</strong><small>Electric bike · 5 kWh</small></span><span class="vehicle-option-check" aria-hidden="true">✓</span></button><button type="button" role="menuitemradio" aria-checked="false" data-choose-vehicle="cargo"><i data-icon="cargo"></i><span><strong>Pluggo Cargo</strong><small>Delivery three-wheeler · 20 kWh</small></span><span class="vehicle-option-check" aria-hidden="true">✓</span></button></div></details></div><a class="icon-button home-map-shortcut" href="#stations" aria-label="Open nearby station map"><i data-icon="map"></i></a></div>
           <article class="vehicle-wallet" aria-label="Your selected vehicle">
@@ -127,6 +130,8 @@
         </div>
         <div class="home-widgets" aria-label="Selected vehicle information"><article class="home-widget battery-widget" aria-labelledby="homeBatteryLabel"><div class="widget-heading"><i data-icon="battery"></i><h2 id="homeBatteryLabel">Battery</h2></div><div class="widget-value"><strong id="homeBatteryValue">25<span>%</span></strong><small id="homeBatteryCapacity">10 of 40 kWh</small></div><progress id="homeBatteryProgress" max="100" value="25" aria-label="Battery level">25%</progress></article><article class="home-widget power-widget" aria-labelledby="homePowerLabel"><div class="widget-heading"><i data-icon="bolt"></i><h2 id="homePowerLabel">Estimated range</h2></div><div class="widget-value"><strong id="homePowerValue">0<span> kW</span></strong></div><p id="homePowerStatus">Up to 50 kW</p></article></div>
         <button type="button" id="homeStartCharging" class="primary-button home-cta"><span id="homeCtaLabel">Start charging</span> <i data-icon="bolt"></i></button>
+        <div class="lower-heading"><h2>Suggestions</h2></div>
+        <div class="suggestions"><button type="button" class="suggestion" data-quick="charge"><i data-icon="bolt"></i><span>Charge</span></button><button type="button" class="suggestion" data-quick="book"><i data-icon="calendar"></i><span>Book</span></button><button type="button" class="suggestion" data-quick="trip"><i data-icon="route"></i><span>Trip</span></button><button type="button" class="suggestion" data-quick="wallet"><i data-icon="wallet"></i><span>Wallet</span></button></div>
         <div id="homeBooking" class="home-booking" aria-live="polite" hidden></div>
         <div class="lower-heading"><h2>Nearest station</h2><a href="#stations" class="text-link">View map ↗</a></div>
         <div id="homeStations" class="home-stations"></div>
@@ -261,7 +266,7 @@
       </p></noscript
     >
     <script src="vendor/leaflet.js"></script>
-    <script src="i18n.js?v=20261118-hi5"></script>
-    <script src="chargeflow.js?v=20261124-features1" type="module"></script>
+    <script src="i18n.js?v=20261124-uber1"></script>
+    <script src="chargeflow.js?v=20261124-uber1" type="module"></script>
   </body>
 </html>
