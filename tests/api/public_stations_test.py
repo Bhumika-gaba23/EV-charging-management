@@ -10,6 +10,9 @@ import urllib.request
 
 from customer_integration import BINARY, ROOT, stop, wait_ready
 
+# Fixed base rates here; tests/api/features_test.py covers time-of-use pricing.
+os.environ.setdefault('PLUGGO_TIME_OF_USE', 'off')
+
 PORT = 18088
 DATA = json.loads((ROOT / 'database/seed/public_stations.json').read_text(encoding='utf-8'))
 

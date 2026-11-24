@@ -19,6 +19,7 @@
     <link rel="stylesheet" href="reference-layout.css?v=20261104-summary1" />
     <link rel="stylesheet" href="account.css?v=20261123-legal1" />
     <link rel="stylesheet" href="app-shell.css?v=20261123-stations1" />
+    <link rel="stylesheet" href="features.css?v=20261124-features1" />
     <script>
       // Apply the saved style and glass level before first paint so the page never flashes the wrong look.
       (function () {
@@ -126,6 +127,7 @@
         </div>
         <div class="home-widgets" aria-label="Selected vehicle information"><article class="home-widget battery-widget" aria-labelledby="homeBatteryLabel"><div class="widget-heading"><i data-icon="battery"></i><h2 id="homeBatteryLabel">Battery</h2></div><div class="widget-value"><strong id="homeBatteryValue">25<span>%</span></strong><small id="homeBatteryCapacity">10 of 40 kWh</small></div><progress id="homeBatteryProgress" max="100" value="25" aria-label="Battery level">25%</progress></article><article class="home-widget power-widget" aria-labelledby="homePowerLabel"><div class="widget-heading"><i data-icon="bolt"></i><h2 id="homePowerLabel">Estimated range</h2></div><div class="widget-value"><strong id="homePowerValue">0<span> kW</span></strong></div><p id="homePowerStatus">Up to 50 kW</p></article></div>
         <button type="button" id="homeStartCharging" class="primary-button home-cta"><span id="homeCtaLabel">Start charging</span> <i data-icon="bolt"></i></button>
+        <div id="homeBooking" class="home-booking" aria-live="polite" hidden></div>
         <div class="lower-heading"><h2>Nearest station</h2><a href="#stations" class="text-link">View map ↗</a></div>
         <div id="homeStations" class="home-stations"></div>
       </section>
@@ -138,7 +140,7 @@
         <div class="map-top-controls">
           <h1 class="visually-hidden">Stations</h1>
           <form class="stations-controls" id="stationSearchForm"><a href="#home" class="icon-button map-back-button" aria-label="Back to Home"><i data-icon="back"></i></a><label class="search-field"><i data-icon="search"></i><input id="stationSearch" placeholder="Search a station or area" type="search" aria-label="Search a station or locality" /></label><button type="button" class="map-locate" id="useLocation" aria-label="Use my location"><i data-icon="locate"></i></button></form>
-          <div class="map-chips"><div class="station-source" role="group" aria-label="Station source"><button type="button" id="demoStationSource" aria-pressed="true">Pluggo</button><button type="button" id="realStationSource" aria-pressed="false" title="Search every charger with Google Places">All chargers</button></div><button class="filter-chip" id="availableFilter" type="button" aria-pressed="false" aria-label="Available now">Available now</button><button class="primary-button real-search-button" id="realStationSearch" type="submit" form="stationSearchForm" hidden>Search here</button></div>
+          <div class="map-chips"><div class="station-source" role="group" aria-label="Station source"><button type="button" id="demoStationSource" aria-pressed="true">Pluggo</button><button type="button" id="realStationSource" aria-pressed="false" title="Search every charger with Google Places">All chargers</button></div><button class="filter-chip" id="availableFilter" type="button" aria-pressed="false" aria-label="Available now">Available now</button><button class="filter-chip" id="openTripPlanner" type="button">Plan a trip</button><button class="primary-button real-search-button" id="realStationSearch" type="submit" form="stationSearchForm" hidden>Search here</button></div>
           <div id="realStationNotice" class="real-station-notice" role="status" hidden></div>
           <div class="map-settings-footer" hidden><span id="mapModeLabel">OPENSTREETMAP</span><button id="openMapSettings" type="button" class="icon-button" aria-label="Map settings"><i data-icon="settings"></i></button></div>
         </div>
@@ -160,11 +162,13 @@
       >
         <header class="app-title"><h1>Sessions</h1></header>
         <div id="liveBanner" hidden></div>
+        <div id="sessionBooking" class="home-booking" aria-live="polite" hidden></div>
         <section class="session-overview" id="sessionOverview" aria-label="Charging summary">
           <div class="summary-heading"><h2 class="visually-hidden">Your charging overview</h2><div class="summary-period" role="group" aria-label="Summary period"><button type="button" data-summary-period="week" aria-pressed="false">Week</button><button type="button" data-summary-period="month" aria-pressed="true">Month</button><button type="button" data-summary-period="all" aria-pressed="false">All time</button></div></div>
           <p id="summaryCaption" class="summary-caption">Completed charges this month · India time</p>
           <div class="activity-card" id="sessionSummaryCards"></div>
           <div class="week-card" id="weekChart"></div>
+          <div class="week-card green-card" id="greenImpact" hidden></div>
         </section>
         <h2 class="list-label" id="sessionListLabel">History</h2>
         <div id="sessionList"></div>
@@ -195,6 +199,9 @@
             <label class="settings-row select-row" for="prefMonthlyBudget"><span>Monthly budget<small>The orange spend ring in Sessions</small></span><select id="prefMonthlyBudget" data-pref="monthlyBudget"></select></label>
             <label class="settings-row select-row" for="prefEnergyGoal"><span>Monthly energy goal<small>The blue energy ring in Sessions</small></span><select id="prefEnergyGoal" data-pref="energyGoal"></select></label>
             <label class="settings-row select-row" for="prefChargesGoal"><span>Monthly charges goal<small>The green charges ring in Sessions</small></span><select id="prefChargesGoal" data-pref="chargesGoal"></select></label>
+            <button type="button" class="settings-row" id="walletButton" hidden><span>Pluggo wallet<small id="walletSummary">No credit yet</small></span><span class="settings-chevron" aria-hidden="true">›</span></button>
+            <label class="settings-row motion-setting" for="chargingAlerts" id="alertsRow" hidden><span>Charging alerts<small>Charge complete, booking reminders and report updates</small></span><input id="chargingAlerts" type="checkbox" role="switch" /></label>
+            <button type="button" class="settings-row" id="reportsButton" hidden><span>Reported problems<small id="reportsSummary"></small></span><span class="settings-chevron" aria-hidden="true">›</span></button>
             <div class="settings-row info-row"><span>Payment methods<small>UPI, cards and netbanking, secured by Razorpay</small></span></div>
             <div class="settings-row info-row"><span>Receipts<small>Saved to your phone number when you are signed in</small></span></div>
           </div>
@@ -255,6 +262,6 @@
     >
     <script src="vendor/leaflet.js"></script>
     <script src="i18n.js?v=20261118-hi5"></script>
-    <script src="chargeflow.js?v=20261123-ocm1" type="module"></script>
+    <script src="chargeflow.js?v=20261124-features1" type="module"></script>
   </body>
 </html>

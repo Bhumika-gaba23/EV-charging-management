@@ -18,6 +18,9 @@ import urllib.request
 from customer_integration import BINARY, ROOT, stop, wait_ready
 from integrations_test import PROJECT, Fakes, make_key, token
 
+# Fixed base rates here; tests/api/features_test.py covers time-of-use pricing.
+os.environ.setdefault('PLUGGO_TIME_OF_USE', 'off')
+
 OPERATOR, CUSTOMER = '+919876543210', '+919000000001'
 PLAN = {'registration': 'OPS-1', 'capacity': 60, 'soc': 20, 'connector': 'CCS2', 'maxRate': 50, 'target': 80, 'hours': 2}
 

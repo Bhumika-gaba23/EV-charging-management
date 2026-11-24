@@ -30,4 +30,9 @@ export class CustomerApi {
   signOut() { return this.request("auth/logout",{method:"POST",body:{}}); }
   reset() { return this.request("reset",{method:"POST",body:{}}); }
   verify(value) { return this.request("verify",{method:"POST",body:value}); }
+  book(value) { return this.request("bookings",{method:"POST",body:value}); }
+  cancelBooking(id) { return this.request(`bookings/${encodeURIComponent(id)}/cancel`,{method:"POST",body:{}}); }
+  review(station,value) { return this.request(`stations/${encodeURIComponent(station)}/review`,{method:"POST",body:value}); }
+  report(value) { return this.request("reports",{method:"POST",body:value}); }
+  trip(params) { return this.request(`trip?${new URLSearchParams(params)}`); }
 }

@@ -11,6 +11,8 @@ import urllib.error
 import urllib.request
 
 ROOT=Path(__file__).resolve().parents[2]
+# Fixed base rates here; tests/api/features_test.py covers time-of-use pricing.
+os.environ.setdefault('PLUGGO_TIME_OF_USE', 'off')
 BINARY=ROOT/'build-web-demo/ev_web_api'
 class Client:
     def __init__(self,port):

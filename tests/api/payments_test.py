@@ -23,6 +23,9 @@ import urllib.request
 from customer_integration import BINARY, ROOT, Client, stop, wait_ready
 from integrations_test import KEY_ID, KEY_SECRET, PROJECT, Fakes, make_key, token
 
+# Fixed base rates here; tests/api/features_test.py covers time-of-use pricing.
+os.environ.setdefault('PLUGGO_TIME_OF_USE', 'off')
+
 PORT, FAKE_PORT = 18087, 18098
 WEBHOOK_SECRET = 'webhook-secret-value'
 OPERATOR = '+919812345678'

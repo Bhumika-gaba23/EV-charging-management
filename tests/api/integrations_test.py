@@ -18,6 +18,9 @@ import time
 
 from customer_integration import BINARY, ROOT, Client, stop, wait_ready
 
+# Fixed base rates here; tests/api/features_test.py covers time-of-use pricing.
+os.environ.setdefault('PLUGGO_TIME_OF_USE', 'off')
+
 PROJECT = 'pluggo-test'
 KEY_ID, KEY_SECRET = 'rzp_test_pluggo', 'test-secret-value'
 ORDERS = []

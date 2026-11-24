@@ -34,6 +34,8 @@ jobs:
         run: python tests/api/public_stations_test.py
       - name: OCPP 1.6J charger gateway tests
         run: python tests/api/ocpp16_test.py
+      - name: Bookings, time-of-use, ratings, reports, wallet, analytics and trip tests
+        run: python tests/api/features_test.py
 
   web-unit:
     runs-on: ubuntu-latest
@@ -43,7 +45,7 @@ jobs:
         with:
           node-version: "22"
       - name: Frontend logic tests
-        run: node --test tests/web/demo.test.mjs tests/web/session-summary.test.mjs tests/web/discovery.test.mjs tests/web/preload.test.mjs
+        run: node --test tests/web/demo.test.mjs tests/web/session-summary.test.mjs tests/web/discovery.test.mjs tests/web/preload.test.mjs tests/web/extras.test.mjs
 
   render-image:
     runs-on: ubuntu-latest

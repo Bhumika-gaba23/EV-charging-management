@@ -1,12 +1,15 @@
 #include "customer_api.hpp"
+#include "ev_system.hpp"
 #include "integrations.hpp"
 #include <sqlite3.h>
 #include <algorithm>
 #include <cctype>
 #include <chrono>
+#include <ctime>
 #include <cstdint>
 #include <cmath>
 #include <cstdlib>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <memory>
@@ -59,11 +62,37 @@ PublicDirectory publicDirectory;
 double distanceKm(double lat1,double lng1,double lat2,double lng2){constexpr double r=6371,rad=3.14159265358979323846/180;const double dlat=(lat2-lat1)*rad,dlng=(lng2-lng1)*rad;const double h=std::sin(dlat/2)*std::sin(dlat/2)+std::cos(lat1*rad)*std::cos(lat2*rad)*std::sin(dlng/2)*std::sin(dlng/2);return 2*r*std::asin(std::sqrt(std::min(1.0,h)));}
 std::unique_ptr<Razorpay> payments;
 std::int64_t amountPaise(double rupees){return static_cast<std::int64_t>(std::llround(rupees*100));}
+std::string text(const Input& value,const char* key){return value.has(key)&&value[key].t()==crow::json::type::String?std::string(value[key].s()):std::string();}
+// Time-of-use pricing in India time: off-peak nights (22:00-06:00) cost 20% less and the evening
+// peak (18:00-22:00) 20% more. A charge keeps the rate it started with. PLUGGO_TIME_OF_USE=off
+// charges every station's base rate around the clock.
+constexpr std::int64_t istOffset=19800000,dayMs=86400000;
+struct Tariff {double multiplier=1;std::string band="standard",next="standard";std::int64_t until=0;};
+bool timeOfUse(){const auto v=env("PLUGGO_TIME_OF_USE","on");return v!="off"&&v!="0"&&v!="false";}
+Tariff tariffAt(std::int64_t ms){
+ if(!timeOfUse())return {};
+ const std::int64_t local=ms+istOffset,into=(local%60000+60000)%60000,minute=((local/60000)%1440+1440)%1440;
+ auto until=[&](std::int64_t boundary){return ms-into+(boundary-minute)*60000;};
+ if(minute<360)return {0.8,"off-peak","standard",until(360)};
+ if(minute<1080)return {1.0,"standard","peak",until(1080)};
+ if(minute<1320)return {1.2,"peak","off-peak",until(1320)};
+ return {0.8,"off-peak","standard",until(1440+360)};
+}
+double rateFor(double base,const Tariff& tariff){return std::round(base*tariff.multiplier*100)/100;}
+Json tariffJson(std::int64_t ms){
+ const auto t=tariffAt(ms);Json j;j["enabled"]=timeOfUse();j["band"]=t.band;j["multiplier"]=t.multiplier;j["next"]=t.next;j["until"]=t.until?Json(t.until):Json(nullptr);
+ Json::list bands;auto add=[&](const char* band,const char* from,const char* to,double multiplier){Json b;b["band"]=band;b["from"]=from;b["to"]=to;b["multiplier"]=timeOfUse()?multiplier:1.0;bands.push_back(std::move(b));};
+ add("off-peak","22:00","06:00",0.8);add("standard","06:00","18:00",1.0);add("peak","18:00","22:00",1.2);j["bands"]=std::move(bands);return j;
+}
+// A booking holds its charger from 15 minutes before the slot until 10 minutes after it starts;
+// a driver who has not started charging by then is a no-show and the charger is released.
+constexpr std::int64_t bookingHold=15*60000,bookingGrace=10*60000;
+const std::set<std::string> reportKinds{"not-working","blocked","damaged","payment","other"};
 std::string cookieFor(const std::string& id){return "pluggo_guest="+id+"; HttpOnly; SameSite=Strict; Path=/api/customer; Max-Age=31536000"+(env("CHARGEFLOW_COOKIE_SECURE","0")=="1"?std::string("; Secure"):std::string());}
 struct Session {
- std::string id,owner,station,connector,vehicle,key,request,reason,paymentId;
- std::int64_t started=0,ended=0;double target=80,budget=300,power=0,energy=0,capacity=40,rate=18,limit=0,paid=0,refunded=0;bool settled=false;
- Json json() const {Json j;j["id"]=id;j["station"]=station;j["connector"]=connector;j["vehicle"]=vehicle;j["started"]=started;j["ended"]=ended?Json(ended):Json(nullptr);j["target"]=target;j["budget"]=budget;j["power"]=power;j["energy"]=energy;j["capacity"]=capacity;j["rate"]=rate;j["cost"]=energy*rate;j["limit"]=limit;j["currentSoc"]=25+100*energy/capacity;j["settled"]=settled;j["reason"]=reason;j["paid"]=paid;j["refunded"]=refunded;j["paymentId"]=paymentId;j["backendOwned"]=true;if(settled){j["receipt"]["id"]="INV-"+id;j["receipt"]["amountCollected"]=paid;j["receipt"]["currency"]="INR";j["receipt"]["paymentId"]=paymentId;j["receipt"]["provider"]=paymentId.empty()?"none":"razorpay";j["receipt"]["refunded"]=refunded;j["receipt"]["netCollected"]=std::max(0.0,paid-refunded);}return j;}
+ std::string id,owner,station,connector,vehicle,key,request,reason,paymentId,band="standard";
+ std::int64_t started=0,ended=0;double target=80,budget=300,power=0,energy=0,capacity=40,rate=18,limit=0,paid=0,refunded=0,walletUsed=0;bool settled=false,walletReserved=false;
+ Json json() const {Json j;j["band"]=band;j["walletUsed"]=walletUsed;j["walletReserved"]=walletReserved;if(settled)j["receipt"]["walletUsed"]=walletUsed;j["id"]=id;j["station"]=station;j["connector"]=connector;j["vehicle"]=vehicle;j["started"]=started;j["ended"]=ended?Json(ended):Json(nullptr);j["target"]=target;j["budget"]=budget;j["power"]=power;j["energy"]=energy;j["capacity"]=capacity;j["rate"]=rate;j["cost"]=energy*rate;j["limit"]=limit;j["currentSoc"]=25+100*energy/capacity;j["settled"]=settled;j["reason"]=reason;j["paid"]=paid;j["refunded"]=refunded;j["paymentId"]=paymentId;j["backendOwned"]=true;if(settled){j["receipt"]["id"]="INV-"+id;j["receipt"]["amountCollected"]=paid;j["receipt"]["currency"]="INR";j["receipt"]["paymentId"]=paymentId;j["receipt"]["provider"]=paymentId.empty()?"none":"razorpay";j["receipt"]["refunded"]=refunded;j["receipt"]["netCollected"]=std::max(0.0,paid-refunded);}return j;}
 };
 class Store {
  sqlite3* db=nullptr;Input catalog;
@@ -75,10 +104,10 @@ class Store {
   while((rc=sqlite3_step(raw))==SQLITE_ROW){Row row;for(int i=0;i<sqlite3_column_count(raw);++i){const auto text=sqlite3_column_text(raw,i);row.emplace_back(text?reinterpret_cast<const char*>(text):"");}rows.push_back(std::move(row));}
   if(rc!=SQLITE_DONE)throw std::runtime_error(sqlite3_errmsg(db));return rows;
  }
- Session fromRow(const Row& row) {const auto j=crow::json::load(row[3]);Session s;s.id=row[0];s.owner=row[1];s.key=row[2];s.request=row[4];s.station=string(j,"station");s.connector=string(j,"connector");s.vehicle=string(j,"vehicle");s.started=static_cast<std::int64_t>(j["started"].d());s.ended=j["ended"].t()==crow::json::type::Null?0:static_cast<std::int64_t>(j["ended"].d());s.target=j["target"].d();s.budget=j["budget"].d();s.power=j["power"].d();s.energy=j["energy"].d();s.capacity=j["capacity"].d();s.rate=j["rate"].d();s.limit=j["limit"].d();s.settled=j["settled"].b();s.reason=string(j,"reason");s.paid=j.has("paid")?j["paid"].d():0;s.refunded=j.has("refunded")?j["refunded"].d():0;s.paymentId=string(j,"paymentId");return s;}
+ Session fromRow(const Row& row) {const auto j=crow::json::load(row[3]);Session s;s.id=row[0];s.owner=row[1];s.key=row[2];s.request=row[4];s.station=string(j,"station");s.connector=string(j,"connector");s.vehicle=string(j,"vehicle");s.started=static_cast<std::int64_t>(j["started"].d());s.ended=j["ended"].t()==crow::json::type::Null?0:static_cast<std::int64_t>(j["ended"].d());s.target=j["target"].d();s.budget=j["budget"].d();s.power=j["power"].d();s.energy=j["energy"].d();s.capacity=j["capacity"].d();s.rate=j["rate"].d();s.limit=j["limit"].d();s.settled=j["settled"].b();s.reason=string(j,"reason");s.paid=j.has("paid")?j["paid"].d():0;s.refunded=j.has("refunded")?j["refunded"].d():0;s.paymentId=string(j,"paymentId");s.walletUsed=j.has("walletUsed")?j["walletUsed"].d():0;s.walletReserved=j.has("walletReserved")&&j["walletReserved"].b();s.band=j.has("band")?string(j,"band"):"standard";return s;}
  std::vector<Session> sessions(const std::string& owner="") {std::vector<Session> values;auto rows=query("SELECT id,owner,idem,payload,request FROM customer_sessions"+(owner.empty()?std::string():" WHERE owner=?")+" ORDER BY started DESC",owner.empty()?Row{}:Row{owner});for(const auto& row:rows)values.push_back(fromRow(row));return values;}
  void persist(const Session& s) {query("INSERT INTO customer_sessions(id,owner,idem,request,connector,started,ended,settled,payload) VALUES(?,?,?,?,?,?,NULLIF(?,''),?,?) ON CONFLICT(id) DO UPDATE SET ended=excluded.ended,settled=excluded.settled,payload=excluded.payload",{s.id,s.owner,s.key,s.request,s.connector,std::to_string(s.started),s.ended?std::to_string(s.ended):"",s.settled?"1":"0",s.json().dump()});}
- void advance() {if(mode!="clock")return;for(auto s:sessions()){if(s.ended||real(s.connector))continue;const double elapsed=std::max<std::int64_t>(0,nowMs()-s.started)/1000.;s.energy=std::min(s.limit,elapsed*s.power*speed/3600.);complete(s);persist(s);}}
+ void advance() {query("UPDATE customer_bookings SET status='no-show' WHERE status='booked' AND starts<?",{std::to_string(nowMs()-bookingGrace)});if(mode!="clock")return;for(auto s:sessions()){if(s.ended||real(s.connector))continue;const double elapsed=std::max<std::int64_t>(0,nowMs()-s.started)/1000.;s.energy=std::min(s.limit,elapsed*s.power*speed/3600.);complete(s);persist(s);}}
  void complete(Session& s) {if(s.energy+1e-9<s.limit)return;s.energy=s.limit;if(!s.ended)s.ended=mode=="clock"?s.started+static_cast<std::int64_t>(s.limit/s.power*3600000./speed):nowMs();s.reason=s.budget/s.rate<=((s.target-25)/100*s.capacity)?"Budget limit reached":"Charge target reached";}
  const Input& profile(const std::string& id) {if(!catalog["vehicles"].has(id))throw ApiError(400,"Unknown vehicle profile");return catalog["vehicles"][id];}
  bool busy(const std::string& id) {return !query("SELECT id FROM customer_sessions WHERE connector=? AND ended IS NULL",{id}).empty();}
@@ -86,6 +115,24 @@ class Store {
  Connector connector(const std::string& id) {for(const auto& station:catalog["stations"])for(const auto& c:station["connectors"])if(std::string(c["id"].s())==id)return {std::string(station["id"].s()),id,std::string(c["type"].s()),c["power"].d(),station["rate"].d(),c["available"].b()};throw ApiError(404,"Charger code not found");}
  bool compatible(const Input& vehicle,const std::string& type) {for(const auto& c:vehicle["connectors"])if(std::string(c.s())==type)return true;return false;}
  bool simulatorOnline() const {return nowMs()-lastSimulator<15000;}
+ // The driver whose booking holds this charger right now, or "" when no booking holds it.
+ std::string holder(const std::string& id){const auto now=nowMs();const auto rows=query("SELECT owner FROM customer_bookings WHERE connector=? AND status='booked' AND starts<=? AND starts>=?",{id,std::to_string(now+bookingHold),std::to_string(now-bookingGrace)});return rows.empty()?std::string():rows[0][0];}
+ void checkHold(const std::string& owner,const std::string& id){const auto h=holder(id);if(!h.empty()&&h!=owner)throw ApiError(409,"This charger is reserved for a booking. Pick another charger or book a later slot");}
+ Json upcomingBookings(const std::string& id){Json::list list;const auto now=nowMs();for(const auto& r:query("SELECT starts,ends FROM customer_bookings WHERE connector=? AND status='booked' AND ends>? AND starts<? ORDER BY starts",{id,std::to_string(now),std::to_string(now+dayMs)})){Json j;j["starts"]=std::stoll(r[0]);j["ends"]=std::stoll(r[1]);list.push_back(std::move(j));}return Json(std::move(list));}
+ Json bookingJson(const Row& r){Json j;j["id"]=r[0];j["station"]=r[1];j["connector"]=r[2];j["vehicle"]=r[3];j["starts"]=std::stoll(r[4]);j["ends"]=std::stoll(r[5]);j["status"]=r[6];j["session"]=r[7];j["created"]=std::stoll(r[8]);const auto t=tariffAt(std::stoll(r[4]));j["band"]=t.band;j["rate"]=rateFor(connector(r[2]).rate,t);return j;}
+ std::int64_t openReports(const std::string& id){return std::stoll(query("SELECT COUNT(*) FROM charger_reports WHERE connector=? AND status='open'",{id})[0][0]);}
+ std::string stationName(const std::string& id){for(const auto& s:catalog["stations"])if(std::string(s["id"].s())==id)return string(s,"name",id);return id;}
+ bool knownStation(const std::string& id){for(const auto& s:catalog["stations"])if(std::string(s["id"].s())==id)return true;return false;}
+ Json rating(const std::string& station,const std::string& owner,bool canReview){
+  const auto total=query("SELECT COUNT(*),COALESCE(AVG(rating),0) FROM customer_reviews WHERE station=?",{station});Json j;j["count"]=std::stoll(total[0][0]);j["average"]=std::round(std::stod(total[0][1])*10)/10;j["canReview"]=canReview;
+  Json::list recent;for(const auto& r:query("SELECT rating,comment,created FROM customer_reviews WHERE station=? AND comment<>'' ORDER BY created DESC LIMIT 3",{station})){Json x;x["rating"]=std::stoll(r[0]);x["comment"]=r[1];x["created"]=std::stoll(r[2]);recent.push_back(std::move(x));}j["recent"]=Json(std::move(recent));
+  const auto mine=query("SELECT rating,comment FROM customer_reviews WHERE station=? AND owner=?",{station,owner});if(!mine.empty()){j["mine"]["rating"]=std::stoll(mine[0][0]);j["mine"]["comment"]=mine[0][1];}return j;}
+ // Pluggo wallet, in paise: credits from operators (positive) and amounts used at checkout (negative).
+ std::int64_t balance(const std::string& owner){return std::max<std::int64_t>(0,std::stoll(query("SELECT COALESCE(SUM(amount),0) FROM customer_wallet WHERE owner=?",{owner})[0][0]));}
+ // Wallet credit is set aside the first time a session's bill is worked out, so the amount due
+ // never changes under an open Razorpay order. It is taken from the wallet when the session settles.
+ std::int64_t amountDue(Session& s){const auto cost=amountPaise(s.energy*s.rate);if(!s.walletReserved){s.walletUsed=std::min(balance(s.owner),cost)/100.0;s.walletReserved=true;persist(s);}return std::max<std::int64_t>(0,cost-amountPaise(s.walletUsed));}
+ void chargeWallet(const Session& s){if(s.walletUsed>0)query("INSERT OR IGNORE INTO customer_wallet(id,owner,amount,reason,session,created) VALUES(?,?,?,?,?,?)",{"use-"+s.id,s.owner,std::to_string(-amountPaise(s.walletUsed)),"Used for charging at "+stationName(s.station),s.id,std::to_string(nowMs())});}
 public:
  // Connectors wired to physical OCPP 1.6J chargers (PLUGGO_REAL_CONNECTORS). The OCPP gateway
  // reports their status; the simulator never meters them and the clock never advances them.
@@ -118,6 +165,12 @@ public:
   // Refunds issued by operators, and Razorpay webhook events already handled (each is processed once).
   query("CREATE TABLE IF NOT EXISTS customer_refunds(id TEXT PRIMARY KEY,session TEXT NOT NULL REFERENCES customer_sessions(id) ON DELETE CASCADE,amount INTEGER NOT NULL,status TEXT NOT NULL,reason TEXT NOT NULL,operator TEXT NOT NULL,created INTEGER NOT NULL)");
   query("CREATE TABLE IF NOT EXISTS razorpay_events(id TEXT PRIMARY KEY,created INTEGER NOT NULL)");
+  query("CREATE TABLE IF NOT EXISTS customer_bookings(id TEXT PRIMARY KEY,owner TEXT NOT NULL REFERENCES customer_visitors(id),station TEXT NOT NULL,connector TEXT NOT NULL,vehicle TEXT NOT NULL,starts INTEGER NOT NULL,ends INTEGER NOT NULL,status TEXT NOT NULL,session TEXT NOT NULL DEFAULT '',created INTEGER NOT NULL)");
+  query("CREATE INDEX IF NOT EXISTS customer_bookings_connector ON customer_bookings(connector,status,starts)");
+  query("CREATE TABLE IF NOT EXISTS customer_wallet(id TEXT PRIMARY KEY,owner TEXT NOT NULL REFERENCES customer_visitors(id),amount INTEGER NOT NULL,reason TEXT NOT NULL,session TEXT NOT NULL DEFAULT '',created INTEGER NOT NULL)");
+  query("CREATE TABLE IF NOT EXISTS customer_reviews(owner TEXT NOT NULL REFERENCES customer_visitors(id),station TEXT NOT NULL,rating INTEGER NOT NULL,comment TEXT NOT NULL DEFAULT '',created INTEGER NOT NULL,PRIMARY KEY(owner,station))");
+  // Reports outlive the account that filed them (owner becomes 'erased'), so operators keep the fault history.
+  query("CREATE TABLE IF NOT EXISTS charger_reports(id TEXT PRIMARY KEY,owner TEXT NOT NULL,station TEXT NOT NULL,connector TEXT NOT NULL DEFAULT '',kind TEXT NOT NULL,note TEXT NOT NULL DEFAULT '',status TEXT NOT NULL,created INTEGER NOT NULL,resolved INTEGER,resolution TEXT NOT NULL DEFAULT '',credit INTEGER NOT NULL DEFAULT 0,operator TEXT NOT NULL DEFAULT '')");
  }
  bool signedIn(const std::string& owner){return !query("SELECT uid FROM customer_accounts WHERE visitor=?",{owner}).empty();}
  std::string newVisitor(){const auto id=randomId();query("INSERT INTO customer_visitors(id) VALUES(?)",{id});return id;}
@@ -131,7 +184,7 @@ public:
  }
  Session owned(const std::string& owner,const std::string& id){auto rows=query("SELECT id,owner,idem,payload,request FROM customer_sessions WHERE id=? AND owner=?",{id,owner});if(rows.empty())throw ApiError(404,"Session not found");return fromRow(rows[0]);}
  // Amount due for an ended, unsettled session, plus any Razorpay order already created for it.
- std::pair<std::int64_t,std::string> paymentQuote(const std::string& owner,const std::string& id){advance();auto s=owned(owner,id);if(!s.ended)throw ApiError(409,"Stop charging before paying");if(s.settled)throw ApiError(409,"This session is already paid");const auto existing=query("SELECT order_id,amount FROM customer_payments WHERE session=?",{id});const auto due=amountPaise(s.energy*s.rate);if(!existing.empty()&&std::stoll(existing[0][1])==due)return {due,existing[0][0]};if(!existing.empty())query("DELETE FROM customer_payments WHERE session=?",{id});return {due,""};}
+ std::pair<std::int64_t,std::string> paymentQuote(const std::string& owner,const std::string& id){advance();auto s=owned(owner,id);if(!s.ended)throw ApiError(409,"Stop charging before paying");if(s.settled)throw ApiError(409,"This session is already paid");const auto existing=query("SELECT order_id,amount FROM customer_payments WHERE session=?",{id});const auto due=amountDue(s);if(!existing.empty()&&std::stoll(existing[0][1])==due)return {due,existing[0][0]};if(!existing.empty())query("DELETE FROM customer_payments WHERE session=?",{id});return {due,""};}
  void recordOrder(const std::string& owner,const std::string& id,const std::string& order,std::int64_t amount){owned(owner,id);query("INSERT INTO customer_payments(session,owner,order_id,amount,created) VALUES(?,?,?,?,?) ON CONFLICT(session) DO UPDATE SET order_id=excluded.order_id,amount=excluded.amount,created=excluded.created",{id,owner,order,std::to_string(amount),std::to_string(nowMs())});}
  std::string phone(const std::string& owner){const auto rows=query("SELECT phone FROM customer_accounts WHERE visitor=?",{owner});return rows.empty()?std::string():rows[0][0];}
  bool settledSession(const std::string& owner,const std::string& id){return owned(owner,id).settled;}
@@ -142,7 +195,7 @@ public:
   const auto row=query("SELECT session,owner,amount FROM customer_payments WHERE order_id=?",{orderId});if(row.empty())return false;
   if(std::stoll(row[0][2])!=amount)throw ApiError(409,"Payment amount does not match the order");
   auto s=owned(row[0][1],row[0][0]);if(s.settled)return true;if(!s.ended)throw ApiError(409,"Session is still charging");
-  s.paid=amount/100.0;s.paymentId=paymentId;s.settled=true;persist(s);return true;}
+  s.paid=amount/100.0;s.paymentId=paymentId;s.settled=true;persist(s);chargeWallet(s);return true;}
  bool eventSeen(const std::string& id){return !query("SELECT id FROM razorpay_events WHERE id=?",{id}).empty();}
  void markEvent(const std::string& id){query("INSERT OR IGNORE INTO razorpay_events(id,created) VALUES(?,?)",{id,std::to_string(nowMs())});}
  struct RefundTarget {std::string paymentId;std::int64_t refundable=0;};
@@ -165,8 +218,22 @@ public:
   if(id.size()==32&&id.find_first_not_of("0123456789abcdef")==std::string::npos&&!query("SELECT id FROM customer_visitors WHERE id=?",{id}).empty())return id;
   if(!create)throw ApiError(401,"Open the app again to establish your visitor session");id=randomId();query("INSERT INTO customer_visitors(id) VALUES(?)",{id});fresh=true;return id;
  }
- Json snapshot(const std::string& owner) {advance();Json result;result["ok"]=true;const auto prefs=query("SELECT vehicle,saved FROM customer_visitors WHERE id=?",{owner});if(prefs.empty())throw ApiError(401,"Visitor not found");result["state"]["vehicle"]=prefs[0][0];result["state"]["saved"]=Json(crow::json::load(prefs[0][1]));Json::list list;for(const auto& s:sessions(owner))list.push_back(s.json());result["state"]["sessions"]=std::move(list);result["catalog"]=Json(catalog);
-  int index=0;for(const auto& station:catalog["stations"]){int ci=0;for(const auto& c:station["connectors"]){auto con=connector(std::string(c["id"].s()));result["catalog"]["stations"][index]["connectors"][ci]["available"]=con.enabled&&!busy(con.id)&&(real(con.id)?realProblem(con.id).empty():(mode=="clock"||simulatorOnline()));result["catalog"]["stations"][index]["connectors"][ci]["ocpp"]=real(con.id);++ci;}++index;}
+ Json snapshot(const std::string& owner) {advance();Json result;result["ok"]=true;const auto prefs=query("SELECT vehicle,saved FROM customer_visitors WHERE id=?",{owner});if(prefs.empty())throw ApiError(401,"Visitor not found");result["state"]["vehicle"]=prefs[0][0];result["state"]["saved"]=Json(crow::json::load(prefs[0][1]));Json::list list;std::set<std::string> visited;const auto wallet=balance(owner);
+  for(const auto& s:sessions(owner)){auto item=s.json();if(s.ended)visited.insert(s.station);
+   // What the driver will actually pay once wallet credit is applied.
+   if(s.ended&&!s.settled){const auto cost=amountPaise(s.energy*s.rate);const auto use=s.walletReserved?amountPaise(s.walletUsed):std::min(wallet,cost);item["walletUse"]=use/100.0;item["due"]=std::max<std::int64_t>(0,cost-use)/100.0;}
+   // When a simulated charge will finish, so the phone can schedule a "charge complete" alert.
+   if(!s.ended&&mode=="clock"&&!real(s.connector)&&s.power>0)item["expectedEnd"]=s.started+static_cast<std::int64_t>(s.limit/s.power*3600000./speed);
+   list.push_back(std::move(item));}
+  result["state"]["sessions"]=std::move(list);result["catalog"]=Json(catalog);
+  const auto now=nowMs();const auto tariff=tariffAt(now);result["tariff"]=tariffJson(now);
+  int index=0;for(const auto& station:catalog["stations"]){auto& out=result["catalog"]["stations"][index];const std::string sid=station["id"].s();out["currentRate"]=rateFor(station["rate"].d(),tariff);out["band"]=tariff.band;out["rating"]=rating(sid,owner,visited.count(sid)>0);
+   int ci=0;for(const auto& c:station["connectors"]){auto con=connector(std::string(c["id"].s()));const auto h=holder(con.id);auto& slot=out["connectors"][ci];
+    slot["available"]=con.enabled&&!busy(con.id)&&(h.empty()||h==owner)&&(real(con.id)?realProblem(con.id).empty():(mode=="clock"||simulatorOnline()));slot["ocpp"]=real(con.id);
+    slot["reserved"]=!h.empty()&&h!=owner;slot["bookedByYou"]=!h.empty()&&h==owner;slot["bookings"]=upcomingBookings(con.id);slot["openReports"]=openReports(con.id);++ci;}++index;}
+  {Json::list bookings;for(const auto& r:query("SELECT id,station,connector,vehicle,starts,ends,status,session,created FROM customer_bookings WHERE owner=? ORDER BY starts DESC LIMIT 10",{owner}))bookings.push_back(bookingJson(r));result["state"]["bookings"]=Json(std::move(bookings));}
+  {Json::list reports;for(const auto& r:query("SELECT id,station,connector,kind,note,status,created,resolved,resolution,credit FROM charger_reports WHERE owner=? ORDER BY created DESC LIMIT 10",{owner})){Json j;j["id"]=r[0];j["station"]=r[1];j["connector"]=r[2];j["kind"]=r[3];j["note"]=r[4];j["status"]=r[5];j["created"]=std::stoll(r[6]);j["resolved"]=r[7].empty()?Json(nullptr):Json(static_cast<std::int64_t>(std::stoll(r[7])));j["resolution"]=r[8];j["credit"]=std::stoll(r[9])/100.0;reports.push_back(std::move(j));}result["state"]["reports"]=Json(std::move(reports));}
+  {result["wallet"]["balance"]=wallet/100.0;Json::list history;for(const auto& r:query("SELECT id,amount,reason,session,created FROM customer_wallet WHERE owner=? ORDER BY created DESC LIMIT 20",{owner})){Json j;j["id"]=r[0];j["amount"]=std::stoll(r[1])/100.0;j["reason"]=r[2];j["session"]=r[3];j["created"]=std::stoll(r[4]);history.push_back(std::move(j));}result["wallet"]["history"]=Json(std::move(history));}
   result["account"]["signedIn"]=signedIn(owner);result["account"]["phone"]=phone(owner);
   result["backend"]["authRequired"]=firebase->enabled();if(firebase->enabled()){result["backend"]["firebase"]["projectId"]=firebase->projectId();result["backend"]["firebase"]["apiKey"]=env("PLUGGO_FIREBASE_API_KEY","");result["backend"]["firebase"]["authDomain"]=env("PLUGGO_FIREBASE_AUTH_DOMAIN",firebase->projectId()+".firebaseapp.com");result["backend"]["firebase"]["appId"]=env("PLUGGO_FIREBASE_APP_ID","");}
   result["backend"]["payments"]=payments->enabled()?"razorpay":"none";
@@ -179,19 +246,22 @@ public:
   for(const auto& station:catalog["stations"])for(const auto& c:station["connectors"]){
    const std::string id=c["id"].s();const Session* active=nullptr;for(const auto& s:all)if(s.connector==id&&!s.ended){active=&s;break;}
    Json slot;slot["id"]=id;slot["stationName"]=string(station,"name",std::string(station["id"].s()));slot["connector"]=std::string(c["type"].s());slot["source"]=real(id)?"OCPP 1.6J":"SIMULATOR";if(real(id)){const auto e=external.find(id);slot["chargerStatus"]=e==external.end()?"Unknown":e->second.status;slot["chargerOnline"]=e!=external.end()&&e->second.online&&nowMs()-e->second.at<=15000;}
-   slot["status"]=active?"occupied":!c["available"].b()?"disabled":real(id)?(realProblem(id).empty()?"available":"offline"):mode=="meter"&&!simulatorOnline()?"offline":"available";
+   const auto held=holder(id);slot["openReports"]=openReports(id);slot["bookings"]=upcomingBookings(id);
+   slot["status"]=active?"occupied":!c["available"].b()?"disabled":!held.empty()?"reserved":real(id)?(realProblem(id).empty()?"available":"offline"):mode=="meter"&&!simulatorOnline()?"offline":"available";
    slot["vehicle"]=active?string(profile(active->vehicle),"name",active->vehicle):"";slot["soc"]=active?25+100*active->energy/active->capacity:0;slot["powerKW"]=active?active->power:0;slot["energyKWh"]=active?active->energy:0;slot["estimatedCost"]=active?active->energy*active->rate:0;slots.push_back(std::move(slot));
   }
   j["slots"]=std::move(slots);j["recentSessions"]=std::move(recent);j["activePowerKW"]=power;j["energyKWh"]=energy;j["estimatedCost"]=cost;j["solarShare"]=0;return j;
  }
  void preferences(const std::string& owner,const Input& body) {const auto vehicle=string(body,"vehicle");profile(vehicle);if(!body.has("saved")||body["saved"].t()!=crow::json::type::List||body["saved"].size()>20)throw ApiError(400,"Invalid saved stations");Json::list saved;for(const auto& item:body["saved"]){if(item.t()!=crow::json::type::String)throw ApiError(400,"Invalid station ID");const std::string id=item.s();bool found=false;for(const auto& s:catalog["stations"])if(std::string(s["id"].s())==id)found=true;if(!found)throw ApiError(400,"Unknown saved station");saved.emplace_back(id);}query("UPDATE customer_visitors SET vehicle=?,saved=? WHERE id=?",{vehicle,Json(std::move(saved)).dump(),owner});}
- Json verify(const Input& body) {advance();const auto con=connector(string(body,"connector"));const auto& v=profile(string(body,"vehicle"));if(con.station!=string(body,"station"))throw ApiError(400,"Charger does not belong to this station");if(!compatible(v,con.type))throw ApiError(409,"Connector is incompatible with this vehicle");if(!con.enabled||busy(con.id))throw ApiError(409,"Connector is in use");if(real(con.id)){const auto problem=realProblem(con.id);if(!problem.empty())throw ApiError(409,problem);}else if(mode=="meter"&&!simulatorOnline())throw ApiError(409,"Charging simulator is offline");Json j;j["ok"]=true;j["connector"]=con.id;return j;}
+ Json verify(const std::string& owner,const Input& body) {advance();const auto con=connector(string(body,"connector"));const auto& v=profile(string(body,"vehicle"));if(con.station!=string(body,"station"))throw ApiError(400,"Charger does not belong to this station");if(!compatible(v,con.type))throw ApiError(409,"Connector is incompatible with this vehicle");if(!con.enabled||busy(con.id))throw ApiError(409,"Connector is in use");checkHold(owner,con.id);if(real(con.id)){const auto problem=realProblem(con.id);if(!problem.empty())throw ApiError(409,problem);}else if(mode=="meter"&&!simulatorOnline())throw ApiError(409,"Charging simulator is offline");Json j;j["ok"]=true;j["connector"]=con.id;return j;}
  std::string start(const std::string& owner,const Input& body,const std::string& idem) {advance();if(firebase->enabled()&&!signedIn(owner))throw ApiError(403,"Sign in with your phone number to start charging");if(idem.empty()||idem.size()>128)throw ApiError(400,"A valid Idempotency-Key is required");const auto vehicle=string(body,"vehicle"),charger=string(body,"connector");const double target=number(body,"target",80),budget=number(body,"budget",300);if(target<30||target>100||budget<50||budget>1000)throw ApiError(400,"Target must be 30–100 and budget 50–1000");const auto& v=profile(vehicle);const auto c=connector(charger);const auto station=string(body,"station");if(c.station!=station)throw ApiError(400,"Charger does not belong to this station");std::ostringstream normalized;normalized<<std::setprecision(std::numeric_limits<double>::max_digits10)<<vehicle<<'|'<<charger<<'|'<<target<<'|'<<budget;auto previous=query("SELECT id,request FROM customer_sessions WHERE owner=? AND idem=?",{owner,idem});if(!previous.empty()){if(previous[0][1]!=normalized.str())throw ApiError(409,"Idempotency key was used for another request");return previous[0][0];}
-  if(!compatible(v,c.type))throw ApiError(409,"Vehicle and connector are incompatible");if(!c.enabled||busy(c.id))throw ApiError(409,"Charger is no longer available");if(real(c.id)){const auto problem=realProblem(c.id);if(!problem.empty())throw ApiError(409,problem);}else if(mode=="meter"&&!simulatorOnline())throw ApiError(409,"Charging simulator is offline");if(!query("SELECT id FROM customer_sessions WHERE owner=? AND settled=0",{owner}).empty())throw ApiError(409,"Finish your existing session or checkout first");
-  Session s;s.id="PG-"+randomId();s.owner=owner;s.station=station;s.connector=charger;s.vehicle=vehicle;s.key=idem;s.request=normalized.str();s.started=nowMs();s.target=target;s.budget=budget;s.capacity=v["capacity"].d();s.power=std::min(v["power"].d(),c.power);s.rate=c.rate;s.limit=std::min((target-25)/100*s.capacity,budget/c.rate);persist(s);return s.id;
+  if(!compatible(v,c.type))throw ApiError(409,"Vehicle and connector are incompatible");if(!c.enabled||busy(c.id))throw ApiError(409,"Charger is no longer available");checkHold(owner,c.id);if(real(c.id)){const auto problem=realProblem(c.id);if(!problem.empty())throw ApiError(409,problem);}else if(mode=="meter"&&!simulatorOnline())throw ApiError(409,"Charging simulator is offline");if(!query("SELECT id FROM customer_sessions WHERE owner=? AND settled=0",{owner}).empty())throw ApiError(409,"Finish your existing session or checkout first");
+  Session s;s.id="PG-"+randomId();s.owner=owner;s.station=station;s.connector=charger;s.vehicle=vehicle;s.key=idem;s.request=normalized.str();s.started=nowMs();s.target=target;s.budget=budget;s.capacity=v["capacity"].d();s.power=std::min(v["power"].d(),c.power);const auto tariff=tariffAt(s.started);s.rate=rateFor(c.rate,tariff);s.band=tariff.band;s.limit=std::min((target-25)/100*s.capacity,budget/s.rate);persist(s);
+  // Starting on the charger you booked fulfils the booking.
+  const auto now=nowMs();query("UPDATE customer_bookings SET status='used',session=? WHERE owner=? AND connector=? AND status='booked' AND starts<=? AND starts>=?",{s.id,owner,c.id,std::to_string(now+bookingHold),std::to_string(now-bookingGrace)});return s.id;
  }
  void action(const std::string& owner,const std::string& id,bool checkout,const Input* payment=nullptr) {advance();auto s=owned(owner,id);
-  if(checkout){if(!s.ended)throw ApiError(409,"Stop charging before checkout");if(s.settled)return;const auto due=amountPaise(s.energy*s.rate);
+  if(checkout){if(!s.ended)throw ApiError(409,"Stop charging before checkout");if(s.settled)return;const auto due=amountDue(s);
    // Charges under ₹1 are below Razorpay's minimum order and settle without a payment.
    if(payments->enabled()&&due>=100){
     if(!payment||!payment->has("razorpay_payment_id"))throw ApiError(409,"Payment is required to finish this session");
@@ -200,7 +270,7 @@ public:
     if(orderId!=order[0][0]||std::stoll(order[0][1])!=due)throw ApiError(409,"Payment does not match this session");
     if(!payments->verifySignature(orderId,paymentId,signature))throw ApiError(400,"Payment could not be verified");
     s.paid=due/100.0;s.paymentId=paymentId;}
-   s.settled=true;}
+   s.settled=true;chargeWallet(s);}
   else if(!s.ended){s.ended=nowMs();s.reason="Stopped by you";}persist(s);}
  // Right to erasure (DPDP Act 2023; Play Store account deletion). Removes the phone account,
  // preferences, unpaid history and the visitor itself. Paid receipts must be kept for tax
@@ -214,10 +284,121 @@ public:
    else{query("DELETE FROM customer_refunds WHERE session=?",{s.id});query("DELETE FROM customer_sessions WHERE id=?",{s.id});}
   }
   query("DELETE FROM customer_payments WHERE owner=?",{owner});
+  query("DELETE FROM customer_bookings WHERE owner=?",{owner});
+  query("DELETE FROM customer_wallet WHERE owner=?",{owner});
+  query("DELETE FROM customer_reviews WHERE owner=?",{owner});
+  query("UPDATE charger_reports SET owner='erased',note='' WHERE owner=?",{owner});
   query("DELETE FROM customer_accounts WHERE visitor=?",{owner});
   query("DELETE FROM customer_visitors WHERE id=?",{owner});
  }
- void reset(const std::string& owner) {query("DELETE FROM customer_refunds WHERE session IN (SELECT id FROM customer_sessions WHERE owner=?)",{owner});query("DELETE FROM customer_payments WHERE owner=?",{owner});query("DELETE FROM customer_sessions WHERE owner=?",{owner});query("UPDATE customer_visitors SET vehicle='car',saved='[]' WHERE id=?",{owner});}
+ void reset(const std::string& owner) {query("DELETE FROM customer_refunds WHERE session IN (SELECT id FROM customer_sessions WHERE owner=?)",{owner});query("DELETE FROM customer_payments WHERE owner=?",{owner});query("DELETE FROM customer_sessions WHERE owner=?",{owner});query("DELETE FROM customer_bookings WHERE owner=?",{owner});query("UPDATE customer_visitors SET vehicle='car',saved='[]' WHERE id=?",{owner});}
+ // ---- Bookings -------------------------------------------------------------------------------
+ std::string book(const std::string& owner,const Input& body){
+  advance();if(firebase->enabled()&&!signedIn(owner))throw ApiError(403,"Sign in with your phone number to book a charger");
+  const auto c=connector(string(body,"connector"));const auto station=string(body,"station");if(c.station!=station)throw ApiError(400,"Charger does not belong to this station");
+  const auto vehicle=string(body,"vehicle");if(!compatible(profile(vehicle),c.type))throw ApiError(409,"This charger does not fit your vehicle");if(!c.enabled)throw ApiError(409,"This charger is out of service");
+  const double minutes=number(body,"minutes",60),startValue=number(body,"start",0);if(minutes!=30&&minutes!=60&&minutes!=90&&minutes!=120)throw ApiError(400,"Book 30, 60, 90 or 120 minutes");
+  const auto now=nowMs();const auto starts=static_cast<std::int64_t>(startValue),ends=starts+static_cast<std::int64_t>(minutes)*60000;
+  if(starts<now-60000||starts>now+dayMs)throw ApiError(400,"Pick a start time within the next 24 hours");
+  if(!query("SELECT id FROM customer_bookings WHERE owner=? AND status='booked'",{owner}).empty())throw ApiError(409,"You already have a booking. Cancel it to book another slot");
+  if(!query("SELECT id FROM customer_bookings WHERE connector=? AND status='booked' AND starts<? AND ends>?",{c.id,std::to_string(ends),std::to_string(starts)}).empty())throw ApiError(409,"That slot is already booked. Pick another time");
+  if(starts<=now+bookingHold&&busy(c.id))throw ApiError(409,"This charger is in use right now. Pick a later slot");
+  const auto id="BK-"+randomId().substr(0,12);
+  query("INSERT INTO customer_bookings(id,owner,station,connector,vehicle,starts,ends,status,created) VALUES(?,?,?,?,?,?,?,'booked',?)",{id,owner,station,c.id,vehicle,std::to_string(starts),std::to_string(ends),std::to_string(now)});return id;}
+ void cancelBooking(const std::string& owner,const std::string& id){const auto rows=query("SELECT status FROM customer_bookings WHERE id=? AND owner=?",{id,owner});if(rows.empty())throw ApiError(404,"Booking not found");if(rows[0][0]!="booked")throw ApiError(409,"This booking is no longer active");query("UPDATE customer_bookings SET status='cancelled' WHERE id=?",{id});}
+ // ---- Ratings and fault reports ----------------------------------------------------------------
+ void review(const std::string& owner,const std::string& station,const Input& body){
+  if(!knownStation(station))throw ApiError(404,"Station not found");
+  const double stars=number(body,"rating",0);if(stars<1||stars>5||std::floor(stars)!=stars)throw ApiError(400,"Rate the station from 1 to 5 stars");
+  const auto comment=string(body,"comment","");if(comment.size()>1000)throw ApiError(400,"Keep your comment under 280 characters");
+  bool visited=false;for(const auto& s:sessions(owner))if(s.station==station&&s.ended)visited=true;if(!visited)throw ApiError(403,"Charge at this station before rating it");
+  query("INSERT INTO customer_reviews(owner,station,rating,comment,created) VALUES(?,?,?,?,?) ON CONFLICT(owner,station) DO UPDATE SET rating=excluded.rating,comment=excluded.comment,created=excluded.created",{owner,station,std::to_string(static_cast<int>(stars)),comment,std::to_string(nowMs())});}
+ std::string report(const std::string& owner,const Input& body){
+  const auto station=string(body,"station"),id=string(body,"connector",""),kind=string(body,"kind"),note=string(body,"note","");
+  if(!knownStation(station))throw ApiError(404,"Station not found");if(!id.empty()&&connector(id).station!=station)throw ApiError(400,"Charger does not belong to this station");
+  if(!reportKinds.count(kind))throw ApiError(400,"Choose what is wrong");if(note.size()>1000)throw ApiError(400,"Keep your note under 280 characters");
+  if(std::stoll(query("SELECT COUNT(*) FROM charger_reports WHERE owner=? AND status='open'",{owner})[0][0])>=5)throw ApiError(429,"You already have 5 open reports. We will look at them soon");
+  const auto reportId="RP-"+randomId().substr(0,12);
+  query("INSERT INTO charger_reports(id,owner,station,connector,kind,note,status,created) VALUES(?,?,?,?,?,?,'open',?)",{reportId,owner,station,id,kind,note,std::to_string(nowMs())});return reportId;}
+ Json operatorReports(){Json j;j["ok"]=true;Json::list items;
+  for(const auto& r:query("SELECT id,station,connector,kind,note,status,created,resolved,resolution,credit,operator FROM charger_reports ORDER BY status='open' DESC,created DESC LIMIT 100")){Json x;x["id"]=r[0];x["station"]=r[1];x["stationName"]=stationName(r[1]);x["connector"]=r[2];x["kind"]=r[3];x["note"]=r[4];x["status"]=r[5];x["created"]=std::stoll(r[6]);x["resolved"]=r[7].empty()?Json(nullptr):Json(static_cast<std::int64_t>(std::stoll(r[7])));x["resolution"]=r[8];x["credit"]=std::stoll(r[9])/100.0;x["operator"]=r[10];items.push_back(std::move(x));}
+  j["reports"]=Json(std::move(items));j["open"]=std::stoll(query("SELECT COUNT(*) FROM charger_reports WHERE status='open'")[0][0]);return j;}
+ void resolveReport(const std::string& id,const std::string& operatorPhone,std::int64_t creditPaise,const std::string& resolution){
+  const auto rows=query("SELECT owner,station,status FROM charger_reports WHERE id=?",{id});if(rows.empty())throw ApiError(404,"Report not found");if(rows[0][2]!="open")throw ApiError(409,"This report is already resolved");
+  query("UPDATE charger_reports SET status='resolved',resolved=?,resolution=?,credit=?,operator=? WHERE id=?",{std::to_string(nowMs()),resolution,std::to_string(creditPaise),operatorPhone,id});
+  if(creditPaise>0&&rows[0][0]!="erased")credit(rows[0][0],creditPaise,"Sorry about the problem at "+stationName(rows[0][1]));}
+ // ---- Wallet -----------------------------------------------------------------------------------
+ void credit(const std::string& owner,std::int64_t paise,const std::string& reason,const std::string& session=""){if(paise<=0||owner=="erased")return;query("INSERT INTO customer_wallet(id,owner,amount,reason,session,created) VALUES(?,?,?,?,?,?)",{"CR-"+randomId().substr(0,16),owner,std::to_string(paise),reason,session,std::to_string(nowMs())});}
+ void creditForSession(const std::string& sessionId,std::int64_t paise,const std::string& reason){const auto rows=query("SELECT owner FROM customer_sessions WHERE id=?",{sessionId});if(rows.empty())throw ApiError(404,"Session not found");if(rows[0][0]=="erased")throw ApiError(409,"This customer deleted their account");credit(rows[0][0],paise,reason,sessionId);}
+ // ---- Operator analytics -----------------------------------------------------------------------
+ Json analytics(int days){
+  advance();const auto now=nowMs();const auto today=(now+istOffset)/dayMs,first=today-days+1;
+  struct Day {std::int64_t sessions=0;double energy=0,revenue=0;};std::vector<Day> daily(static_cast<std::size_t>(days));std::vector<double> busyMinutes(24,0);
+  struct Totals {std::int64_t sessions=0;double energy=0,revenue=0;};std::map<std::string,Totals> byStation,byBand;
+  double energy=0,billed=0,collected=0,refunded=0,wallet=0;std::int64_t completed=0,active=0;
+  for(const auto& s:sessions()){
+   if(!s.ended){++active;continue;}const auto day=(s.ended+istOffset)/dayMs;if(day<first||day>today)continue;
+   const double cost=s.energy*s.rate;++completed;energy+=s.energy;billed+=cost;collected+=s.paid;refunded+=s.refunded;wallet+=s.walletUsed;
+   auto& d=daily[static_cast<std::size_t>(day-first)];++d.sessions;d.energy+=s.energy;d.revenue+=cost;
+   for(auto* t:{&byStation[s.station],&byBand[s.band]}){++t->sessions;t->energy+=s.energy;t->revenue+=cost;}
+   // Spread the time on the charger over the India-time hours it covered.
+   for(std::int64_t t=s.started;t<s.ended;){const auto local=t+istOffset;const auto next=std::min<std::int64_t>(s.ended,t+3600000-local%3600000);busyMinutes[static_cast<std::size_t>(local/3600000%24)]+=(next-t)/60000.0;t=next;}
+  }
+  std::size_t connectors=0;for(const auto& station:catalog["stations"])connectors+=station["connectors"].size();
+  Json j;j["ok"]=true;j["days"]=days;j["serverTime"]=now;j["tariff"]=tariffJson(now);
+  j["totals"]["completedSessions"]=completed;j["totals"]["activeSessions"]=active;j["totals"]["energyKWh"]=energy;j["totals"]["billed"]=billed;j["totals"]["collected"]=collected;j["totals"]["refunded"]=refunded;j["totals"]["walletUsed"]=wallet;j["totals"]["averageKWh"]=completed?energy/completed:0.0;
+  const auto ratingRow=query("SELECT COUNT(*),COALESCE(AVG(rating),0) FROM customer_reviews");j["totals"]["ratings"]=std::stoll(ratingRow[0][0]);j["totals"]["averageRating"]=std::round(std::stod(ratingRow[0][1])*10)/10;
+  j["totals"]["openReports"]=std::stoll(query("SELECT COUNT(*) FROM charger_reports WHERE status='open'")[0][0]);
+  const auto since=std::to_string((first*dayMs)-istOffset);
+  for(const char* status:{"booked","used","no-show","cancelled"})j["bookings"][status]=std::stoll(query("SELECT COUNT(*) FROM customer_bookings WHERE status=? AND created>=?",{status,since})[0][0]);
+  Json::list dayList;for(std::size_t i=0;i<daily.size();++i){const std::time_t seconds=static_cast<std::time_t>((first+static_cast<std::int64_t>(i))*(dayMs/1000));char label[16]{};std::strftime(label,sizeof label,"%Y-%m-%d",std::gmtime(&seconds));Json d;d["date"]=label;d["sessions"]=daily[i].sessions;d["energyKWh"]=daily[i].energy;d["revenue"]=daily[i].revenue;dayList.push_back(std::move(d));}
+  j["daily"]=Json(std::move(dayList));
+  Json::list hours;for(std::size_t h=0;h<24;++h){Json x;x["hour"]=static_cast<std::int64_t>(h);x["busyMinutes"]=busyMinutes[h];x["utilisation"]=connectors?busyMinutes[h]/(static_cast<double>(connectors)*days*60)*100:0.0;hours.push_back(std::move(x));}j["hourly"]=Json(std::move(hours));
+  Json::list stationList;for(const auto& station:catalog["stations"]){const std::string id=station["id"].s();const auto& t=byStation[id];const auto r=query("SELECT COUNT(*),COALESCE(AVG(rating),0) FROM customer_reviews WHERE station=?",{id});Json x;x["id"]=id;x["name"]=stationName(id);x["sessions"]=t.sessions;x["energyKWh"]=t.energy;x["revenue"]=t.revenue;x["ratings"]=std::stoll(r[0][0]);x["averageRating"]=std::round(std::stod(r[0][1])*10)/10;stationList.push_back(std::move(x));}j["stations"]=Json(std::move(stationList));
+  Json::list bandList;for(const char* band:{"off-peak","standard","peak"}){const auto& t=byBand[band];Json x;x["band"]=band;x["sessions"]=t.sessions;x["energyKWh"]=t.energy;x["revenue"]=t.revenue;bandList.push_back(std::move(x));}j["bands"]=Json(std::move(bandList));
+  return j;}
+ // ---- Trip planner -----------------------------------------------------------------------------
+ // Plans charging stops between two points from the Pluggo network and the public station
+ // directory. Each leg is checked with the domain RangeSafetyService (15% range buffer); stops
+ // are picked greedily as far along the route as the battery safely reaches.
+ Json trip(double fromLat,double fromLng,double toLat,double toLng,const std::string& vehicleId,double battery){
+  const auto& v=profile(vehicleId);const double capacity=v["capacity"].d(),power=v["power"].d(),kmPerKWh=v.has("kmPerKWh")?v["kmPerKWh"].d():6;
+  if(!(battery>=5&&battery<=100))throw ApiError(400,"Battery must be between 5% and 100%");
+  constexpr double roadFactor=1.25,buffer=15,arriveAtLeast=10,chargeTo=80,averageSpeed=50,estimateRate=18,unknownPower=7.4;
+  const double straight=distanceKm(fromLat,fromLng,toLat,toLng);if(straight<2)throw ApiError(400,"Pick a destination at least 2 km away");if(straight>2500)throw ApiError(400,"That trip is too long to plan");
+  auto check=[&](double soc,double km){const ev::Vehicle probe("TRIP",capacity,soc,1.0/kmPerKWh,ev::ConnectorType::CCS2,power);return ev::RangeSafetyService::evaluate(probe,km,buffer);};
+  const double midLat=(fromLat+toLat)/2*3.14159265358979323846/180;
+  auto project=[&](double lat,double lng){return std::pair<double,double>{(lng-fromLng)*111.32*std::cos(midLat),(lat-fromLat)*110.57};};
+  const auto end=project(toLat,toLng);const double length2=end.first*end.first+end.second*end.second,corridor=std::clamp(straight*0.08,10.0,30.0);
+  struct Candidate {double progress,lat,lng,powerKW;std::string id,name,address,network;};std::vector<Candidate> candidates;
+  auto consider=[&](double lat,double lng,double kw,std::string id,std::string name,std::string address,std::string network){
+   const auto p=project(lat,lng);const double t=(p.first*end.first+p.second*end.second)/length2;if(t<=0.01||t>=0.995)return;
+   const double dx=p.first-t*end.first,dy=p.second-t*end.second;if(std::sqrt(dx*dx+dy*dy)>corridor)return;
+   candidates.push_back({t,lat,lng,kw,std::move(id),std::move(name),std::move(address),std::move(network)});};
+  for(const auto& e:publicDirectory.entries){const auto& s=publicDirectory.root["stations"][e.index];consider(e.lat,e.lng,s.has("powerKW")&&s["powerKW"].t()==crow::json::type::Number?s["powerKW"].d():0,text(s,"id"),text(s,"name"),text(s,"address"),"public");}
+  for(const auto& s:catalog["stations"]){double best=0;for(const auto& c:s["connectors"])if(compatible(v,std::string(c["type"].s())))best=std::max(best,c["power"].d());if(best>0)consider(s["lat"].d(),s["lng"].d(),best,std::string(s["id"].s()),string(s,"name"),string(s,"area"),"pluggo");}
+  double soc=battery,lat=fromLat,lng=fromLng,progress=0,chargeMinutes=0,chargeCost=0;bool arrived=false;std::string note;Json::list stops;
+  for(int guard=0;guard<12&&!arrived;++guard){
+   if(check(soc,distanceKm(lat,lng,toLat,toLng)*roadFactor).canReach){arrived=true;break;}
+   // Reachable chargers further along the route. Among those within 5% of the route of the
+   // furthest one, take the fastest: a known DC charger beats an unlisted one a little further on.
+   std::vector<std::pair<const Candidate*,double>> reachable;double furthest=0;
+   for(const auto& c:candidates){if(c.progress<=progress+1e-6)continue;const double km=distanceKm(lat,lng,c.lat,c.lng)*roadFactor;if(!check(soc,km).canReach||soc-km/kmPerKWh/capacity*100<arriveAtLeast)continue;reachable.emplace_back(&c,km);furthest=std::max(furthest,c.progress);}
+   const Candidate* pick=nullptr;double pickKm=0,pickKW=0;
+   for(const auto& [c,km]:reachable){if(c->progress<furthest-0.05)continue;const double kw=std::min(power,c->powerKW>0?c->powerKW:unknownPower);
+    if(!pick||kw>pickKW+1e-9||(std::abs(kw-pickKW)<1e-9&&c->progress>pick->progress)){pick=c;pickKm=km;pickKW=kw;}}
+   if(!pick){note="No charger is within safe range on this route. Charge more before you leave or pick a closer destination.";break;}
+   const double arrive=soc-pickKm/kmPerKWh/capacity*100,leave=std::max(chargeTo,arrive),added=(leave-arrive)/100*capacity;
+   const double kw=std::max(1.0,std::min(power,pick->powerKW>0?pick->powerKW:unknownPower)),minutes=added/kw*60;
+   Json stop;stop["id"]=pick->id;stop["name"]=pick->name.empty()?"EV charging station":pick->name;stop["address"]=pick->address;stop["network"]=pick->network;stop["lat"]=pick->lat;stop["lng"]=pick->lng;
+   stop["legKm"]=pickKm;stop["arriveBattery"]=arrive;stop["leaveBattery"]=leave;stop["energyKWh"]=added;stop["powerKW"]=kw;stop["powerKnown"]=pick->powerKW>0;stop["minutes"]=minutes;stop["costEstimate"]=added*estimateRate;
+   stops.push_back(std::move(stop));chargeMinutes+=minutes;chargeCost+=added*estimateRate;soc=leave;lat=pick->lat;lng=pick->lng;progress=pick->progress;}
+  if(!arrived&&note.empty())note="This trip needs more stops than we can plan. Split it into shorter trips.";
+  const double finalKm=distanceKm(lat,lng,toLat,toLng)*roadFactor,total=straight*roadFactor;
+  Json j;j["ok"]=true;j["feasible"]=arrived;j["note"]=note;j["vehicle"]=vehicleId;j["startBattery"]=battery;j["straightKm"]=straight;j["distanceKm"]=total;j["rangeKm"]=capacity*battery/100*kmPerKWh;
+  j["finalLegKm"]=finalKm;j["arrivalBattery"]=arrived?Json(soc-finalKm/kmPerKWh/capacity*100):Json(nullptr);j["driveMinutes"]=total/averageSpeed*60;j["chargeMinutes"]=chargeMinutes;j["chargeCostEstimate"]=chargeCost;
+  j["stops"]=Json(std::move(stops));j["assumptions"]="Road distance is about 1.25 times the straight line at 50 km/h. You charge to 80%, arrive at every stop with at least 10%, and keep a 15% range buffer. Costs use Rs 18/kWh; check each charger's plug type and price.";
+  return j;}
  Json simulatorSessions() {lastSimulator=nowMs();advance();Json j;j["ok"]=true;j["mode"]=mode;j["speed"]=speed;Json::list values;for(const auto& s:sessions())if(!s.ended){auto item=s.json();item["external"]=real(s.connector);values.push_back(std::move(item));}j["sessions"]=std::move(values);return j;}
  void meter(const Input& body) {lastSimulator=nowMs();const auto id=string(body,"sessionId");auto rows=query("SELECT id,owner,idem,payload,request FROM customer_sessions WHERE id=?",{id});if(rows.empty())throw ApiError(404,"Session not found");auto s=fromRow(rows[0]);if(mode!="meter"&&!real(s.connector))return;const bool lateFinal=s.ended&&real(s.connector)&&!s.settled&&nowMs()-s.ended<120000&&query("SELECT session FROM customer_payments WHERE session=?",{s.id}).empty();if(s.ended&&!lateFinal)return;if(string(body,"connector")!=s.connector)throw ApiError(409,"Meter connector does not match session");const double energy=number(body,"energyKWh",s.energy);if(energy<0)throw ApiError(400,"Energy must be non-negative");s.energy=std::min(s.limit,std::max(s.energy,energy));if(!s.ended)complete(s);persist(s);}
 };
@@ -298,7 +479,7 @@ void registerCustomerApi(crow::SimpleApp& app){initIntegrations();publicDirector
  CROW_ROUTE(app,"/api/customer/bootstrap")([](const crow::request& r){return customer(r,true,[](const std::string& owner){return store->snapshot(owner);});});
  CROW_ROUTE(app,"/api/customer/state")([](const crow::request& r){return customer(r,false,[](const std::string& owner){return store->snapshot(owner);});});
  CROW_ROUTE(app,"/api/customer/preferences").methods(crow::HTTPMethod::PUT)([](const crow::request& r){return customer(r,false,[&](const std::string& owner){store->preferences(owner,body(r));return store->snapshot(owner);});});
- CROW_ROUTE(app,"/api/customer/verify").methods(crow::HTTPMethod::POST)([](const crow::request& r){return customer(r,false,[&](const std::string&){return store->verify(body(r));});});
+ CROW_ROUTE(app,"/api/customer/verify").methods(crow::HTTPMethod::POST)([](const crow::request& r){return customer(r,false,[&](const std::string& owner){return store->verify(owner,body(r));});});
  CROW_ROUTE(app,"/api/customer/sessions").methods(crow::HTTPMethod::POST)([](const crow::request& r){return customer(r,false,[&](const std::string& owner){auto id=store->start(owner,body(r),r.get_header_value("Idempotency-Key"));auto j=store->snapshot(owner);j["sessionId"]=id;return j;});});
  CROW_ROUTE(app,"/api/customer/sessions/<string>/stop").methods(crow::HTTPMethod::POST)([](const crow::request& r,const std::string& id){return customer(r,false,[&](const std::string& owner){store->action(owner,id,false);return store->snapshot(owner);});});
  CROW_ROUTE(app,"/api/customer/sessions/<string>/checkout").methods(crow::HTTPMethod::POST)([](const crow::request& r,const std::string& id){return customer(r,false,[&](const std::string& owner){const auto payment=body(r);store->action(owner,id,true,&payment);return store->snapshot(owner);});});
@@ -395,6 +576,38 @@ void registerCustomerApi(crow::SimpleApp& app){initIntegrations();publicDirector
   if(result.code==200)result.set_header("Set-Cookie",cookieFor(next));
   return result;});
  CROW_ROUTE(app,"/api/customer/reset").methods(crow::HTTPMethod::POST)([](const crow::request& r){return customer(r,false,[](const std::string& owner){store->reset(owner);return store->snapshot(owner);});});
+ CROW_ROUTE(app,"/api/customer/bookings").methods(crow::HTTPMethod::POST)([](const crow::request& r){return customer(r,false,[&](const std::string& owner){const auto id=store->book(owner,body(r));auto j=store->snapshot(owner);j["bookingId"]=id;return j;});});
+ CROW_ROUTE(app,"/api/customer/bookings/<string>/cancel").methods(crow::HTTPMethod::POST)([](const crow::request& r,const std::string& id){return customer(r,false,[&](const std::string& owner){store->cancelBooking(owner,id);return store->snapshot(owner);});});
+ CROW_ROUTE(app,"/api/customer/stations/<string>/review").methods(crow::HTTPMethod::POST)([](const crow::request& r,const std::string& id){return customer(r,false,[&](const std::string& owner){store->review(owner,id,body(r));return store->snapshot(owner);});});
+ CROW_ROUTE(app,"/api/customer/reports").methods(crow::HTTPMethod::POST)([](const crow::request& r){return customer(r,false,[&](const std::string& owner){const auto id=store->report(owner,body(r));auto j=store->snapshot(owner);j["reportId"]=id;return j;});});
+ // Charging stops for a trip. Reads only the station catalog and directory, so it needs no visitor.
+ CROW_ROUTE(app,"/api/customer/trip")([](const crow::request& r){
+  auto param=[&](const char* key){const char* v=r.url_params.get(key);if(!v)throw ApiError(400,std::string("Missing ")+key);std::size_t used=0;const double n=std::stod(v,&used);if(used!=std::strlen(v)||!std::isfinite(n))throw ApiError(400,std::string("Invalid ")+key);return n;};
+  try{
+   const double fromLat=param("fromLat"),fromLng=param("fromLng"),toLat=param("toLat"),toLng=param("toLng");
+   for(const double lat:{fromLat,toLat})if(std::abs(lat)>90)throw ApiError(400,"Invalid location");for(const double lng:{fromLng,toLng})if(std::abs(lng)>180)throw ApiError(400,"Invalid location");
+   const char* vehicle=r.url_params.get("vehicle");const double battery=r.url_params.get("battery")?param("battery"):25;
+   return response(store->trip(fromLat,fromLng,toLat,toLng,vehicle?vehicle:"car",battery));
+  }catch(const ApiError& e){return failure(e.what(),e.status);}catch(const std::exception&){return failure("Invalid trip request",400);}});
+ // Operator analytics, fault reports and wallet credit. Each needs a signed-in operator when sign-in is configured.
+ CROW_ROUTE(app,"/api/operator/analytics")([](const crow::request& r){
+  if(auto denied=operatorDenied(r))return std::move(*denied);
+  int days=14;if(const char* v=r.url_params.get("days")){try{days=std::stoi(v);}catch(...){return failure("Invalid days",400);}}
+  if(days<1||days>90)return failure("Days must be 1 to 90",400);
+  return locked([&]{return store->analytics(days);});});
+ CROW_ROUTE(app,"/api/operator/reports")([](const crow::request& r){if(auto denied=operatorDenied(r))return std::move(*denied);return locked([]{return store->operatorReports();});});
+ CROW_ROUTE(app,"/api/operator/reports/<string>/resolve").methods(crow::HTTPMethod::POST)([](const crow::request& r,const std::string& id){
+  std::string operatorPhone;if(auto denied=operatorCheck(r,operatorPhone))return std::move(*denied);
+  std::int64_t creditPaise=0;std::string resolution;
+  try{const auto b=body(r);resolution=string(b,"resolution","Fixed by the operator");if(resolution.size()>300)resolution.resize(300);const double rupees=number(b,"credit",0);if(!(rupees>=0&&rupees<=500))throw ApiError(400,"Credit must be ₹0 to ₹500");creditPaise=amountPaise(rupees);}
+  catch(const ApiError& e){return failure(e.what(),e.status);}catch(const std::exception&){return failure("Invalid request",400);}
+  return locked([&]{store->resolveReport(id,operatorPhone,creditPaise,resolution);CROW_LOG_WARNING<<"operator "<<operatorPhone<<" resolved "<<id<<" with "<<creditPaise<<" paise credit";return store->operatorReports();});});
+ CROW_ROUTE(app,"/api/operator/credit").methods(crow::HTTPMethod::POST)([](const crow::request& r){
+  std::string operatorPhone;if(auto denied=operatorCheck(r,operatorPhone))return std::move(*denied);
+  std::string sessionId,reason;std::int64_t paise=0;
+  try{const auto b=body(r);sessionId=string(b,"sessionId");reason=string(b,"reason","Credit from Pluggo");if(reason.size()>200)reason.resize(200);const double rupees=number(b,"amount",0);if(!(rupees>=1&&rupees<=500))throw ApiError(400,"Credit must be ₹1 to ₹500");paise=amountPaise(rupees);}
+  catch(const ApiError& e){return failure(e.what(),e.status);}catch(const std::exception&){return failure("Invalid request",400);}
+  return locked([&]{store->creditForSession(sessionId,paise,reason);CROW_LOG_WARNING<<"operator "<<operatorPhone<<" credited "<<paise<<" paise for "<<sessionId;Json j;j["ok"]=true;j["amount"]=paise/100.0;return j;});});
  CROW_ROUTE(app,"/api/customer/simulator/active")([](const crow::request& r){if(r.get_header_value("X-Charger-Key")!=store->key){Json j;j["ok"]=false;j["error"]="Invalid simulator key";return response(std::move(j),401);}std::lock_guard<std::mutex> lock(store->mutex);return response(store->simulatorSessions());});
  CROW_ROUTE(app,"/api/customer/simulator/meter").methods(crow::HTTPMethod::POST)([](const crow::request& r){if(r.get_header_value("X-Charger-Key")!=store->key){Json j;j["ok"]=false;j["error"]="Invalid simulator key";return response(std::move(j),401);}std::lock_guard<std::mutex> lock(store->mutex);try{store->begin();store->meter(body(r));store->commit();Json j;j["ok"]=true;return response(std::move(j));}catch(const std::exception& e){store->rollback();Json j;j["ok"]=false;j["error"]=e.what();return response(std::move(j),400);}});
 }

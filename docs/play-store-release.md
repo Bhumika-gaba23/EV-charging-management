@@ -60,10 +60,9 @@ Commit `frontend/.well-known/assetlinks.json` and deploy the website. Check it a
 6. **App content:**
    - Privacy policy: `https://<host>/privacy.html`
    - Account deletion: `https://<host>/privacy.html#delete-account`
-   - Data safety: collects **phone number** (account management, app functionality) and
-     **purchase history** (app functionality); data encrypted in transit; users can request
-     deletion; not shared for advertising; approximate location is used on the device and
-     not collected.
+   - Data safety: see the table in [the launch checklist](launch-checklist.md#2-play-store-data-safety-form)
+     (phone number, purchase history, ratings and reports, bookings, approximate location for
+     searches; encrypted in transit; deletable; not shared for advertising).
    - Target audience: 18+. Ads: none. Content rating: complete the questionnaire (no
      sensitive content).
 7. Fill in `frontend/legal.json` (operator name, contact email, address) so the policy pages show
@@ -71,6 +70,7 @@ Commit `frontend/.well-known/assetlinks.json` and deploy the website. Check it a
 
 ## 5. Before production
 
-- Switch Razorpay to live keys after KYC, and set the live webhook secret.
+- Switch Razorpay to live keys after KYC, and set the live webhook secret
+  ([step by step](launch-checklist.md#1-razorpay-live-mode)).
 - Run the release on a real phone: install the test APK with `adb install`, confirm there is
   no address bar, sign in, pay with UPI, and delete a test account.

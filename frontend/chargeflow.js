@@ -1,8 +1,10 @@
 import { summarizeSessions, chargingDuration } from "./session-summary.js?v=20261123-pay1";
 import { performanceProfile } from "./performance-profile.js?v=20261104-summary1";
-import { CustomerApi } from "./customer-api.js?v=20261123-legal1";
+import { CustomerApi } from "./customer-api.js?v=20261124-features1";
 import { normalizeIndianPhone, sendOtp, confirmOtp, signOutFirebase, friendlyAuthError, payWithRazorpay, firebaseSignInAge, deleteFirebaseUser } from "./account.js?v=20261123-legal1";
 import { findGoogleStations } from "./google-stations.js?v=20261104-server9";
+import { greenImpact, BAND_NAMES, bandAt, rateAt, nextOffPeak, BOOKING_MINUTES, bookingSlots, overlaps, istTime, istDay, CITIES, findCity, tripMapsLink } from "./extras.js?v=20261124-features1";
+import { alertsSupported, alertsOn, enableAlerts, disableAlerts, notify, syncSchedule } from "./alerts.js?v=20261124-features1";
 import {
   vehicles,
   stations,
@@ -55,6 +57,12 @@ const paths = {
   stop: '<rect x="5" y="5" width="14" height="14" rx="3"/>',
   camera: '<path d="M3 7h4l2-3h6l2 3h4v13H3Z"/><circle cx="12" cy="13" r="4"/>',
   share: '<path d="M12 3v12m0-12-4 4m4-4 4 4M5 12v8h14v-8"/>',
+  calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4m8-4v4"/>',
+  route: '<circle cx="6" cy="19" r="2"/><circle cx="18" cy="5" r="2"/><path d="M8 19h8a4 4 0 0 0 0-8H8a4 4 0 0 1 0-8h8"/>',
+  leaf: '<path d="M5 21c0-9 5-15 15-16-1 10-7 15-15 16Z"/><path d="m5 21 9-9"/>',
+  wallet: '<path d="M3 7h17v13H3Z"/><path d="m3 7 12-4v4m1 6h3"/>',
+  alert: '<path d="M12 3 2 21h20Z"/><path d="M12 10v5m0 3h.01"/>',
+  star: '<path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2L12 17.3 6.4 20.2l1.1-6.2L3 9.6l6.2-.9Z"/>',
 };
 const icon = (name) =>
   `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true">${paths[name] || paths.bolt}</svg>`;
@@ -73,6 +81,11 @@ let preferenceQueue = Promise.resolve(), lastPreferences = "", catalogSignature 
 let state = { vehicle: "car", saved: [], sessions: [] };
 let account = { signedIn: false, phone: "" };
 let backendConfig = { authRequired: false, payments: "none" };
+// Bookings, fault reports, wallet and the time-of-use tariff come from the server (none in the preview).
+let bookings = [], reports = [], wallet = { balance: 0, history: [] }, tariff = null;
+const stationRate = (station) => station.currentRate ?? station.rate;
+const rateText = (n) => Number.isInteger(Number(n)) ? String(n) : Number(n).toFixed(2);
+const activeBooking = () => bookings.find((b) => b.status === "booked");
 let storageOkay = true;
 try {
   const saved = JSON.parse(localStorage.getItem(storageKey) || "null");
@@ -164,10 +177,19 @@ function applyBackend(payload, keepPreferences = true) {
   // The server owns battery and connector data; the app owns how vehicles look. A server that still lists
   // an older picture (with its baked-in shadow) must never override the one shipped with this app.
   for (const [id,{image,...profile}] of Object.entries(payload.catalog.vehicles)) if (Object.hasOwn(vehicles,id)) Object.assign(vehicles[id],profile);
+  const previous = { sessions: state.sessions, bookings, reports, wallet };
   state.sessions = payload.state.sessions;
+  bookings = Array.isArray(payload.state.bookings) ? payload.state.bookings : [];
+  reports = Array.isArray(payload.state.reports) ? payload.state.reports : [];
+  wallet = payload.wallet || { balance: 0, history: [] };
+  tariff = payload.tariff || null;
   account = payload.account || account;
   backendConfig = payload.backend || backendConfig;
   renderAccount();
+  if (backendReady) announceChanges(previous);
+  scheduleAlerts();
+  renderHomeBooking();
+  renderSettingsExtras();
   if (!keepPreferences) { state.vehicle = payload.state.vehicle; state.saved = payload.state.saved; lastPreferences = JSON.stringify({vehicle:state.vehicle,saved:state.saved}); }
   backendStatus(true);
   if (catalogChanged || oldVehicle !== state.vehicle) { renderVehicle(); renderStations(); renderMap(); }
@@ -229,7 +251,7 @@ function card(station) {
     vehicles[state.vehicle].connectors.includes(c.type),
   );
   const count = plugs.filter((c) => c.available).length;
-  return `<article class="station-card"><div class="station-card-top"><div><h3>${station.name}</h3><p class="station-area">${station.area} · ${distance(station, origin).toFixed(1)} km away</p></div><button class="save-button" data-save="${station.id}" aria-label="${state.saved.includes(station.id) ? "Unsave" : "Save"} ${station.name}" aria-pressed="${state.saved.includes(station.id)}">${icon("bookmark")}</button></div><span class="station-status ${count ? "" : "busy"}"><span class="status-pip"></span>${count ? `${count} compatible plug${count === 1 ? "" : "s"} available` : "Compatible plugs in use"}</span><p class="station-connectors">${[...new Set(plugs.map((c) => c.type))].join(" · ")} · up to ${Math.max(...plugs.map((c) => c.power))} kW</p><div class="station-card-bottom"><span class="rate">₹${station.rate} <small>/ kWh</small></span><button class="secondary-button" data-station="${station.id}" aria-label="View ${station.name}">View station ${icon("arrow-up-right")}</button></div></article>`;
+  return `<article class="station-card"><div class="station-card-top"><div><h3>${station.name}</h3><p class="station-area">${station.area} · ${distance(station, origin).toFixed(1)} km away</p></div><button class="save-button" data-save="${station.id}" aria-label="${state.saved.includes(station.id) ? "Unsave" : "Save"} ${station.name}" aria-pressed="${state.saved.includes(station.id)}">${icon("bookmark")}</button></div><span class="station-status ${count ? "" : "busy"}"><span class="status-pip"></span>${count ? `${count} compatible plug${count === 1 ? "" : "s"} available` : "Compatible plugs in use"}</span><p class="station-connectors">${[...new Set(plugs.map((c) => c.type))].join(" · ")} · up to ${Math.max(...plugs.map((c) => c.power))} kW</p><div class="station-card-bottom"><span class="rate">₹${rateText(stationRate(station))} <small>/ kWh</small>${station.rating?.count ? ` · ★ ${station.rating.average.toFixed(1)}` : ""}</span><button class="secondary-button" data-station="${station.id}" aria-label="View ${station.name}">View station ${icon("arrow-up-right")}</button></div></article>`;
 }
 function updateLens() {
   const selected = $(".glass-nav a[aria-current]");
@@ -445,6 +467,9 @@ function renderHomeWidgets() {
 $("#homeStartCharging").onclick = () => {
   const blocking = activeSession() || pendingSession();
   if (blocking) { openSession(blocking); return; }
+  // A booking that is holding its charger now goes straight to that charger.
+  const booking = activeBooking(), booked = booking && stationById(booking.station);
+  if (booked && Date.now() >= booking.starts - HOLD_BEFORE) { openSetup(booked, booked.connectors.find(c => c.id === booking.connector)); return; }
   const nearest = stations
     .filter(s => compatible(s, state.vehicle) && available(s, state.vehicle))
     .sort((a, b) => distance(a, origin) - distance(b, origin))[0];
@@ -520,7 +545,7 @@ function renderSelectedStation(station) {
   $("#stationSelection").dataset.stationId = station.id;
   const plugs = station.connectors.filter(connector => vehicles[state.vehicle].connectors.includes(connector.type));
   const free = plugs.filter(connector => connector.available).length;
-  $("#stationSelection").innerHTML = `<button type="button" class="station-sheet-handle" aria-label="Show or hide station details"></button><div class="station-sheet-heading"><span class="sheet-station-icon">${icon("station")}</span><div><h2>${station.name}</h2><p>${station.area} · Pluggo station</p></div><span class="sheet-distance">${distance(station, origin).toFixed(1)} km</span></div><div class="sheet-availability"><span class="availability-dot ${free ? "" : "busy"}" aria-hidden="true"></span>${free ? `${free} compatible plug${free === 1 ? "" : "s"} available` : "Compatible plugs in use"}</div><dl class="station-sheet-stats"><div><dt>Power</dt><dd>${Math.max(...plugs.map(connector => connector.power))} kW</dd></div><div><dt>Plugs</dt><dd>${free} / ${plugs.length}</dd></div><div><dt>Tariff</dt><dd>₹${station.rate}/kWh</dd></div></dl><div class="station-sheet-actions"><button class="primary-button" data-station="${station.id}" aria-label="View ${station.name}">View chargers</button><a href="${stationDirections(station)}" target="_blank" rel="noopener noreferrer" class="secondary-button">Directions ↗</a></div>`;
+  $("#stationSelection").innerHTML = `<button type="button" class="station-sheet-handle" aria-label="Show or hide station details"></button><div class="station-sheet-heading"><span class="sheet-station-icon">${icon("station")}</span><div><h2>${station.name}</h2><p>${station.area} · Pluggo station</p></div><span class="sheet-distance">${distance(station, origin).toFixed(1)} km</span></div><div class="sheet-availability"><span class="availability-dot ${free ? "" : "busy"}" aria-hidden="true"></span>${free ? `${free} compatible plug${free === 1 ? "" : "s"} available` : "Compatible plugs in use"}</div><dl class="station-sheet-stats"><div><dt>Power</dt><dd>${Math.max(...plugs.map(connector => connector.power))} kW</dd></div><div><dt>Plugs</dt><dd>${free} / ${plugs.length}</dd></div><div><dt>${station.rating?.count ? `★ ${station.rating.average.toFixed(1)} · ` : ""}Tariff</dt><dd>₹${rateText(stationRate(station))}/kWh</dd></div></dl><div class="station-sheet-actions"><button class="primary-button" data-station="${station.id}" aria-label="View ${station.name}">View chargers</button><a href="${stationDirections(station)}" target="_blank" rel="noopener noreferrer" class="secondary-button">Directions ↗</a></div>`;
   if (previous && previous !== station.id && animationAllowed && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
     const sheet = $("#stationSelection");
     sheet.getAnimations({subtree:true}).forEach(a => {if(a.id === "station-change")a.cancel();});
@@ -1051,7 +1076,7 @@ function renderRealMap() {
 }
 function layoutDialogActions() {
   const candidate = $("#dialogBody").querySelector(
-    '#chargePlan button[type="submit"], #sessionActions > button, #completePayment, #confirmReset, #selectCharger, #receiptDone',
+    '#chargePlan button[type="submit"], #bookingForm button[type="submit"], #reviewForm button[type="submit"], #reportForm button[type="submit"], #tripForm button[type="submit"], #sessionActions > button, #completePayment, #confirmReset, #selectCharger, #receiptDone',
   );
   if (!candidate) return;
   if (candidate.form?.id) candidate.setAttribute("form", candidate.form.id);
@@ -1132,9 +1157,17 @@ function openStation(station) {
   });
   const supported = (c) => v.connectors.includes(c.type);
   const ready = station.connectors.filter((c) => supported(c) && c.available);
+  const rating = station.rating;
+  const plugStatus = (c) => !supported(c) ? "Incompatible with selected vehicle" : c.bookedByYou ? "Booked by you" : c.available ? "Available" : c.reserved ? "Reserved for a booking" : "In use";
+  const cheaperAt = tariff?.enabled && station.band !== "off-peak" ? nextOffPeak(Date.now(), tariff) : 0;
+  const actions = [
+    !localPreview && `<button type="button" class="secondary-button" data-station-action="book" data-station-id="${station.id}">${icon("calendar")} Book a slot</button>`,
+    rating?.canReview && `<button type="button" class="secondary-button" data-station-action="rate" data-station-id="${station.id}">${icon("star")} ${rating.mine ? "Edit rating" : "Rate"}</button>`,
+    !localPreview && `<button type="button" class="secondary-button" data-station-action="report" data-station-id="${station.id}">${icon("alert")} Report a problem</button>`,
+  ].filter(Boolean).join("");
   showDialog(
     "PLUGGO STATION · NEW DELHI",
-    `<h2 id="dialogTitle">${station.name}</h2><p class="dialog-subtitle">${station.area} · ${distance(station, origin).toFixed(1)} km straight-line distance</p><div class="detail-tariff"><div><strong>₹${station.rate}</strong><small> / kWh</small></div><span><span class="availability-dot ${ready.length ? "" : "busy"}" aria-hidden="true"></span> ${ready.length} compatible plug${ready.length === 1 ? "" : "s"} available<br>No booking or idle fees</span></div><fieldset class="connector-picker"><legend>Charger for your ${v.name}</legend>${station.connectors.map((c) => `<label class="connector-choice ${supported(c) && c.available ? "" : "unavailable"}"><input type="radio" name="connector" value="${c.id}" data-connector="${c.id}" ${c === ready[0] ? "checked" : ""} ${supported(c) && c.available ? "" : "disabled"}><span><strong>${c.type}<span>${c.power} kW</span></strong><small><span class="availability-dot ${!supported(c) ? "unknown" : c.available ? "" : "busy"}" aria-hidden="true"></span> ${c.id} · ${!supported(c) ? "Incompatible with selected vehicle" : c.available ? "Available" : "In use"}</small></span></label>`).join("")}</fieldset><div class="amenities">${station.amenities.map((a) => `<span class="pill">${a}</span>`).join("")}</div><div class="dialog-links"><button class="text-link" id="scanConnector">${icon("qr")} Scan or enter code</button><a href="${destination}" target="_blank" rel="noopener noreferrer" class="text-link">Google Maps directions ${icon("arrow-up-right")}</a></div><button id="selectCharger" class="primary-button dialog-full" ${ready.length ? "" : "disabled"}>Select charger ${icon("arrow-up-right")}</button>`,
+    `<h2 id="dialogTitle">${station.name}</h2><p class="dialog-subtitle">${station.area} · ${distance(station, origin).toFixed(1)} km straight-line distance</p><p class="station-rating">${rating?.count ? `${stars(rating.average)} <strong>${rating.average.toFixed(1)}</strong> · ${rating.count} rating${rating.count === 1 ? "" : "s"}` : localPreview ? "" : "No ratings yet"}</p><div class="detail-tariff"><div><strong>₹${rateText(stationRate(station))}</strong><small> / kWh</small> ${bandChip(station.band)}</div><span><span class="availability-dot ${ready.length ? "" : "busy"}" aria-hidden="true"></span> ${ready.length} compatible plug${ready.length === 1 ? "" : "s"} available<br>${cheaperAt ? `₹${rateText(rateAt(station.rate, cheaperAt, tariff))}/kWh off-peak from ${istTime(cheaperAt)}` : "No idle fees"}</span></div><fieldset class="connector-picker"><legend>Charger for your ${v.name}</legend>${station.connectors.map((c) => `<label class="connector-choice ${supported(c) && c.available ? "" : "unavailable"}"><input type="radio" name="connector" value="${c.id}" data-connector="${c.id}" ${c === ready[0] ? "checked" : ""} ${supported(c) && c.available ? "" : "disabled"}><span><strong>${c.type}<span>${c.power} kW</span></strong><small><span class="availability-dot ${!supported(c) ? "unknown" : c.available ? "" : "busy"}" aria-hidden="true"></span> ${c.id} · ${plugStatus(c)}${c.openReports ? ` · <span class="issue-flag">issue reported</span>` : ""}</small></span></label>`).join("")}</fieldset><div class="amenities">${station.amenities.map((a) => `<span class="pill">${a}</span>`).join("")}</div>${rating?.recent?.length ? `<div class="review-list">${rating.recent.map((r) => `<blockquote>${stars(r.rating)}<p>${escapeText(r.comment)}</p></blockquote>`).join("")}</div>` : ""}${actions ? `<div class="station-extra-actions">${actions}</div>` : ""}<div class="dialog-links"><button class="text-link" id="scanConnector">${icon("qr")} Scan or enter code</button><a href="${destination}" target="_blank" rel="noopener noreferrer" class="text-link">Google Maps directions ${icon("arrow-up-right")}</a></div><button id="selectCharger" class="primary-button dialog-full" ${ready.length ? "" : "disabled"}>Select charger ${icon("arrow-up-right")}</button>`,
   );
   $("#selectCharger").onclick = () =>
     openSetup(
@@ -1161,15 +1194,16 @@ function openSetup(station, connector) {
   }
   showDialog(
     "YOUR CHARGE, YOUR WAY",
-    `<h2 id="dialogTitle">A little more ready.</h2><p class="dialog-subtitle">${station.name} · ${connector.id} · ${v.label}<br>Starting from 25% battery.</p><form id="chargePlan"><div class="slider-field"><label for="chargeTarget">Charge target <output id="targetOutput">${prefs.target}%</output></label><input id="chargeTarget" type="range" min="30" max="100" step="5" value="${prefs.target}"></div><div class="slider-field"><label for="chargeBudget">Budget cap <output id="budgetOutput">₹${prefs.budget}</output></label><input id="chargeBudget" type="range" min="50" max="1000" step="50" value="${prefs.budget}"></div><p class="dialog-subtitle">Stops at your target or budget, whichever comes first.</p><div class="bill-summary" id="chargeEstimate"></div><button type="submit" class="primary-button dialog-full">Start charging ${icon("bolt")}</button></form>`,
+    `<h2 id="dialogTitle">A little more ready.</h2><p class="dialog-subtitle">${station.name} · ${connector.id} · ${v.label}<br>Starting from 25% battery.</p><form id="chargePlan"><div class="slider-field"><label for="chargeTarget">Charge target <output id="targetOutput">${prefs.target}%</output></label><input id="chargeTarget" type="range" min="30" max="100" step="5" value="${prefs.target}"></div><div class="slider-field"><label for="chargeBudget">Budget cap <output id="budgetOutput">₹${prefs.budget}</output></label><input id="chargeBudget" type="range" min="50" max="1000" step="50" value="${prefs.budget}"></div><p class="dialog-subtitle">Stops at your target or budget, whichever comes first.</p><div class="bill-summary" id="chargeEstimate"></div><div id="chargeTip"></div><button type="submit" class="primary-button dialog-full">Start charging ${icon("bolt")}</button></form>`,
   );
   function estimate() {
     const target = Number($("#chargeTarget").value),
       budget = Number($("#chargeBudget").value),
-      power = Math.min(v.power, connector.power);
+      power = Math.min(v.power, connector.power),
+      rate = stationRate(station);
     const energy = Math.min(
       ((target - 25) / 100) * v.capacity,
-      budget / station.rate,
+      budget / rate,
     );
     $("#targetOutput").textContent = `${target}%`;
     $("#budgetOutput").textContent = `₹${budget}`;
@@ -1177,7 +1211,14 @@ function openSetup(station, connector) {
       billRow("Energy to add", `${energy.toFixed(2)} kWh`) +
       billRow("Charging power", `${power} kW`) +
       billRow("Estimated time", `~${Math.max(1, Math.ceil((energy / power) * 60))} min`) +
-      billRow("Estimated bill", currency(energy * station.rate), "total");
+      billRow("Rate now", `₹${rateText(rate)} / kWh ${bandChip(station.band)}`) +
+      billRow("Estimated bill", currency(energy * rate), "total");
+    // Time-of-use: point out a cheaper off-peak slot, and the wallet credit that will be used.
+    const cheaperAt = tariff?.enabled && station.band !== "off-peak" ? nextOffPeak(Date.now(), tariff) : 0;
+    const saving = cheaperAt ? energy * (rate - rateAt(station.rate, cheaperAt, tariff)) : 0;
+    $("#chargeTip").innerHTML =
+      (saving >= 1 ? `<p class="tariff-tip">${icon("calendar")}<span>Off-peak from ${istTime(cheaperAt)} costs ₹${rateText(rateAt(station.rate, cheaperAt, tariff))}/kWh, about ${currency(saving)} less for this charge. <button type="button" class="text-link" data-station-action="book" data-station-id="${station.id}">Book an off-peak slot</button></span></p>` : "") +
+      (wallet.balance > 0 && !localPreview ? notice(`${currency(Math.min(wallet.balance, energy * rate))} of your wallet credit will be used at checkout.`) : "");
   }
   $("#chargeTarget").oninput = estimate;
   $("#chargeBudget").oninput = estimate;
@@ -1254,11 +1295,13 @@ function updateSessionDialog() {
         (s.energy > 0 && (s.energy / s.power) * 60 < 1) ? "Less than 1 min" : `${Math.floor((s.energy / s.power) * 60)} min`,
       ) +
       billRow("Total", currency(total(s))) +
+      (s.walletUsed > 0 ? billRow("Wallet credit used", `−${currency(s.walletUsed)}`) : "") +
       billRow("Amount paid", currency(paidAmount(s)), "total")
     : `<div><span>Energy added</span><strong>${s.energy.toFixed(2)}<small> kWh</small></strong></div><div><span>Charging time</span><strong>${Math.floor((s.energy / s.power) * 60)}<small> min</small></strong></div><div><span>Cost</span><strong>${currency(total(s))}</strong></div><p class="charge-context">${s.ended ? s.reason : `${s.power} kW`} · Target ${s.target}%</p>`;
   if (s.settled) {
+    const rating = stationById(s.station)?.rating;
     $("#sessionActions").innerHTML =
-      `<button id="receiptDone" class="primary-button dialog-full">Back to sessions</button><button id="shareReceipt" class="secondary-button dialog-full">${icon("share")} Share receipt</button>`;
+      `<button id="receiptDone" class="primary-button dialog-full">Back to sessions</button><button id="shareReceipt" class="secondary-button dialog-full">${icon("share")} Share receipt</button>${rating?.canReview && !rating.mine ? `<button type="button" class="secondary-button dialog-full" data-station-action="rate" data-station-id="${s.station}">${icon("star")} Rate this station</button>` : ""}`;
     $("#shareReceipt").onclick = () => shareReceipt(s);
     $("#receiptDone").onclick = () => {
       $("#flowDialog").close();
@@ -1293,11 +1336,12 @@ const refundedAmount = (s) => Math.max(0, Number(s.receipt?.refunded) || 0);
 function openCheckout(s) {
   if (!s.ended) return;
   const station = stationById(s.station);
-  const due = total(s);
+  const due = sessionDue(s);
+  const credit = Number(s.walletUse) || 0;
   const online = !localPreview && backendConfig.payments === "razorpay" && due >= 1;
   showDialog(
     "CHECKOUT",
-    `<div class="receipt-symbol">${icon("receipt")}</div><h2 id="dialogTitle">All charged.</h2><p class="dialog-subtitle">${station.name} · ${s.connector}</p><div class="bill-summary">${billRow("Energy delivered", `${s.energy.toFixed(2)} kWh`)}${billRow("Rate", `₹${s.rate ?? station.rate} / kWh`)}${billRow("Amount due", currency(due), "total")}</div>${online ? notice("Secure payment by Razorpay · UPI, cards and netbanking.") : due < 1 ? notice("Charges under ₹1 are on us.") : ""}<button class="primary-button dialog-full" id="completePayment">${online ? `Pay ${currency(due)}` : "Complete checkout"} ${icon("check")}</button>`,
+    `<div class="receipt-symbol">${icon("receipt")}</div><h2 id="dialogTitle">All charged.</h2><p class="dialog-subtitle">${station.name} · ${s.connector}</p><div class="bill-summary">${billRow("Energy delivered", `${s.energy.toFixed(2)} kWh`)}${billRow("Rate", `₹${s.rate ?? station.rate} / kWh ${s.band ? bandChip(s.band) : ""}`)}${credit > 0 ? billRow("Charging cost", currency(total(s))) + billRow("Wallet credit", `−${currency(credit)}`) : ""}${billRow("Amount due", currency(due), "total")}</div>${online ? notice("Secure payment by Razorpay · UPI, cards and netbanking.") : credit > 0 && due < 1 ? notice("Your wallet credit covers this charge.") : due < 1 ? notice("Charges under ₹1 are on us.") : ""}<button class="primary-button dialog-full" id="completePayment">${online ? `Pay ${currency(due)}` : "Complete checkout"} ${icon("check")}</button>`,
   );
   $("#completePayment").onclick = async () => {
     const button = $("#completePayment");
@@ -1463,6 +1507,7 @@ function renderSessionSummary() {
   const html = `<div class="activity-rings"><svg viewBox="0 0 120 120" role="img" aria-label="Energy, spend and charges against your goals">${ringSvg}</svg><ul class="ring-legend">${legend}</ul></div><div class="activity-strip"><span><small>Time on charger</small><strong>${chargingDuration(summary.minutes)}</strong></span><span><small>Paid</small><strong>${currency(summary.collected)}</strong></span><span><small>Average</small><strong>${summary.completed ? `₹${(summary.cost / summary.completed).toFixed(0)}` : "—"}</strong></span></div>`;
   if ($("#sessionSummaryCards").innerHTML !== html) $("#sessionSummaryCards").innerHTML = html;
   renderWeekChart();
+  renderGreenImpact();
 }
 // Energy added per day for the last seven India days: one series, so no legend; the title names it.
 function renderWeekChart() {
@@ -1706,8 +1751,202 @@ function useFallback(permanent = true) {
     sceneController.setVisible(page === "home" || page === "garage");
   })
   .catch(() => useFallback(true));
+// ===== Bookings, alerts, ratings, fault reports, trips, wallet and green impact =================
+const stars = (value) => `<span class="stars" role="img" aria-label="${value} out of 5 stars">${[1, 2, 3, 4, 5].map((n) => `<span class="${n <= Math.round(value) ? "on" : ""}" aria-hidden="true">★</span>`).join("")}</span>`;
+const bandChip = (band) => tariff?.enabled ? `<span class="band-chip band-${band}">${BAND_NAMES[band] || band}</span>` : "";
+const sessionDue = (s) => Number.isFinite(s.due) ? s.due : total(s);
+const durationLabel = (minutes) => minutes < 60 ? `${minutes} min` : `${Math.floor(minutes / 60)} h${minutes % 60 ? ` ${minutes % 60}` : ""}`;
+const HOLD_BEFORE = 15 * 60000, HOLD_AFTER = 10 * 60000;
+let synced = false;
+// Tells the driver about things that changed on the server: a finished charge, an expired booking,
+// a resolved report or new wallet credit. A system notification when Pluggo is in the background.
+function announceChanges(previous) {
+  if (!synced) { synced = true; return; }
+  const tell = (tag, title, message) => { if (document.hidden) notify(tag, title, message); else toast(message); };
+  for (const s of state.sessions) {
+    const before = previous.sessions.find((p) => p.id === s.id);
+    if (before && !before.ended && s.ended) tell(`charge-${s.id}`, "Charging complete", `${s.energy.toFixed(2)} kWh added at ${stationById(s.station)?.name || "the station"}. ${currency(sessionDue(s))} to pay.`);
+  }
+  for (const b of bookings) {
+    if (previous.bookings.find((p) => p.id === b.id)?.status === "booked" && b.status === "no-show")
+      tell(`booking-${b.id}`, "Booking expired", `Your ${istTime(b.starts)} slot at ${stationById(b.station)?.name} was released because charging did not start.`);
+  }
+  for (const r of reports) {
+    if (previous.reports.find((p) => p.id === r.id)?.status === "open" && r.status === "resolved")
+      tell(`report-${r.id}`, "Your report was resolved", `${stationById(r.station)?.name}: ${r.resolution || "fixed"}.`);
+  }
+  for (const entry of wallet.history) {
+    if (entry.amount > 0 && Date.now() - entry.created < 120000 && !previous.wallet.history.some((p) => p.id === entry.id))
+      tell(`wallet-${entry.id}`, "Credit added", `${currency(entry.amount)} added to your Pluggo wallet. ${entry.reason}.`);
+  }
+}
+// Alerts the phone can show on its own, even if Pluggo is closed: charge complete and booking reminders.
+function scheduleAlerts() {
+  const desired = new Map();
+  for (const s of state.sessions) if (!s.ended && s.expectedEnd)
+    desired.set(`charge-${s.id}`, { at: s.expectedEnd, title: "Charging complete", body: `Your ${vehicles[s.vehicle]?.name || "vehicle"} is charged at ${stationById(s.station)?.name}. Open Pluggo to pay.` });
+  const b = activeBooking();
+  if (b) desired.set(`booking-${b.id}`, { at: b.starts - HOLD_AFTER, title: `Your charging slot starts at ${istTime(b.starts)}`, body: `${stationById(b.station)?.name} · ${b.connector}. We hold the charger until ${istTime(b.starts + HOLD_AFTER)}.` });
+  syncSchedule(desired);
+}
+function bookingCard(b) {
+  const station = stationById(b.station);
+  const ready = Date.now() >= b.starts - HOLD_BEFORE;
+  return `<div class="booking-card"><span class="booking-icon">${icon("calendar")}</span><div class="booking-copy"><small>Booked · ${istDay(b.starts)} ${istTime(b.starts)}–${istTime(b.ends)}</small><strong>${station?.name || b.station}</strong><span>${b.connector} · ₹${rateText(b.rate)}/kWh ${bandChip(b.band)}</span></div><div class="booking-actions">${ready ? `<button type="button" class="primary-button" data-booking-start="${b.id}">Start ${icon("bolt")}</button>` : ""}<button type="button" class="secondary-button" data-booking-cancel="${b.id}">Cancel</button></div></div>`;
+}
+function renderHomeBooking() {
+  const b = activeBooking();
+  for (const el of [$("#homeBooking"), $("#sessionBooking")]) {
+    if (!el) continue;
+    el.hidden = !b;
+    const html = b ? bookingCard(b) : "";
+    if (el.innerHTML !== html) el.innerHTML = html;
+  }
+}
+function openBooking(station, preferred = "") {
+  if (localPreview) { toast("Booking needs the live Pluggo app."); return; }
+  if (backendConfig.authRequired && !account.signedIn) { openSignIn(() => openBooking(stationById(station.id), preferred)); return; }
+  if (activeBooking()) { toast("You already have a booking. Cancel it to book another slot."); return; }
+  const v = vehicles[state.vehicle];
+  const plugs = station.connectors.filter((c) => v.connectors.includes(c.type));
+  if (!plugs.length) { toast("No charger here fits your vehicle."); return; }
+  const slots = bookingSlots(Date.now());
+  showDialog("BOOK A CHARGER", `<h2 id="dialogTitle">Book your slot.</h2><p class="dialog-subtitle">${station.name} · ${v.name}<br>We hold the charger from 15 minutes before your slot until 10 minutes after it starts. Booking is free.</p><form id="bookingForm"><fieldset class="connector-picker"><legend>Charger</legend>${plugs.map((c, i) => `<label class="connector-choice"><input type="radio" name="bookConnector" value="${c.id}" ${(preferred ? c.id === preferred : i === 0) ? "checked" : ""}><span><strong>${c.type}<span>${c.power} kW</span></strong><small>${c.id}${c.bookings?.length ? ` · ${c.bookings.length} booked slot${c.bookings.length === 1 ? "" : "s"} today` : " · no bookings yet"}</small></span></label>`).join("")}</fieldset><label class="field-label" for="bookingStart">Start</label><select id="bookingStart" class="field-select"></select><p class="field-label" id="bookingLengthLabel">How long</p><div class="duration-choice" role="radiogroup" aria-labelledby="bookingLengthLabel">${BOOKING_MINUTES.map((m) => `<label><input type="radio" name="bookMinutes" value="${m}" ${m === 60 ? "checked" : ""}><span>${durationLabel(m)}</span></label>`).join("")}</div><div class="bill-summary" id="bookingSummary"></div><button type="submit" class="primary-button dialog-full">Book this slot ${icon("calendar")}</button></form>`);
+  const chosenConnector = () => station.connectors.find((c) => c.id === $("input[name=bookConnector]:checked")?.value) || plugs[0];
+  function refresh() {
+    const connector = chosenConnector(), minutes = Number($("input[name=bookMinutes]:checked")?.value || 60), previous = $("#bookingStart").value;
+    const options = slots.map((slot) => {
+      const start = slot.now ? Date.now() : slot.start;
+      const taken = overlaps(start, minutes, connector.bookings) || (slot.now && !connector.available);
+      return { value: slot.now ? "now" : String(slot.start), taken, label: `${slot.now ? "Now" : `${istDay(slot.start)} ${istTime(slot.start)}`} · ${BAND_NAMES[bandAt(start, tariff).band]}${taken ? " · taken" : ""}` };
+    });
+    $("#bookingStart").innerHTML = options.map((o) => `<option value="${o.value}" ${o.taken ? "disabled" : ""}>${o.label}</option>`).join("");
+    const keep = options.find((o) => o.value === previous && !o.taken) || options.find((o) => !o.taken);
+    if (keep) $("#bookingStart").value = keep.value;
+    $("#dialogActions button")?.toggleAttribute("disabled", !keep);
+    summarize();
+  }
+  function summarize() {
+    const value = $("#bookingStart").value, start = value === "now" ? Date.now() : Number(value);
+    if (!start) { $("#bookingSummary").innerHTML = notice("Every slot in the next 24 hours is taken on this charger. Try another charger."); return; }
+    const minutes = Number($("input[name=bookMinutes]:checked")?.value || 60), band = bandAt(start, tariff).band;
+    $("#bookingSummary").innerHTML = billRow("When", `${istDay(start)} ${istTime(start)}–${istTime(start + minutes * 60000)}`) + billRow("Rate at that time", `₹${rateText(rateAt(station.rate, start, tariff))} / kWh ${bandChip(band)}`) + billRow("Booking fee", "Free", "total");
+  }
+  $("#bookingForm").addEventListener("change", (event) => { if (event.target.id === "bookingStart") summarize(); else refresh(); });
+  refresh();
+  $("#bookingForm").onsubmit = async (event) => {
+    event.preventDefault();
+    const value = $("#bookingStart").value, start = value === "now" ? Date.now() : Number(value);
+    const reply = await backendAction($("#dialogActions button"), () => customerApi.book({ station: station.id, connector: chosenConnector().id, vehicle: state.vehicle, start, minutes: Number($("input[name=bookMinutes]:checked").value) }));
+    if (!reply) return;
+    $("#flowDialog").close();
+    toast(`Booked ${istDay(start).toLowerCase()} at ${istTime(start)}, ${station.name}.${alertsSupported() && !alertsOn() ? " Turn on charging alerts in Settings for a reminder." : ""}`);
+  };
+}
+function openReview(station) {
+  const mine = station.rating?.mine;
+  showDialog("RATE THIS STATION", `<h2 id="dialogTitle">How was ${station.name}?</h2><form id="reviewForm"><div class="star-input" role="radiogroup" aria-label="Your rating">${[1, 2, 3, 4, 5].map((n) => `<label><input type="radio" name="stars" value="${n}" ${mine?.rating === n ? "checked" : ""} required><span aria-hidden="true">★</span><span class="visually-hidden">${n} star${n === 1 ? "" : "s"}</span></label>`).join("")}</div><label class="field-label" for="reviewComment">Comment <small>(optional)</small></label><textarea id="reviewComment" class="field-text" maxlength="280" rows="3" placeholder="Was it easy to find? Did the charger work well?">${escapeText(mine?.comment || "")}</textarea><p class="dialog-subtitle">Other drivers see your stars and comment, never your name or number.</p><button type="submit" class="primary-button dialog-full">${mine ? "Update rating" : "Post rating"}</button></form>`);
+  const paint = () => { const value = Number($("input[name=stars]:checked")?.value || 0); $$(".star-input label").forEach((label, i) => label.classList.toggle("on", i < value)); };
+  $(".star-input").addEventListener("change", paint);
+  paint();
+  $("#reviewForm").onsubmit = async (event) => {
+    event.preventDefault();
+    const reply = await backendAction($("#dialogActions button"), () => customerApi.review(station.id, { rating: Number($("input[name=stars]:checked").value), comment: $("#reviewComment").value.trim() }));
+    if (!reply) return;
+    toast(`Thanks for rating ${station.name}.`);
+    openStation(stationById(station.id));
+  };
+}
+const REPORT_KINDS = [["not-working", "Charger is not working"], ["blocked", "Bay is blocked by another vehicle"], ["damaged", "Cable or plug is damaged"], ["payment", "Problem with payment or the bill"], ["other", "Something else"]];
+function openReport(station, connectorId = "") {
+  if (localPreview) { toast("Reporting needs the live Pluggo app."); return; }
+  showDialog("REPORT A PROBLEM", `<h2 id="dialogTitle">What went wrong?</h2><p class="dialog-subtitle">${station.name}. The station operator sees your report straight away, and we tell you when it is fixed.</p><form id="reportForm"><fieldset class="connector-picker report-kinds"><legend class="visually-hidden">Problem</legend>${REPORT_KINDS.map(([kind, label], i) => `<label class="connector-choice"><input type="radio" name="reportKind" value="${kind}" ${i === 0 ? "checked" : ""}><span><strong>${label}</strong></span></label>`).join("")}</fieldset><label class="field-label" for="reportConnector">Charger</label><select id="reportConnector" class="field-select"><option value="">Whole station or not sure</option>${station.connectors.map((c) => `<option value="${c.id}" ${c.id === connectorId ? "selected" : ""}>${c.id} · ${c.type}</option>`).join("")}</select><label class="field-label" for="reportNote">Details <small>(optional)</small></label><textarea id="reportNote" class="field-text" maxlength="280" rows="3" placeholder="For example: the screen is blank"></textarea><button type="submit" class="primary-button dialog-full">Send report</button></form>`);
+  $("#reportForm").onsubmit = async (event) => {
+    event.preventDefault();
+    const reply = await backendAction($("#dialogActions button"), () => customerApi.report({ station: station.id, connector: $("#reportConnector").value, kind: $("input[name=reportKind]:checked").value, note: $("#reportNote").value.trim() }));
+    if (!reply) return;
+    $("#flowDialog").close();
+    toast("Thanks. The operator has been told, and we will let you know when it is fixed.");
+  };
+}
+function openTrip() {
+  if (localPreview) { toast("Trip planning needs the live Pluggo app."); return; }
+  const v = vehicles[state.vehicle], level = Math.max(5, Math.round(batteryLevel(state.vehicle) / 5) * 5);
+  // Rounded to about 100 m before it leaves the phone, as for the real-station search.
+  const from = { lat: Math.round(origin.lat * 1000) / 1000, lng: Math.round(origin.lng * 1000) / 1000 };
+  showDialog("PLAN A TRIP", `<h2 id="dialogTitle">Where to?</h2><p class="dialog-subtitle">From ${origin.device ? "your location" : "Connaught Place, New Delhi"} in your ${v.name}. We find charging stops along the way.</p><form id="tripForm"><label class="field-label" for="tripTo">Destination city</label><input id="tripTo" class="field-text" list="tripCities" autocomplete="off" placeholder="For example: Jaipur" required><datalist id="tripCities">${CITIES.map((c) => `<option value="${c.name}"></option>`).join("")}</datalist><div class="slider-field"><label for="tripBattery">Battery now <output id="tripBatteryOut">${level}%</output></label><input id="tripBattery" type="range" min="5" max="100" step="5" value="${level}"></div><button type="submit" class="primary-button dialog-full">Plan charging stops ${icon("route")}</button></form><div id="tripResult" aria-live="polite"></div>`);
+  $("#tripBattery").oninput = () => { $("#tripBatteryOut").textContent = `${$("#tripBattery").value}%`; };
+  $("#tripForm").onsubmit = async (event) => {
+    event.preventDefault();
+    const to = findCity($("#tripTo").value);
+    if (!to) { toast("Pick a city from the list."); return; }
+    const button = $("#dialogActions button");
+    button.disabled = true; button.setAttribute("aria-busy", "true");
+    $("#tripResult").innerHTML = `<p class="dialog-subtitle">Finding chargers between here and ${to.name}…</p>`;
+    try {
+      const plan = await customerApi.trip({ fromLat: from.lat, fromLng: from.lng, toLat: to.lat, toLng: to.lng, vehicle: state.vehicle, battery: $("#tripBattery").value });
+      $("#tripResult").innerHTML = tripResult(plan, from, to);
+      $("#tripResult").scrollIntoView({ behavior: animationAllowed ? "smooth" : "auto", block: "start" });
+    } catch (error) { $("#tripResult").innerHTML = notice(escapeText(error.message)); }
+    finally { if (button.isConnected) { button.disabled = false; button.removeAttribute("aria-busy"); } }
+  };
+}
+function tripResult(plan, from, to) {
+  const stops = plan.stops || [];
+  const head = billRow("Distance by road", `~${Math.round(plan.distanceKm)} km`) + billRow("Driving", `~${chargingDuration(plan.driveMinutes)}`) + billRow("Charging stops", stops.length ? `${stops.length} · ${chargingDuration(plan.chargeMinutes)}` : "None needed") + (stops.length ? billRow("Charging cost", `~${currency(plan.chargeCostEstimate)}`) : "") + (plan.feasible ? billRow(`Arrive in ${to.name} with`, `${Math.round(plan.arrivalBattery)}%`, "total") : "");
+  const list = stops.map((s, i) => `<li><span class="trip-index">${i + 1}</span><div><strong>${escapeText(s.name)}</strong><small>${escapeText(s.address || "")}</small><span>${Math.round(s.legKm)} km on · arrive ${Math.round(s.arriveBattery)}% · charge to ${Math.round(s.leaveBattery)}% in ~${chargingDuration(s.minutes)}</span><span class="trip-meta">${s.network === "pluggo" ? "Pluggo station" : `Public charger · ${s.powerKnown ? `${Math.round(s.powerKW)} kW` : "power not listed, assumed 7.4 kW"}`} · ~${currency(s.costEstimate)}</span><a class="text-link" href="${stationDirections(s)}" target="_blank" rel="noopener noreferrer">Directions ${icon("arrow-up-right")}</a></div></li>`).join("");
+  return `<h3 class="trip-heading">${plan.feasible ? `Your trip to ${to.name}` : "We could not plan this trip"}</h3>${plan.feasible ? "" : notice(escapeText(plan.note))}<div class="bill-summary">${head}</div>${list ? `<ol class="trip-stops">${list}</ol>` : ""}${plan.feasible ? `<a class="secondary-button dialog-full" href="${tripMapsLink(from, to, stops)}" target="_blank" rel="noopener noreferrer">Open the route in Google Maps ${icon("arrow-up-right")}</a>` : ""}<p class="green-note">${escapeText(plan.assumptions)}</p>`;
+}
+function renderGreenImpact() {
+  const g = greenImpact(state.sessions, { period: summaryPeriod, cost: total });
+  const html = g.energy > 0 ? `<div class="week-head"><h3>${icon("leaf")} Green impact</h3><small>vs a similar petrol vehicle</small></div><div class="green-grid"><span><small>CO₂ avoided</small><strong>${g.co2Avoided.toFixed(1)} kg</strong></span><span><small>Petrol saved</small><strong>${g.litres.toFixed(1)} L</strong></span><span><small>Money saved</small><strong>${currency(Math.max(0, g.saved))}</strong></span><span><small>Distance powered</small><strong>${Math.round(g.km)} km</strong></span></div><p class="green-note">About ${g.treeYears.toFixed(1)} tree-years of CO₂ absorption. Assumes petrol at ₹95/L (2.31 kg CO₂/L) and India's grid at 0.71 kg CO₂/kWh.</p>` : "";
+  $("#greenImpact").hidden = !html;
+  if ($("#greenImpact").innerHTML !== html) $("#greenImpact").innerHTML = html;
+}
+function renderSettingsExtras() {
+  if (!$("#walletButton")) return;
+  $("#walletButton").hidden = localPreview;
+  $("#walletSummary").textContent = wallet.balance > 0 ? `${currency(wallet.balance)} credit · used automatically at checkout` : "No credit yet";
+  $("#reportsButton").hidden = !reports.length;
+  const open = reports.filter((r) => r.status === "open").length;
+  $("#reportsSummary").textContent = open ? `${open} open · we will tell you when ${open === 1 ? "it is" : "they are"} fixed` : `${reports.length} resolved`;
+  $("#alertsRow").hidden = !alertsSupported();
+  $("#chargingAlerts").checked = alertsOn();
+}
+const KIND_LABELS = Object.fromEntries(REPORT_KINDS);
+const when = (ms) => new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" }).format(new Date(ms));
+$("#walletButton").onclick = () => showDialog("PLUGGO WALLET", `<div class="receipt-symbol">${icon("wallet")}</div><h2 id="dialogTitle">${currency(wallet.balance)}</h2><p class="dialog-subtitle">Credit from Pluggo, for example after a faulty charger. It pays for your next charges automatically at checkout.</p>${wallet.history.length ? `<div class="bill-summary wallet-history">${wallet.history.map((h) => billRow(`${escapeText(h.reason)}<small>${when(h.created)}</small>`, `${h.amount > 0 ? "+" : "−"}${currency(Math.abs(h.amount))}`)).join("")}</div>` : notice("No credit yet.")}`);
+$("#reportsButton").onclick = () => showDialog("REPORTED PROBLEMS", `<h2 id="dialogTitle">Your reports</h2><div class="bill-summary wallet-history">${reports.map((r) => billRow(`${KIND_LABELS[r.kind] || r.kind}<small>${stationById(r.station)?.name || r.station}${r.connector ? ` · ${r.connector}` : ""} · ${when(r.created)}${r.status === "resolved" && r.resolution ? ` · ${escapeText(r.resolution)}` : ""}</small>`, r.status === "open" ? "Open" : `Resolved${r.credit > 0 ? ` · +${currency(r.credit)}` : ""}`)).join("")}</div>`);
+$("#chargingAlerts").addEventListener("change", async (event) => {
+  if (!event.target.checked) { disableAlerts(); toast("Charging alerts are off."); return; }
+  const granted = await enableAlerts();
+  event.target.checked = granted;
+  if (!granted) { toast("Notifications are blocked. Allow them for Pluggo in your phone or browser settings."); return; }
+  scheduleAlerts();
+  toast("Charging alerts are on.");
+});
+$("#openTripPlanner").onclick = openTrip;
+document.addEventListener("click", async (event) => {
+  const start = event.target.closest("[data-booking-start]");
+  if (start) {
+    const b = bookings.find((item) => item.id === start.dataset.bookingStart), station = b && stationById(b.station);
+    if (station) openSetup(station, station.connectors.find((c) => c.id === b.connector));
+  }
+  const cancel = event.target.closest("[data-booking-cancel]");
+  if (cancel && await backendAction(cancel, () => customerApi.cancelBooking(cancel.dataset.bookingCancel))) toast("Booking cancelled.");
+  const extra = event.target.closest("[data-station-action]");
+  if (extra) {
+    const station = stationById(extra.dataset.stationId);
+    ({ book: () => openBooking(station), rate: () => openReview(station), report: () => openReport(station) })[extra.dataset.stationAction]?.();
+  }
+});
+let hiddenTicks = 0;
 const tick = setInterval(() => {
-  if (document.hidden) return;
+  if (document.hidden) {
+    // In a background browser tab, check every 20 s so a finished charge can still raise an alert.
+    if (!localPreview && alertsOn() && (activeSession() || activeBooking()) && ++hiddenTicks % 20 === 0) refreshBackend();
+    return;
+  }
   if (!localPreview) { if (!document.hidden) refreshBackend(); return; }
   const current = activeSession();
   if (current) {

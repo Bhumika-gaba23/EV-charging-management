@@ -11,6 +11,7 @@
       "index": "01",
       "capacity": 40,
       "power": 50,
+      "kmPerKWh": 6.5,
       "connectors": [
         "CCS2",
         "Type 2"
@@ -28,6 +29,7 @@
       "index": "02",
       "capacity": 3,
       "power": 1.5,
+      "kmPerKWh": 30,
       "connectors": [
         "Bharat AC-001"
       ],
@@ -44,6 +46,7 @@
       "index": "03",
       "capacity": 5,
       "power": 3,
+      "kmPerKWh": 25,
       "connectors": [
         "Bharat AC-001"
       ],
@@ -60,6 +63,7 @@
       "index": "04",
       "capacity": 20,
       "power": 6.6,
+      "kmPerKWh": 7.5,
       "connectors": [
         "Bharat AC-001"
       ],

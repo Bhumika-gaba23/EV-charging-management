@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="styles.css">
   <link rel="stylesheet" href="theme.css">
   <link rel="stylesheet" href="portal.css">
-  <link rel="stylesheet" href="dashboard.css?v=20261123-refunds">
+  <link rel="stylesheet" href="dashboard.css?v=20261124-insights1">
   <link rel="icon" href="assets/pluggo.svg" type="image/svg+xml">
 </head>
 <body>
@@ -71,6 +71,8 @@
       <button class="nav-item" data-target="queue"><span>04</span>Smart queue</button>
       <button class="nav-item" data-target="energy"><span>05</span>Solar energy</button>
       <button class="nav-item" data-target="emergency"><span>06</span>Emergency</button>
+      <button class="nav-item" data-target="analytics"><span>07</span>Analytics</button>
+      <button class="nav-item" data-target="reports"><span>08</span>Reports <b id="openReportCount" class="nav-count" hidden></b></button>
     </nav>
     <button id="themeToggle" class="theme-toggle" type="button" aria-label="Switch to light mode" aria-pressed="true">
       <span class="theme-icon">DARK</span><span class="theme-label">APPEARANCE</span><i aria-hidden="true"></i>
@@ -179,6 +181,22 @@
         <article class="card protocol-card" id="emergencyResult"><span class="protocol-icon">!</span><div><p class="eyebrow">PROTOCOL STANDBY</p><h2>No active emergency</h2><p>The system will choose a compatible non-emergency session, pause it safely, and issue a ₹50 fairness credit.</p></div></article>
       </div>
     </section>
+    <section id="analytics" class="panel" aria-labelledby="analyticsTitle">
+      <div class="section-heading"><p class="eyebrow">REVENUE, ENERGY AND UTILISATION</p><h2 id="analyticsTitle">Analytics</h2><p>Completed customer charges by India date. Revenue is what was billed; collected is what Razorpay received after refunds and wallet credit.</p></div>
+      <div class="recent-toolbar"><label for="analyticsDays">Period</label><select id="analyticsDays"><option value="7">Last 7 days</option><option value="14" selected>Last 14 days</option><option value="30">Last 30 days</option><option value="90">Last 90 days</option></select><span id="analyticsUpdated" aria-live="polite"></span></div>
+      <div class="metric-grid insight-metrics" id="analyticsTotals"></div>
+      <div class="insight-grid">
+        <article class="card"><p class="eyebrow">PER DAY</p><h2>Revenue and charges</h2><div id="analyticsDaily" class="insight-chart"></div></article>
+        <article class="card"><p class="eyebrow">BY HOUR · INDIA TIME</p><h2>Charger utilisation</h2><div id="analyticsHourly" class="insight-chart"></div></article>
+        <article class="card"><p class="eyebrow">PER STATION</p><h2>Stations</h2><div id="analyticsStations"></div></article>
+        <article class="card"><p class="eyebrow">TIME-OF-USE PRICING AND BOOKINGS</p><h2>Tariff bands</h2><div id="analyticsBands"></div></article>
+      </div>
+    </section>
+
+    <section id="reports" class="panel" aria-labelledby="reportsTitle">
+      <div class="section-heading"><p class="eyebrow">FAULTS REPORTED BY DRIVERS</p><h2 id="reportsTitle">Charger reports</h2><p>Resolve a report once it is fixed. You can add wallet credit for the driver, which pays for their next charge.</p></div>
+      <div id="reportList" class="report-grid" aria-live="polite"><article class="card"><p class="queue-empty">Loading reports…</p></article></div>
+    </section>
   </main>
 
   <div id="scannerModal" class="scanner-modal" role="dialog" aria-modal="true" aria-labelledby="scannerTitle" aria-hidden="true">
@@ -201,9 +219,12 @@
   <footer class="dashboard-footer"><span>Pluggo · EV charging management</span><span>Simulation data · no physical charger connected</span><a href="assets/models/CREDITS.md" target="_blank" rel="noopener">Model credits ↗</a></footer>
   <dialog id="operatorInfo" class="operator-info"><div><h2>Station operator</h2><button type="button" id="closeOperatorInfo" aria-label="Close operator details">×</button></div><p>This project dashboard demonstrates scheduling, budget control, priority queues, solar allocation and emergency handling.</p><p id="operatorConnection"></p><p id="operatorAccount"></p><button type="button" id="operatorSignOut" class="operator-gate-link" hidden>Sign out</button></dialog>
   <dialog id="refundDialog" class="operator-info refund-dialog" aria-labelledby="refundTitle"><form id="refundForm" method="dialog"><div><h2 id="refundTitle">Refund payment</h2></div><p id="refundSummary"></p><label>Amount (₹)<input id="refundAmount" type="number" min="0.01" step="0.01" required inputmode="decimal"></label><label>Reason<input id="refundReason" type="text" maxlength="200" placeholder="Charger fault, overcharge…"></label><div class="refund-actions"><button type="button" id="cancelRefund" class="refund-secondary">Cancel</button><button type="submit" id="confirmRefund" class="operator-gate-button">Refund</button></div></form></dialog>
+  <dialog id="creditDialog" class="operator-info refund-dialog" aria-labelledby="creditTitle"><form id="creditForm" method="dialog"><div><h2 id="creditTitle">Add wallet credit</h2></div><p id="creditSummary"></p><label>Amount (₹)<input id="creditAmount" type="number" min="1" max="500" step="1" value="50" required inputmode="numeric"></label><label>Reason<input id="creditReason" type="text" maxlength="200" placeholder="Paused for an emergency vehicle, slow charger…" value="Credit from Pluggo"></label><div class="refund-actions"><button type="button" id="cancelCredit" class="refund-secondary">Cancel</button><button type="submit" id="confirmCredit" class="operator-gate-button">Add credit</button></div></form></dialog>
+  <dialog id="resolveDialog" class="operator-info refund-dialog" aria-labelledby="resolveTitle"><form id="resolveForm" method="dialog"><div><h2 id="resolveTitle">Resolve report</h2></div><p id="resolveSummary"></p><label>What was done<input id="resolveNote" type="text" maxlength="300" required value="Fixed by the operator"></label><label>Wallet credit for the driver (₹)<select id="resolveCredit"><option value="0">No credit</option><option value="25">₹25</option><option value="50" selected>₹50</option><option value="100">₹100</option></select></label><div class="refund-actions"><button type="button" id="cancelResolve" class="refund-secondary">Cancel</button><button type="submit" id="confirmResolve" class="operator-gate-button">Resolve</button></div></form></dialog>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script src="api-client.js?v=20261123-refunds"></script>
-  <script src="portal.js?v=20261123-refunds"></script>
+  <script src="api-client.js?v=20261124-insights1"></script>
+  <script src="portal.js?v=20261124-insights1"></script>
+  <script src="operator-insights.js?v=20261124-insights1"></script>
   <script type="module" src="operator-auth.js?v=20261123-refunds"></script>
 </body>
 </html>

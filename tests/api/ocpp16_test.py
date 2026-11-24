@@ -22,6 +22,9 @@ from websockets.exceptions import InvalidStatus
 
 from customer_integration import BINARY, ROOT, Client, stop, wait_ready
 
+# Fixed base rates here; tests/api/features_test.py covers time-of-use pricing.
+os.environ.setdefault('PLUGGO_TIME_OF_USE', 'off')
+
 API_PORT, OCPP_PORT = 18089, 19016
 CP_ID, PASSWORD = 'TEST-CP-1', '0123456789abcdef'
 CHARGERS = json.dumps({CP_ID: {'password': PASSWORD, 'connectors': {'1': 'CP-01'}}})

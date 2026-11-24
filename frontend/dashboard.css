@@ -387,3 +387,26 @@ html[data-theme] .refund-actions { display: flex; justify-content: flex-end; gap
 html[data-theme] .refund-actions button { min-width: 110px; padding: 0 18px; }
 html[data-theme] .refund-secondary { min-height: 48px; border: 1px solid var(--d-line); border-radius: 999px; background: transparent; color: var(--d-text); font: inherit; cursor: pointer; }
 html[data-theme] .slot-ocpp { font-weight: 600; color: var(--d-text); letter-spacing: .02em; }
+/* Analytics, charger reports and wallet credit */
+html[data-theme] .nav-count { display: inline-grid; place-items: center; min-width: 18px; height: 18px; margin-left: 6px; padding: 0 5px; border-radius: 999px; background: var(--d-text); color: var(--d-bg, #000); font-size: 11px; font-weight: 700; }
+html[data-theme] .insight-metrics { margin-bottom: 18px; }
+html[data-theme] .insight-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 18px; }
+html[data-theme] .insight-chart svg { display: block; width: 100%; height: 140px; margin-top: 12px; overflow: visible; }
+html[data-theme] .insight-fill { fill: var(--d-text); opacity: .78; }
+html[data-theme] .insight-bar.is-peak .insight-fill, html[data-theme] .insight-bar:hover .insight-fill, html[data-theme] .insight-bar:focus .insight-fill { opacity: 1; }
+html[data-theme] .insight-base { fill: var(--d-line); }
+html[data-theme] .insight-hit { fill: transparent; }
+html[data-theme] .insight-bar:focus { outline: none; }
+html[data-theme] .insight-tick { fill: var(--d-muted, currentColor); font-size: 9px; text-anchor: middle; opacity: .7; }
+html[data-theme] .insight-caption { margin: 8px 0 0; font-size: 12px; opacity: .72; }
+html[data-theme] .insight-table { width: 100%; margin-top: 12px; border-collapse: collapse; font-size: 13px; }
+html[data-theme] .insight-table th, html[data-theme] .insight-table td { padding: 8px 6px; border-bottom: 1px solid var(--d-line); text-align: right; font-variant-numeric: tabular-nums; }
+html[data-theme] .insight-table th[scope="row"], html[data-theme] .insight-table thead th:first-child { text-align: left; font-weight: 600; }
+html[data-theme] .insight-table thead th { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; opacity: .7; font-weight: 600; }
+html[data-theme] .report-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 18px; }
+html[data-theme] .report-card.resolved { opacity: .72; }
+html[data-theme] .report-note { margin: 10px 0; font-size: 15px; }
+html[data-theme] .recent-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+html[data-theme] .slot-issue { font-weight: 600; color: #ff9f43; }
+html[data-theme] .refund-dialog select { min-height: 44px; padding: 0 12px; border-radius: 12px; border: 1px solid var(--d-line); background: transparent; color: var(--d-text); font: inherit; }
+html[data-theme] .nav-count[hidden] { display: none; }

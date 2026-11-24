@@ -31,6 +31,26 @@ the fictional demo stations or simulated charging. Checkout collects ₹0.
 hosting supports that preview; server mode needs an API/proxy deployment.
 The previous operator dashboard remains at `/operator.html`.
 
+### Bookings, alerts, trips, ratings, reports and wallet
+
+- **Slot booking:** book a charger up to 24 hours ahead for 30–120 minutes. The charger is held from
+  15 minutes before the slot until 10 minutes after it starts. After that the booking is a no-show
+  and the charger is released.
+- **Time-of-use pricing:** off-peak (22:00–06:00 India time) is 20% cheaper and peak (18:00–22:00)
+  20% dearer. A charge keeps the rate it started with. `PLUGGO_TIME_OF_USE=off` turns this off.
+- **Charging alerts:** charge complete, booking reminders and report updates. The Android test app
+  schedules them on the phone, so they arrive even when Pluggo is closed.
+- **Trip planner:** charging stops between your location and an Indian city. It uses Pluggo and
+  public stations, and checks every leg with the C++ `RangeSafetyService`.
+- **Ratings and fault reports:** drivers rate stations after charging and report broken or blocked
+  chargers. Operators resolve reports and can add wallet credit.
+- **Wallet:** operator credit pays for the next charges automatically at checkout.
+- **Green impact:** CO₂, petrol and money saved compared with a similar petrol vehicle.
+- **Operator analytics:** revenue, energy, utilisation by hour, per-station figures and tariff bands.
+
+`tests/api/features_test.py` and `tests/web/extras.test.mjs` cover these features. See
+[the launch checklist](docs/launch-checklist.md) for Razorpay live mode and the Play data safety form.
+
 ## Android test APK and hosting package
 
 [Download the latest Android APK](https://github.com/Bhumika-gaba23/EV-charging-management/releases/latest/download/pluggo-phone-test.apk)

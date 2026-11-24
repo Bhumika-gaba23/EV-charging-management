@@ -28,6 +28,10 @@ class ChargeFlowApi {
   simulateSolar(data) { return this.request("/api/solar/simulate", { method: "POST", body: JSON.stringify(data) }); }
   emergency(data) { return this.request("/api/emergency", { method: "POST", body: JSON.stringify(data) }); }
   refund(data) { return this.request("/api/operator/refund", { method: "POST", body: JSON.stringify(data) }); }
+  analytics(days = 14) { return this.request(`/api/operator/analytics?days=${encodeURIComponent(days)}`); }
+  reports() { return this.request("/api/operator/reports"); }
+  resolveReport(id, data) { return this.request(`/api/operator/reports/${encodeURIComponent(id)}/resolve`, { method: "POST", body: JSON.stringify(data) }); }
+  credit(data) { return this.request("/api/operator/credit", { method: "POST", body: JSON.stringify(data) }); }
 }
 
 window.chargeFlowApi = new ChargeFlowApi();

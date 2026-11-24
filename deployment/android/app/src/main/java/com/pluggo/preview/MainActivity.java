@@ -10,9 +10,16 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.webkit.*;
 import android.widget.EditText;
+import androidx.webkit.JavaScriptReplyProxy;
 import androidx.webkit.WebViewAssetLoader;
+import androidx.webkit.WebViewCompat;
+import androidx.webkit.WebViewFeature;
+import java.util.Collections;
 
-/** Android test shell for the exact repository frontend. No JavaScript/native bridge. */
+/**
+ * Android test shell for the exact repository frontend. The only native bridge is PluggoNative,
+ * for charging alerts, and it is injected only into pages from the app's own origin.
+ */
 public class MainActivity extends Activity {
     private static final String HOSTED = "https://pluggo-customer-demo.onrender.com/#home";
     private static final String LOCAL = "https://appassets.androidplatform.net/index.html?demo=1#home";
@@ -22,6 +29,8 @@ public class MainActivity extends Activity {
     private GeolocationPermissions.Callback locationCallback;
     private String locationOrigin;
     private PermissionRequest cameraRequest;
+    private JavaScriptReplyProxy permissionReply;
+    private Boolean permissionAnswer;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -108,7 +117,25 @@ public class MainActivity extends Activity {
             }
             @Override public void onPermissionRequestCanceled(PermissionRequest request) {if(cameraRequest==request)cameraRequest=null;}
         });
+        Alerts.createChannel(this);
+        installAlertBridge();
         if(state==null || !restoreWebState(state)) web.loadUrl(startUrl);
+    }
+    // Charging alerts: the page posts {type: notify | schedule | cancel | permission} messages.
+    private void installAlertBridge() {
+        if (web == null || !WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) return;
+        try { WebViewCompat.removeWebMessageListener(web, "PluggoNative"); } catch (Exception ignored) { }
+        Uri start = Uri.parse(startUrl);
+        String origin = start.getScheme() + "://" + start.getHost() + (start.getPort() == -1 ? "" : ":" + start.getPort());
+        WebViewCompat.addWebMessageListener(web, "PluggoNative", Collections.singleton(origin), (view, message, source, mainFrame, reply) -> {
+            if (!mainFrame || message.getData() == null) return;
+            if (!Alerts.handle(this, message.getData())) requestAlertPermission(reply);
+        });
+    }
+    private void requestAlertPermission(JavaScriptReplyProxy reply) {
+        if (Alerts.permitted(this)) { reply.postMessage("{\"type\":\"permission\",\"granted\":true}"); return; }
+        permissionReply = reply;
+        requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 12);
     }
     private static String withoutPerformance(String value) {
         Uri uri=Uri.parse(value);Uri.Builder builder=uri.buildUpon().clearQuery();
@@ -134,7 +161,7 @@ public class MainActivity extends Activity {
     private void load(String url) {
         getIntent().removeExtra(EXTRA_POSTER);
         getPreferences(MODE_PRIVATE).edit().putString("startUrl",withoutPerformance(url)).apply();
-        startUrl=withPerformance(url,"lite");web.loadUrl(startUrl);web.clearHistory();
+        startUrl=withPerformance(url,"lite");installAlertBridge();web.loadUrl(startUrl);web.clearHistory();
     }
     private void connection() {
         EditText address = new EditText(this);
@@ -172,9 +199,18 @@ public class MainActivity extends Activity {
             if(results.length>0 && results[0]==PackageManager.PERMISSION_GRANTED)cameraRequest.grant(new String[]{PermissionRequest.RESOURCE_VIDEO_CAPTURE});else cameraRequest.deny();
             cameraRequest=null;
         }
+        // The answer arrives while the page is still paused behind the system dialog, and a
+        // message posted then is lost. onResume delivers it once the page runs again.
+        if(code==12 && permissionReply!=null) permissionAnswer=results.length>0 && results[0]==PackageManager.PERMISSION_GRANTED;
     }
     @Override protected void onSaveInstanceState(Bundle out) {super.onSaveInstanceState(out);if(web!=null)web.saveState(out);}
     @Override protected void onPause() {CookieManager.getInstance().flush();if(web!=null){web.onPause();web.pauseTimers();}super.onPause();}
-    @Override protected void onResume() {super.onResume();if(web!=null){web.resumeTimers();web.onResume();}}
+    @Override protected void onResume() {
+        super.onResume();if(web!=null){web.resumeTimers();web.onResume();}
+        if(permissionReply!=null && permissionAnswer!=null) {
+            JavaScriptReplyProxy reply=permissionReply;boolean granted=permissionAnswer;permissionReply=null;permissionAnswer=null;
+            if(web!=null)web.postDelayed(()->reply.postMessage("{\"type\":\"permission\",\"granted\":"+granted+"}"),300);
+        }
+    }
     @Override protected void onDestroy() {if(cameraRequest!=null)cameraRequest.deny();if(locationCallback!=null)locationCallback.invoke(locationOrigin,false,false);if(web!=null)web.destroy();super.onDestroy();}
 }

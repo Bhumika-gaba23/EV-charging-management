@@ -1,0 +1,4 @@
+<!-- Status-bar icon for charging alerts: the Pluggo plug outline only (Android tints it). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="48" android:viewportHeight="48">
+ <path android:strokeColor="#FFFFFFFF" android:strokeWidth="3.5" android:fillColor="#00000000" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M18,8v11M30,8v11M14,19h20v8a10,10 0,0 1,-20 0zM24,37v6"/>
+</vector>

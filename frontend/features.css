@@ -1,0 +1,91 @@
+/* Bookings, ratings, fault reports, trip planner, wallet and green impact. Uses the app-shell tokens. */
+:root { --band-off: #3ecf8e; --band-std: #8e9098; --band-peak: #ff9f43; --star: #f5c542; }
+
+/* Tariff bands */
+.band-chip { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; letter-spacing: .02em; vertical-align: middle; border: 1px solid currentColor; }
+.band-off-peak { color: var(--band-off); }
+.band-standard { color: var(--band-std); }
+.band-peak { color: var(--band-peak); }
+.tariff-tip { display: flex; gap: 10px; align-items: flex-start; margin: 12px 0 0; padding: 12px 14px; border-radius: 16px; background: color-mix(in srgb, var(--band-off) 12%, transparent); color: var(--s-text); font-size: 13px; line-height: 1.45; }
+.tariff-tip .icon { flex: none; width: 18px; height: 18px; color: var(--band-off); }
+.tariff-tip .text-link { display: inline; padding: 0; font-size: inherit; }
+
+/* Ratings */
+.stars { display: inline-flex; gap: 1px; color: var(--s-line); font-size: 14px; letter-spacing: 0; vertical-align: -1px; }
+.stars .on { color: var(--star); }
+.station-rating { margin: -4px 0 12px; color: var(--s-muted); font-size: 13px; display: flex; gap: 6px; align-items: center; }
+.station-rating strong { color: var(--s-text); }
+.station-rating:empty { display: none; }
+.review-list { display: grid; gap: 8px; margin: 14px 0 0; }
+.review-list blockquote { margin: 0; padding: 10px 12px; border-radius: 14px; background: var(--s-surface-2); }
+.review-list p { margin: 4px 0 0; font-size: 13px; color: var(--s-text); line-height: 1.4; }
+.star-input { display: flex; gap: 6px; margin: 6px 0 18px; }
+.star-input label { position: relative; cursor: pointer; font-size: 36px; line-height: 1; color: var(--s-line); transition: color .15s, transform .15s; }
+.star-input label.on { color: var(--star); }
+.star-input label:active { transform: scale(.92); }
+.star-input input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.star-input label:focus-within { outline: 2px solid var(--s-text); outline-offset: 2px; border-radius: 6px; }
+.issue-flag { color: var(--band-peak); font-weight: 600; }
+
+/* Station sheet actions */
+.station-extra-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0 4px; }
+.station-extra-actions .secondary-button { flex: 1 1 auto; min-height: 40px; padding: 0 14px; font-size: 13px; gap: 6px; }
+.station-extra-actions .icon { width: 16px; height: 16px; }
+
+/* Booking */
+.home-booking { margin: 18px 0 4px; }
+.booking-card { display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: center; padding: 14px 16px; border-radius: 22px; background: var(--s-surface); border: 1px solid var(--s-line); }
+.booking-icon { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 14px; background: var(--s-surface-2); }
+.booking-icon .icon { width: 20px; height: 20px; }
+.booking-copy { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.booking-copy small { color: var(--s-muted); font-size: 12px; }
+.booking-copy strong { font-size: 16px; }
+.booking-copy span { color: var(--s-muted); font-size: 13px; }
+.booking-actions { grid-column: 1 / -1; display: flex; gap: 8px; }
+.booking-actions button { flex: 1; min-height: 40px; }
+.field-label { display: block; margin: 16px 0 6px; font-size: 13px; font-weight: 600; color: var(--s-text); }
+.field-label small { color: var(--s-muted); font-weight: 400; }
+.field-select, .field-text { width: 100%; box-sizing: border-box; padding: 12px 14px; border-radius: 14px; border: 1px solid var(--s-line); background: var(--s-surface-2); color: var(--s-text); font: inherit; font-size: 15px; }
+.field-text { resize: vertical; min-height: 44px; }
+.field-select:focus, .field-text:focus { outline: 2px solid var(--s-text); outline-offset: 1px; }
+.duration-choice { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.duration-choice label { position: relative; }
+.duration-choice input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.duration-choice span { display: grid; place-items: center; min-height: 40px; border-radius: 12px; border: 1px solid var(--s-line); background: var(--s-surface-2); font-size: 14px; }
+.duration-choice input:checked + span { background: var(--s-primary); color: var(--s-on-primary); border-color: var(--s-primary); }
+.duration-choice input:focus-visible + span { outline: 2px solid var(--s-text); outline-offset: 2px; }
+#bookingSummary, #chargeTip:not(:empty) { margin-top: 14px; }
+.report-kinds .connector-choice strong { font-size: 14px; }
+
+/* Trip planner */
+.trip-heading { margin: 22px 0 10px; font-size: 18px; }
+.trip-stops { list-style: none; margin: 14px 0; padding: 0; display: grid; gap: 10px; }
+.trip-stops li { display: grid; grid-template-columns: auto 1fr; gap: 12px; padding: 12px 14px; border-radius: 16px; background: var(--s-surface-2); }
+.trip-stops li > div { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.trip-stops strong { font-size: 15px; overflow-wrap: anywhere; }
+.trip-stops small, .trip-meta { color: var(--s-muted); font-size: 12px; overflow-wrap: anywhere; }
+.trip-stops span { font-size: 13px; }
+.trip-stops .text-link { align-self: flex-start; padding: 4px 0 0; font-size: 13px; }
+.trip-index { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--s-primary); color: var(--s-on-primary); font-weight: 700; font-size: 13px; }
+
+/* Green impact */
+.green-card .week-head h3 { display: flex; align-items: center; gap: 6px; }
+.green-card .week-head .icon { width: 16px; height: 16px; color: var(--band-off); }
+.green-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin: 12px 0 8px; }
+.green-grid span { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: 14px; background: var(--s-surface-2); }
+.green-grid small { color: var(--s-muted); font-size: 12px; }
+.green-grid strong { font-size: 18px; }
+.green-note { margin: 8px 0 0; color: var(--s-muted); font-size: 11.5px; line-height: 1.45; }
+
+/* Wallet and report history */
+.wallet-history .bill-row span:first-child { display: flex; flex-direction: column; gap: 2px; text-align: left; }
+.wallet-history .bill-row small { color: var(--s-muted); font-size: 12px; }
+.wallet-history .bill-row span:last-child { white-space: nowrap; }
+
+/* app-shell.css mutes every span and label inside dialogs and cards; these colours carry meaning. */
+.stars .on, .star-input label.on { color: var(--star) !important; }
+.band-chip.band-off-peak { color: var(--band-off) !important; }
+.band-chip.band-standard { color: var(--band-std) !important; }
+.band-chip.band-peak { color: var(--band-peak) !important; }
+.issue-flag { color: var(--band-peak) !important; }
+#flowDialog .field-select, #flowDialog .field-text { width: 100%; max-width: none; }

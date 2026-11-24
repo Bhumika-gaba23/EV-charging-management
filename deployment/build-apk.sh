@@ -9,17 +9,15 @@ if [ -z "${JAVA_HOME:-}" ] && [ -d '/Applications/Android Studio.app/Contents/jb
 fi
 mkdir -p "$deploy_root/android/app/src/main/assets" "$deploy_root/apk"
 # Always copy the current UI, rather than maintaining a divergent mobile fork.
+# The whole frontend is copied: a hand-kept file list went stale whenever a new script or
+# stylesheet was added, which broke the offline preview.
 python3 - "$repo_root/frontend" "$deploy_root/android/app/src/main/assets" <<'PY'
 import shutil,sys
-shutil.rmtree(sys.argv[2])
 from pathlib import Path
 source,target=map(Path,sys.argv[1:])
-target.mkdir(parents=True)
-for name in ['index.html','chargeflow.css','wallet.css','reference-layout.css','chargeflow.js','customer-api.js','demo-data.js','google-stations.js','vehicle-scene.js','performance-profile.js','cargo-model.js','session-summary.js']:
-    shutil.copy2(source/name,target/name)
-for name in ['vendor','assets/models','assets/fonts']:
-    shutil.copytree(source/name,target/name)
-shutil.copy2(source/'assets/pluggo.svg',target/'assets/pluggo.svg')
+shutil.rmtree(target,ignore_errors=True)
+# The paper-* vehicle art belongs to the operator dashboard only (about 20 MB).
+shutil.copytree(source,target,ignore=shutil.ignore_patterns('README.md','*.map','paper-*'))
 PY
 cd "$deploy_root/android"
 ./gradlew --no-daemon assembleRelease
