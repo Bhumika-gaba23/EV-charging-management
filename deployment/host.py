@@ -45,6 +45,15 @@ def backup_config():
     match=re.fullmatch(r'(https?://[A-Za-z0-9.\-]+(?::\d+)?)(/[A-Za-z0-9._\-/]*)?',endpoint) if endpoint else None
     if endpoint and not match:raise SystemExit('PLUGGO_BACKUP_ENDPOINT must be a URL such as https://<account>.r2.cloudflarestorage.com')
     if match:endpoint=match.group(1)
+    host=re.sub(r'^https?://','',endpoint).split(':')[0].lower() if endpoint else ''
+    # These hosts answer with web pages, which Litestream reports as "expected element type <Error> but have <html>".
+    if host=='dash.cloudflare.com' or host.endswith('.cloudflare.com'):
+        raise SystemExit('PLUGGO_BACKUP_ENDPOINT is a Cloudflare dashboard link. Use the S3 API endpoint instead: '
+                         'https://<account-id>.r2.cloudflarestorage.com (R2 overview → Account Details → S3 API).')
+    if host.endswith('.r2.dev'):
+        raise SystemExit('PLUGGO_BACKUP_ENDPOINT is a public bucket URL (r2.dev). Use the S3 API endpoint instead: '
+                         'https://<account-id>.r2.cloudflarestorage.com (R2 overview → Account Details → S3 API).')
+    if host:print(f'Backup endpoint: {host}',flush=True)
     lines=['dbs:',f'  - path: {db_path}','    replicas:',f'      - url: {url}','        sync-interval: 1s','        snapshot-interval: 6h','        retention: 72h']
     if endpoint:lines+=[f'        endpoint: {endpoint.rstrip("/")}','        region: auto','        force-path-style: true']
     path=Path('/tmp/pluggo-litestream.yml');path.write_text('\n'.join(lines)+'\n');path.chmod(0o600)
