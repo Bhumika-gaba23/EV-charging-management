@@ -53,6 +53,11 @@ def backup_config():
     if host.endswith('.r2.dev'):
         raise SystemExit('PLUGGO_BACKUP_ENDPOINT is a public bucket URL (r2.dev). Use the S3 API endpoint instead: '
                          'https://<account-id>.r2.cloudflarestorage.com (R2 overview → Account Details → S3 API).')
+    # An R2 endpoint is <32 hex account id>[.eu|.fedramp].r2.cloudflarestorage.com; a shortened or
+    # placeholder ID ("…xxxxxx") names no server and fails with "tls: handshake failure".
+    if host.endswith('.r2.cloudflarestorage.com') and not re.fullmatch(r'[0-9a-f]{32}(\.(eu|fedramp))?\.r2\.cloudflarestorage\.com',host):
+        raise SystemExit(f'PLUGGO_BACKUP_ENDPOINT host "{host}" does not start with a full 32-character Cloudflare account ID. '
+                         'Copy the S3 API value from R2 overview → Account Details with its copy button.')
     if host:print(f'Backup endpoint: {host}',flush=True)
     lines=['dbs:',f'  - path: {db_path}','    replicas:',f'      - url: {url}','        sync-interval: 1s','        snapshot-interval: 6h','        retention: 72h']
     if endpoint:lines+=[f'        endpoint: {endpoint.rstrip("/")}','        region: auto','        force-path-style: true']
