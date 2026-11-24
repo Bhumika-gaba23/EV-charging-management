@@ -245,6 +245,12 @@ def test_trip(db):
         to_jaipur = [math.hypot(s['lat'] - 26.9124, (s['lng'] - 75.7873) * .89) for s in trip['stops']]
         assert to_jaipur == sorted(to_jaipur, reverse=True)  # every stop is closer to Jaipur
         assert trip['arrivalBattery'] >= 10 and 250 < trip['distanceKm'] < 400
+        # Hills: the road from Aut to Delhi winds far from the straight line; stops must still be found.
+        code, hills = a.call('trip?fromLat=31.736&fromLng=77.198&toLat=28.6139&toLng=77.2090&vehicle=car&battery=80')
+        assert code == 200 and hills['feasible'] and hills['stops'] and not hills['chargeFirst'], hills
+        # Too little charge to reach any charger: plan from a full battery and say so.
+        code, low = a.call('trip?fromLat=31.736&fromLng=77.198&toLat=28.6139&toLng=77.2090&vehicle=car&battery=25')
+        assert code == 200 and low['feasible'] and low['chargeFirst'] and low['startBattery'] == 100 and 'Charge to 100%' in low['note'], low
         # A scooter cannot cross a gap the car can.
         code, far = a.call('trip?fromLat=28.6315&fromLng=77.2167&toLat=26.9124&toLng=75.7873&vehicle=scooter&battery=100')
         assert code == 200 and isinstance(far['feasible'], bool)

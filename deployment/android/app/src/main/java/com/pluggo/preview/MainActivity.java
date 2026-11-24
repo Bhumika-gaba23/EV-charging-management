@@ -57,6 +57,9 @@ public class MainActivity extends Activity {
         savedUrl = withoutPerformance(savedUrl);
         getPreferences(MODE_PRIVATE).edit().putString("startUrl", savedUrl).apply();
         startUrl = withPerformance(savedUrl, getIntent().getBooleanExtra(EXTRA_POSTER, false) ? "poster" : "lite");
+        // Test build only (the Play Store app is a separate Trusted Web Activity): lets a connected
+        // computer inspect the page with chrome://inspect to diagnose problems on a real phone.
+        WebView.setWebContentsDebuggingEnabled(true);
         web = new WebView(this);
         web.setBackgroundColor(Color.rgb(11,11,11));
         web.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, true);

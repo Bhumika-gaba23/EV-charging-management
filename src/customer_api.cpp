@@ -364,40 +364,53 @@ public:
  Json trip(double fromLat,double fromLng,double toLat,double toLng,const std::string& vehicleId,double battery){
   const auto& v=profile(vehicleId);const double capacity=v["capacity"].d(),power=v["power"].d(),kmPerKWh=v.has("kmPerKWh")?v["kmPerKWh"].d():6;
   if(!(battery>=5&&battery<=100))throw ApiError(400,"Battery must be between 5% and 100%");
-  constexpr double roadFactor=1.25,buffer=15,arriveAtLeast=10,chargeTo=80,averageSpeed=50,estimateRate=18,unknownPower=7.4;
+  constexpr double roadFactor=1.3,buffer=15,arriveAtLeast=10,chargeTo=80,averageSpeed=45,estimateRate=18,unknownPower=7.4;
   const double straight=distanceKm(fromLat,fromLng,toLat,toLng);if(straight<2)throw ApiError(400,"Pick a destination at least 2 km away");if(straight>2500)throw ApiError(400,"That trip is too long to plan");
   auto check=[&](double soc,double km){const ev::Vehicle probe("TRIP",capacity,soc,1.0/kmPerKWh,ev::ConnectorType::CCS2,power);return ev::RangeSafetyService::evaluate(probe,km,buffer);};
-  const double midLat=(fromLat+toLat)/2*3.14159265358979323846/180;
-  auto project=[&](double lat,double lng){return std::pair<double,double>{(lng-fromLng)*111.32*std::cos(midLat),(lat-fromLat)*110.57};};
-  const auto end=project(toLat,toLng);const double length2=end.first*end.first+end.second*end.second,corridor=std::clamp(straight*0.08,10.0,30.0);
-  struct Candidate {double progress,lat,lng,powerKW;std::string id,name,address,network;};std::vector<Candidate> candidates;
+  // A charger is useful when it brings you closer to the destination without a big detour. Roads in
+  // the hills wind far from the straight line, so there is no fixed corridor around it.
+  struct Candidate {double lat,lng,powerKW,toDest;std::string id,name,address,network;};std::vector<Candidate> candidates;
   auto consider=[&](double lat,double lng,double kw,std::string id,std::string name,std::string address,std::string network){
-   const auto p=project(lat,lng);const double t=(p.first*end.first+p.second*end.second)/length2;if(t<=0.01||t>=0.995)return;
-   const double dx=p.first-t*end.first,dy=p.second-t*end.second;if(std::sqrt(dx*dx+dy*dy)>corridor)return;
-   candidates.push_back({t,lat,lng,kw,std::move(id),std::move(name),std::move(address),std::move(network)});};
+   const double toDest=distanceKm(lat,lng,toLat,toLng);if(toDest>=straight-2)return;
+   if(distanceKm(fromLat,fromLng,lat,lng)+toDest>straight*1.6+30)return;
+   candidates.push_back({lat,lng,kw,toDest,std::move(id),std::move(name),std::move(address),std::move(network)});};
   for(const auto& e:publicDirectory.entries){const auto& s=publicDirectory.root["stations"][e.index];consider(e.lat,e.lng,s.has("powerKW")&&s["powerKW"].t()==crow::json::type::Number?s["powerKW"].d():0,text(s,"id"),text(s,"name"),text(s,"address"),"public");}
   for(const auto& s:catalog["stations"]){double best=0;for(const auto& c:s["connectors"])if(compatible(v,std::string(c["type"].s())))best=std::max(best,c["power"].d());if(best>0)consider(s["lat"].d(),s["lng"].d(),best,std::string(s["id"].s()),string(s,"name"),string(s,"area"),"pluggo");}
-  double soc=battery,lat=fromLat,lng=fromLng,progress=0,chargeMinutes=0,chargeCost=0;bool arrived=false;std::string note;Json::list stops;
-  for(int guard=0;guard<12&&!arrived;++guard){
-   if(check(soc,distanceKm(lat,lng,toLat,toLng)*roadFactor).canReach){arrived=true;break;}
-   // Reachable chargers further along the route. Among those within 5% of the route of the
-   // furthest one, take the fastest: a known DC charger beats an unlisted one a little further on.
-   std::vector<std::pair<const Candidate*,double>> reachable;double furthest=0;
-   for(const auto& c:candidates){if(c.progress<=progress+1e-6)continue;const double km=distanceKm(lat,lng,c.lat,c.lng)*roadFactor;if(!check(soc,km).canReach||soc-km/kmPerKWh/capacity*100<arriveAtLeast)continue;reachable.emplace_back(&c,km);furthest=std::max(furthest,c.progress);}
-   const Candidate* pick=nullptr;double pickKm=0,pickKW=0;
-   for(const auto& [c,km]:reachable){if(c->progress<furthest-0.05)continue;const double kw=std::min(power,c->powerKW>0?c->powerKW:unknownPower);
-    if(!pick||kw>pickKW+1e-9||(std::abs(kw-pickKW)<1e-9&&c->progress>pick->progress)){pick=c;pickKm=km;pickKW=kw;}}
-   if(!pick){note="No charger is within safe range on this route. Charge more before you leave or pick a closer destination.";break;}
-   const double arrive=soc-pickKm/kmPerKWh/capacity*100,leave=std::max(chargeTo,arrive),added=(leave-arrive)/100*capacity;
-   const double kw=std::max(1.0,std::min(power,pick->powerKW>0?pick->powerKW:unknownPower)),minutes=added/kw*60;
-   Json stop;stop["id"]=pick->id;stop["name"]=pick->name.empty()?"EV charging station":pick->name;stop["address"]=pick->address;stop["network"]=pick->network;stop["lat"]=pick->lat;stop["lng"]=pick->lng;
-   stop["legKm"]=pickKm;stop["arriveBattery"]=arrive;stop["leaveBattery"]=leave;stop["energyKWh"]=added;stop["powerKW"]=kw;stop["powerKnown"]=pick->powerKW>0;stop["minutes"]=minutes;stop["costEstimate"]=added*estimateRate;
-   stops.push_back(std::move(stop));chargeMinutes+=minutes;chargeCost+=added*estimateRate;soc=leave;lat=pick->lat;lng=pick->lng;progress=pick->progress;}
-  if(!arrived&&note.empty())note="This trip needs more stops than we can plan. Split it into shorter trips.";
-  const double finalKm=distanceKm(lat,lng,toLat,toLng)*roadFactor,total=straight*roadFactor;
-  Json j;j["ok"]=true;j["feasible"]=arrived;j["note"]=note;j["vehicle"]=vehicleId;j["startBattery"]=battery;j["straightKm"]=straight;j["distanceKm"]=total;j["rangeKm"]=capacity*battery/100*kmPerKWh;
-  j["finalLegKm"]=finalKm;j["arrivalBattery"]=arrived?Json(soc-finalKm/kmPerKWh/capacity*100):Json(nullptr);j["driveMinutes"]=total/averageSpeed*60;j["chargeMinutes"]=chargeMinutes;j["chargeCostEstimate"]=chargeCost;
-  j["stops"]=Json(std::move(stops));j["assumptions"]="Road distance is about 1.25 times the straight line at 50 km/h. You charge to 80%, arrive at every stop with at least 10%, and keep a 15% range buffer. Costs use Rs 18/kWh; check each charger's plug type and price.";
+  struct Plan {bool arrived=false;double soc=0,lat=0,lng=0,minutes=0,cost=0;Json::list stops;};
+  auto plan=[&](double startSoc){
+   Plan p;p.soc=startSoc;p.lat=fromLat;p.lng=fromLng;
+   for(int guard=0;guard<15;++guard){
+    const double remaining=distanceKm(p.lat,p.lng,toLat,toLng);
+    if(check(p.soc,remaining*roadFactor).canReach){p.arrived=true;return p;}
+    // Reachable chargers that make real progress. Among those nearly as close to the destination
+    // as the best one, take the fastest (a known DC charger beats an unlisted one a little further on).
+    std::vector<std::pair<const Candidate*,double>> reachable;double closest=remaining;
+    for(const auto& c:candidates){
+     if(c.toDest>remaining-5)continue;
+     const double leg=distanceKm(p.lat,p.lng,c.lat,c.lng);if(leg+c.toDest>remaining*1.45+15)continue;
+     const double km=leg*roadFactor;if(!check(p.soc,km).canReach||p.soc-km/kmPerKWh/capacity*100<arriveAtLeast)continue;
+     reachable.emplace_back(&c,km);closest=std::min(closest,c.toDest);}
+    const Candidate* pick=nullptr;double pickKm=0,pickKW=0;const double slack=std::max(10.0,remaining*0.05);
+    for(const auto& [c,km]:reachable){if(c->toDest>closest+slack)continue;const double kw=std::min(power,c->powerKW>0?c->powerKW:unknownPower);
+     if(!pick||kw>pickKW+1e-9||(std::abs(kw-pickKW)<1e-9&&c->toDest<pick->toDest)){pick=c;pickKm=km;pickKW=kw;}}
+    if(!pick)return p;
+    const double arrive=p.soc-pickKm/kmPerKWh/capacity*100,leave=std::max(chargeTo,arrive),added=(leave-arrive)/100*capacity;
+    const double kw=std::max(1.0,pickKW),minutes=added/kw*60;
+    Json stop;stop["id"]=pick->id;stop["name"]=pick->name.empty()?"EV charging station":pick->name;stop["address"]=pick->address;stop["network"]=pick->network;stop["lat"]=pick->lat;stop["lng"]=pick->lng;
+    stop["legKm"]=pickKm;stop["arriveBattery"]=arrive;stop["leaveBattery"]=leave;stop["energyKWh"]=added;stop["powerKW"]=kw;stop["powerKnown"]=pick->powerKW>0;stop["minutes"]=minutes;stop["costEstimate"]=added*estimateRate;
+    p.stops.push_back(std::move(stop));p.minutes+=minutes;p.cost+=added*estimateRate;p.soc=leave;p.lat=pick->lat;p.lng=pick->lng;}
+   return p;};
+  auto result=plan(battery);double startBattery=battery;bool chargeFirst=false;
+  // Too little charge to reach any useful charger: plan again from a full battery and say so.
+  if(!result.arrived&&battery<100){auto full=plan(100);if(full.arrived){result=std::move(full);startBattery=100;chargeFirst=true;}}
+  std::string note;
+  if(chargeFirst)note="Your battery is too low to reach a charger on the way. Charge to 100% before you leave, then follow this plan.";
+  else if(!result.arrived)note=result.stops.size()>=15?"This trip needs more stops than we can plan. Split it into shorter trips.":"There are not enough mapped chargers on this route for your vehicle, even from a full battery. Try a nearer destination.";
+  const double finalKm=distanceKm(result.lat,result.lng,toLat,toLng)*roadFactor,total=straight*roadFactor;
+  Json j;j["ok"]=true;j["feasible"]=result.arrived;j["chargeFirst"]=chargeFirst;j["note"]=note;j["vehicle"]=vehicleId;j["startBattery"]=startBattery;j["requestedBattery"]=battery;
+  j["straightKm"]=straight;j["distanceKm"]=total;j["rangeKm"]=capacity*startBattery/100*kmPerKWh;
+  j["finalLegKm"]=finalKm;j["arrivalBattery"]=result.arrived?Json(result.soc-finalKm/kmPerKWh/capacity*100):Json(nullptr);j["driveMinutes"]=total/averageSpeed*60;j["chargeMinutes"]=result.minutes;j["chargeCostEstimate"]=result.cost;
+  j["stops"]=Json(std::move(result.stops));j["assumptions"]="Road distance is about 1.3 times the straight line at 45 km/h. You charge to 80%, arrive at every stop with at least 10%, and keep a 15% range buffer. Costs use Rs 18/kWh; check each charger's plug type and price.";
   return j;}
  Json simulatorSessions() {lastSimulator=nowMs();advance();Json j;j["ok"]=true;j["mode"]=mode;j["speed"]=speed;Json::list values;for(const auto& s:sessions())if(!s.ended){auto item=s.json();item["external"]=real(s.connector);values.push_back(std::move(item));}j["sessions"]=std::move(values);return j;}
  void meter(const Input& body) {lastSimulator=nowMs();const auto id=string(body,"sessionId");auto rows=query("SELECT id,owner,idem,payload,request FROM customer_sessions WHERE id=?",{id});if(rows.empty())throw ApiError(404,"Session not found");auto s=fromRow(rows[0]);if(mode!="meter"&&!real(s.connector))return;const bool lateFinal=s.ended&&real(s.connector)&&!s.settled&&nowMs()-s.ended<120000&&query("SELECT session FROM customer_payments WHERE session=?",{s.id}).empty();if(s.ended&&!lateFinal)return;if(string(body,"connector")!=s.connector)throw ApiError(409,"Meter connector does not match session");const double energy=number(body,"energyKWh",s.energy);if(energy<0)throw ApiError(400,"Energy must be non-negative");s.energy=std::min(s.limit,std::max(s.energy,energy));if(!s.ended)complete(s);persist(s);}

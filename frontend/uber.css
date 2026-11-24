@@ -454,3 +454,43 @@
   top: 0 !important; right: 0 !important; bottom: 0 !important; left: 0 !important; width: 100% !important; height: 100% !important;
   margin: 0 !important; padding: 0 !important; transform: none !important; translate: none !important; z-index: 3;
 }
+/* Real charger details: two actions side by side and a short note on how to charge there. */
+:root[data-ui="uber"]:not(#u):not(#v) .real-station-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
+:root[data-ui="uber"]:not(#u):not(#v) .real-station-actions :is(.primary-button, .secondary-button) { min-height: 48px; margin: 0 !important; display: flex; align-items: center; justify-content: center; text-align: center; font-size: 14px !important; text-decoration: none; }
+:root[data-ui="uber"]:not(#u):not(#v) .real-station-note { margin: 10px 2px 0; font-size: 12.5px; line-height: 18px; color: var(--u-body); }
+
+/* ---- Charging feels alive: green fills that glide between meter readings and gently pulse ------- */
+@property --progress { syntax: "<percentage>"; inherits: true; initial-value: 0%; }
+@keyframes u-charging { 0%, 100% { opacity: 1; } 50% { opacity: .62; } }
+:root[data-ui="uber"]:not(#u):not(#v) {
+  /* Live charging sheet */
+  & .charge-ring { transition: --progress 1.2s linear; }
+  & .charge-ring::before { background: linear-gradient(to right, var(--u-text) var(--progress), var(--u-pressed) 0) !important; height: 10px !important; }
+  & .charge-ring.is-charging::before {
+    background: linear-gradient(to right, var(--u-green) var(--progress), var(--u-pressed) 0) !important;
+    animation: u-charging 1.6s ease-in-out infinite;
+  }
+  & .charge-ring.is-charging > div > .icon { color: var(--u-green) !important; }
+  /* Sessions list and Garage bars */
+  & :is(.session-bar > span, .garage-battery-bar > span) { transition: width 1.2s linear; }
+  & .session-bar > span, & .garage-battery-bar.is-charging > span {
+    background: var(--u-green) !important; animation: u-charging 1.6s ease-in-out infinite;
+  }
+  /* Home battery card */
+  & #homeBatteryProgress { appearance: none; -webkit-appearance: none; border: 0; border-radius: 3px; background: var(--u-pressed); overflow: hidden; }
+  & #homeBatteryProgress::-webkit-progress-bar { background: var(--u-pressed); border-radius: 3px; }
+  & #homeBatteryProgress::-webkit-progress-value { background: var(--u-text); border-radius: 3px; transition: width 1.2s linear; }
+  & #homeBatteryProgress::-moz-progress-bar { background: var(--u-text); }
+  & #homeBatteryProgress.is-charging::-webkit-progress-value { background: var(--u-green); animation: u-charging 1.6s ease-in-out infinite; }
+  & #homeBatteryProgress.is-charging::-moz-progress-bar { background: var(--u-green); }
+  /* Sessions: the "Charging now" card is a dark card with white text and a green pulse. */
+  & .live-banner { background: var(--u-card) !important; color: var(--u-text) !important; border: 0 !important; }
+  & .live-banner :is(small, span, strong) { color: var(--u-text) !important; }
+  & .live-banner .live-copy small { color: var(--u-green) !important; font-weight: 600; }
+  & .live-banner .live-copy > span { color: var(--u-body) !important; }
+  & .live-banner .live-action { background: var(--u-primary) !important; color: var(--u-on-primary) !important; }
+  & .live-banner .live-action :is(span, .icon) { color: var(--u-on-primary) !important; }
+}
+@media (prefers-reduced-motion: reduce) {
+  :root[data-ui="uber"] :is(.charge-ring.is-charging::before, .session-bar > span, .garage-battery-bar.is-charging > span) { animation: none !important; }
+}

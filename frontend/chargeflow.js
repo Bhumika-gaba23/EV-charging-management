@@ -485,6 +485,7 @@ function renderHomeWidgets() {
   $("#homeBatteryCapacity").textContent = `${(level / 100 * vehicle.capacity).toFixed(1)} of ${vehicle.capacity} kWh`;
   $("#homeBatteryProgress").value = level;
   $("#homeBatteryProgress").textContent = `${Math.round(level)}%`;
+  $("#homeBatteryProgress").classList.toggle("is-charging", charging);
   $("#homeBatteryLabel").textContent = shownId === state.vehicle ? "Battery" : `${vehicle.name} battery`;
   // While charging this widget shows live power; otherwise the more useful estimated range.
   $("#homePowerLabel").textContent = charging ? "Charging power" : "Estimated range";
@@ -631,7 +632,7 @@ function renderGarage() {
   $("#garageVehicles").innerHTML = Object.entries(vehicles)
     .map(
       ([id, v]) =>
-        `<button class="garage-vehicle" data-vehicle="${id}" aria-pressed="${state.vehicle === id}"><img src="${v.image}" alt="" loading="lazy"><span class="garage-vehicle-text"><strong>${v.name}</strong><small>${v.capacity} kWh · ${v.power} kW · ${v.connectors.join(" / ")}</small><span class="garage-battery"><span class="garage-battery-bar" aria-hidden="true"><span style="width:${Math.round(batteryLevel(id))}%"></span></span><span>${Math.round(batteryLevel(id))}%</span><span>~${estimatedRange(id)} km</span></span></span><span class="garage-check" aria-hidden="true">${state.vehicle === id ? icon("check") : ""}</span></button>`,
+        `<button class="garage-vehicle" data-vehicle="${id}" aria-pressed="${state.vehicle === id}"><img src="${v.image}" alt="" loading="lazy"><span class="garage-vehicle-text"><strong>${v.name}</strong><small>${v.capacity} kWh · ${v.power} kW · ${v.connectors.join(" / ")}</small><span class="garage-battery"><span class="garage-battery-bar ${activeSession()?.vehicle === id ? "is-charging" : ""}" aria-hidden="true"><span style="width:${Math.round(batteryLevel(id))}%"></span></span><span>${Math.round(batteryLevel(id))}%</span><span>~${estimatedRange(id)} km</span></span></span><span class="garage-check" aria-hidden="true">${state.vehicle === id ? icon("check") : ""}</span></button>`,
     )
     .join("");
 }
@@ -1101,6 +1102,12 @@ $("#stationSearchForm").onsubmit = async event => {
     }
   }
 };
+// Opens the charger in Google Maps (photos, reviews, hours and phone number when Google has them).
+function googlePlaceLink(place) {
+  const url = new URL("https://www.google.com/maps/search/");
+  url.search = new URLSearchParams({ api: "1", query: `${place.displayName || "EV charging station"} ${place.location.lat},${place.location.lng}` });
+  return url.href;
+}
 function placeMapsLink(place) {
   const url = new URL("https://www.google.com/maps/search/");
   url.search = new URLSearchParams({api:"1", query:place.displayName || "EV charging station", query_place_id:place.id});
@@ -1144,7 +1151,7 @@ function renderRealStations() {
       place.hours ? `Hours: ${place.hours}` : "",
     ].filter(Boolean);
     const attribution = directorySources.map(s => `© ${s.name} (${s.license})`).join(" · ") || "© OpenStreetMap contributors (ODbL)";
-    $("#stationSelection").innerHTML = `${handle}${back}<div class="station-sheet-heading"><span class="sheet-station-icon">${icon("station")}</span><div><h2>${escapeText(place.displayName || "Charging station")}</h2><p>${escapeText(place.formattedAddress || "Address not mapped")}</p></div></div><ul class="real-station-facts">${facts.map(f => `<li>${escapeText(f)}</li>`).join("")}</ul><p class="sheet-availability"><span class="availability-dot unknown" aria-hidden="true"></span>Live availability not provided · not a Pluggo network station</p><a class="primary-button real-station" href="${escapeText(stationDirections(place.location))}" target="_blank" rel="noopener noreferrer">Get directions ↗</a><p class="real-station-attribution">${escapeText(attribution)}</p>`;
+    $("#stationSelection").innerHTML = `${handle}${back}<div class="station-sheet-heading"><span class="sheet-station-icon">${icon("station")}</span><div><h2>${escapeText(place.displayName || "Charging station")}</h2><p>${escapeText(place.formattedAddress || "Address not mapped")}</p></div></div><ul class="real-station-facts">${facts.map(f => `<li>${escapeText(f)}</li>`).join("")}</ul><p class="sheet-availability"><span class="availability-dot unknown" aria-hidden="true"></span>Live availability not provided · not a Pluggo network station</p><div class="real-station-actions"><a class="primary-button real-station" href="${escapeText(stationDirections(place.location))}" target="_blank" rel="noopener noreferrer">Directions ↗</a><a class="secondary-button" href="${escapeText(googlePlaceLink(place))}" target="_blank" rel="noopener noreferrer">View on Google Maps</a></div><p class="real-station-note">Public charger run by ${escapeText(place.operator || "its operator")}: start and pay at the charger or in the operator's app. In-app charging works at Pluggo stations.</p><p class="real-station-attribution">${escapeText(attribution)}</p>`;
     return;
   }
   $("#stationSelection").innerHTML = `${handle}<div class="station-sheet-heading"><span class="sheet-station-icon">${icon("station")}</span><div><h2>${escapeText(place.displayName || "Charging station")}</h2><p>${escapeText(place.formattedAddress)}</p></div></div><p class="sheet-availability"><span class="availability-dot unknown" aria-hidden="true"></span>Availability and pricing not provided</p><a class="primary-button real-station" href="${escapeText(placeMapsLink(place))}" target="_blank" rel="noopener noreferrer">View in Google Maps ↗</a>`;
@@ -2031,7 +2038,7 @@ function tripResult(plan, from, to) {
   const stops = plan.stops || [];
   const head = billRow("Distance by road", `~${Math.round(plan.distanceKm)} km`) + billRow("Driving", `~${chargingDuration(plan.driveMinutes)}`) + billRow("Charging stops", stops.length ? `${stops.length} · ${chargingDuration(plan.chargeMinutes)}` : "None needed") + (stops.length ? billRow("Charging cost", `~${currency(plan.chargeCostEstimate)}`) : "") + (plan.feasible ? billRow(`Arrive in ${to.name} with`, `${Math.round(plan.arrivalBattery)}%`, "total") : "");
   const list = stops.map((s, i) => `<li><span class="trip-index">${i + 1}</span><div><strong>${escapeText(s.name)}</strong><small>${escapeText(s.address || "")}</small><span>${Math.round(s.legKm)} km on · arrive ${Math.round(s.arriveBattery)}% · charge to ${Math.round(s.leaveBattery)}% in ~${chargingDuration(s.minutes)}</span><span class="trip-meta">${s.network === "pluggo" ? "Pluggo station" : `Public charger · ${s.powerKnown ? `${Math.round(s.powerKW)} kW` : "power not listed, assumed 7.4 kW"}`} · ~${currency(s.costEstimate)}</span><a class="text-link" href="${stationDirections(s)}" target="_blank" rel="noopener noreferrer">Directions ${icon("arrow-up-right")}</a></div></li>`).join("");
-  return `<h3 class="trip-heading">${plan.feasible ? `Your trip to ${to.name}` : "We could not plan this trip"}</h3>${plan.feasible ? "" : notice(escapeText(plan.note))}<div class="bill-summary">${head}</div>${list ? `<ol class="trip-stops">${list}</ol>` : ""}${plan.feasible ? `<a class="secondary-button dialog-full" href="${tripMapsLink(from, to, stops)}" target="_blank" rel="noopener noreferrer">Open the route in Google Maps ${icon("arrow-up-right")}</a>` : ""}<p class="green-note">${escapeText(plan.assumptions)}</p>`;
+  return `<h3 class="trip-heading">${plan.feasible ? `Your trip to ${to.name}` : "We could not plan this trip"}</h3>${plan.feasible && !plan.chargeFirst ? "" : notice(escapeText(plan.note))}<div class="bill-summary">${head}</div>${list ? `<ol class="trip-stops">${list}</ol>` : ""}${plan.feasible ? `<a class="secondary-button dialog-full" href="${tripMapsLink(from, to, stops)}" target="_blank" rel="noopener noreferrer">Open the route in Google Maps ${icon("arrow-up-right")}</a>` : ""}<p class="green-note">${escapeText(plan.assumptions)}</p>`;
 }
 function renderGreenImpact() {
   const g = greenImpact(state.sessions, { period: summaryPeriod, cost: total });

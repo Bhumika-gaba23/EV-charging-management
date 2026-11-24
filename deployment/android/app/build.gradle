@@ -6,8 +6,8 @@ android {
         applicationId 'com.pluggo.preview'
         minSdk 26
         targetSdk 34
-        versionCode 12
-        versionName '2.1-stations-sheet'
+        versionCode 13
+        versionName '2.2-live-charging'
     }
     buildTypes {
         release {
