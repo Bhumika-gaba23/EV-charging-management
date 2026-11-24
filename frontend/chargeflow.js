@@ -198,6 +198,26 @@ function applyBackend(payload, keepPreferences = true) {
   if (oldSessions !== JSON.stringify(state.sessions)) { renderSessions(); updateSessionDialog(); }
   window.pluggoBackend = {connected:true,storage:payload.backend.storage,simulationMode:payload.backend.simulationMode,simulatorConnected:payload.backend.simulatorConnected};
 }
+// The last reply from the server, kept on this phone so the app opens with your data straight away:
+// offline, or while a free server wakes up. Nothing can be changed until the server answers.
+const LAST_SERVER_KEY = "pluggo.lastServer";
+let lastSaved = { at: 0, sessions: "" }, showingSaved = false;
+function rememberServer(payload) {
+  const sessions = JSON.stringify(payload.state?.sessions || []);
+  if (sessions === lastSaved.sessions && Date.now() - lastSaved.at < 15000) return;
+  lastSaved = { at: Date.now(), sessions };
+  try { localStorage.setItem(LAST_SERVER_KEY, JSON.stringify({ at: Date.now(), payload })); } catch {}
+}
+function showSavedServer() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(LAST_SERVER_KEY) || "null");
+    if (!saved?.payload) return false;
+    applyBackend(saved.payload, false);
+    showingSaved = true;
+    backendStatus(false, `Connecting… showing your data from ${new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" }).format(new Date(saved.at))}.`);
+    return true;
+  } catch { return false; }
+}
 async function refreshBackend() {
   if (localPreview || backendSyncing || backendMutations || preferencePending) return;
   backendSyncing = true;
@@ -206,10 +226,10 @@ async function refreshBackend() {
     const initial = !backendReady;
     const payload = initial ? await customerApi.bootstrap() : await customerApi.state();
     if (revision !== backendRevision) return;
-    backendReady = true; applyBackend(payload,false);
+    backendReady = true; showingSaved = false; applyBackend(payload,false); rememberServer(payload);
   } catch (error) {
     if (error.status === 401) backendReady = false;
-    backendStatus(false,error.status === 503 ? "The local charging server is offline. Start it, then retry." : "Cannot reach the charging server. Your server history will return when it reconnects.");
+    backendStatus(false,showingSaved ? "Waking up the charging server… showing your last saved data. You can charge once it connects." : error.status === 503 ? "The local charging server is offline. Start it, then retry." : "Cannot reach the charging server. Your server history will return when it reconnects.");
     window.pluggoBackend = {connected:false,error:error.message};
   } finally { backendSyncing = false; }
 }
@@ -218,7 +238,7 @@ async function backendAction(button, operation, keepPreferences = true) {
   backendMutations++; backendRevision++;
   const html = button?.innerHTML;
   if (button) { button.disabled=true; button.setAttribute("aria-busy","true"); }
-  try { const payload = await operation(); applyBackend(payload,keepPreferences); return payload; }
+  try { const payload = await operation(); applyBackend(payload,keepPreferences); rememberServer(payload); return payload; }
   catch (error) { toast(error.message); if (!error.status || error.status >= 500) backendStatus(false,"Connection lost. Retry before continuing."); return null; }
   finally { backendMutations--; if (button?.isConnected) {button.disabled=false;button.removeAttribute("aria-busy");button.innerHTML=html;} }
 }
@@ -2019,7 +2039,7 @@ renderMap();
 navigate();
 loadMaps();
 if (localPreview) backendStatus(false);
-else refreshBackend();
+else { showSavedServer(); refreshBackend(); }
 if (!storageOkay)
   setTimeout(
     () =>

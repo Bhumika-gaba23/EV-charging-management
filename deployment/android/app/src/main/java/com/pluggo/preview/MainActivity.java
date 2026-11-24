@@ -14,7 +14,10 @@ import androidx.webkit.JavaScriptReplyProxy;
 import androidx.webkit.WebViewAssetLoader;
 import androidx.webkit.WebViewCompat;
 import androidx.webkit.WebViewFeature;
+import java.io.InputStream;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Android test shell for the exact repository frontend. The only native bridge is PluggoNative,
@@ -61,7 +64,8 @@ public class MainActivity extends Activity {
                 .addPathHandler("/", new WebViewAssetLoader.AssetsPathHandler(this)).build();
         web.setWebViewClient(new WebViewClient() {
             @Override public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
-                return loader.shouldInterceptRequest(request.getUrl());
+                WebResourceResponse bundled = bundledScreen(request);
+                return bundled != null ? bundled : loader.shouldInterceptRequest(request.getUrl());
             }
             @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 if (!request.isForMainFrame()) return false;
@@ -136,6 +140,37 @@ public class MainActivity extends Activity {
         if (Alerts.permitted(this)) { reply.postMessage("{\"type\":\"permission\",\"granted\":true}"); return; }
         permissionReply = reply;
         requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 12);
+    }
+    // The app's screens ship inside the APK. Requests for them on the server's own address are
+    // answered from the APK, so the app opens instantly (even offline, or while a free server
+    // wakes up); only /api/ and /ocpp/ go to the network. The page keeps the server's origin, so
+    // its cookies and same-origin checks work exactly as on the website.
+    private static final Map<String,String> TYPES = new HashMap<>();
+    static {
+        String[][] types = {{"html","text/html"},{"js","text/javascript"},{"mjs","text/javascript"},{"css","text/css"},{"json","application/json"},
+            {"svg","image/svg+xml"},{"png","image/png"},{"jpg","image/jpeg"},{"webp","image/webp"},{"glb","model/gltf-binary"},
+            {"woff2","font/woff2"},{"ttf","font/ttf"},{"txt","text/plain"},{"md","text/markdown"}};
+        for (String[] t : types) TYPES.put(t[0], t[1]);
+    }
+    private WebResourceResponse bundledScreen(WebResourceRequest request) {
+        Uri url = request.getUrl(), start = Uri.parse(startUrl);
+        if (!"GET".equals(request.getMethod()) || !"https".equals(url.getScheme()) || !sameOrigin(url, start)) return null;
+        if ("appassets.androidplatform.net".equals(url.getHost())) return null;
+        String path = url.getPath() == null ? "" : url.getPath();
+        if (path.startsWith("/api/") || path.startsWith("/ocpp/") || path.contains("..")) return null;
+        if (path.isEmpty() || path.equals("/")) path = "/index.html";
+        String name = path.substring(1), extension = name.substring(name.lastIndexOf('.') + 1).toLowerCase();
+        String type = TYPES.get(extension);
+        if (type == null) return null;
+        try {
+            InputStream stream = getAssets().open(name);
+            Map<String,String> headers = new HashMap<>();
+            headers.put("Cache-Control", "no-cache");
+            boolean text = type.startsWith("text/") || type.endsWith("json") || type.endsWith("xml") || type.endsWith("javascript");
+            return new WebResourceResponse(type, text ? "UTF-8" : null, 200, "OK", headers, stream);
+        } catch (Exception missing) {
+            return null; // not in the APK: fetch it from the server
+        }
     }
     private static String withoutPerformance(String value) {
         Uri uri=Uri.parse(value);Uri.Builder builder=uri.buildUpon().clearQuery();
