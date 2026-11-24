@@ -16,6 +16,7 @@ import androidx.webkit.WebViewAssetLoader;
 public class MainActivity extends Activity {
     private static final String HOSTED = "https://pluggo-customer-demo.onrender.com/#home";
     private static final String LOCAL = "https://appassets.androidplatform.net/index.html?demo=1#home";
+    private static final String EXTRA_POSTER = "pluggo.poster";
     private WebView web;
     private String startUrl;
     private GeolocationPermissions.Callback locationCallback;
@@ -28,9 +29,13 @@ public class MainActivity extends Activity {
         // Earlier test builds defaulted to offline; switch that default once on upgrade.
         if (getPreferences(MODE_PRIVATE).getInt("hostedDefaultVersion", 0) < 7) {
             if ("appassets.androidplatform.net".equals(Uri.parse(savedUrl).getHost())) savedUrl = HOSTED;
-            getPreferences(MODE_PRIVATE).edit().putInt("hostedDefaultVersion", 7).putString("startUrl", savedUrl).apply();
+            getPreferences(MODE_PRIVATE).edit().putInt("hostedDefaultVersion", 7).apply();
         }
-        startUrl = withPerformanceProfile(savedUrl);
+        // The rendering mode is never stored: builds up to 1.6 saved "performance=poster" after any
+        // renderer loss, which left 3D vehicles replaced by still pictures on every later launch.
+        savedUrl = withoutPerformance(savedUrl);
+        getPreferences(MODE_PRIVATE).edit().putString("startUrl", savedUrl).apply();
+        startUrl = withPerformance(savedUrl, getIntent().getBooleanExtra(EXTRA_POSTER, false) ? "poster" : "lite");
         web = new WebView(this);
         web.setBackgroundColor(Color.rgb(11,11,11));
         web.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, true);
@@ -59,13 +64,19 @@ public class MainActivity extends Activity {
                 return true;
             }
             @Override public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail) {
-                startUrl=Uri.parse(startUrl).buildUpon().clearQuery().encodedQuery(posterQuery(startUrl)).build().toString();
-                getPreferences(MODE_PRIVATE).edit().putString("startUrl",startUrl).apply();
                 ((android.view.ViewGroup)view.getParent()).removeView(view);
                 view.destroy();web=null;
-                new AlertDialog.Builder(MainActivity.this).setTitle("Lighter preview ready")
-                    .setMessage("The web renderer stopped. Reload with still vehicle previews to use less memory. Saved charging data is kept.")
-                    .setPositiveButton("Reload",(d,w)->recreate()).setNegativeButton("Close",(d,w)->finish()).show();
+                if (!detail.didCrash()) {
+                    // The system reclaimed the renderer for memory (common in the background on
+                    // ColorOS/MIUI). Nothing is wrong with 3D, so reload as it was.
+                    getIntent().removeExtra(EXTRA_POSTER);
+                    recreate();
+                    return true;
+                }
+                new AlertDialog.Builder(MainActivity.this).setTitle("Pluggo stopped")
+                    .setMessage("The web renderer crashed. Reload with still vehicle pictures for this session to use less memory. Saved charging data is kept.")
+                    .setPositiveButton("Reload",(d,w)->{getIntent().putExtra(EXTRA_POSTER,true);recreate();})
+                    .setNegativeButton("Close",(d,w)->finish()).show();
                 return true;
             }
             @Override public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
@@ -99,16 +110,14 @@ public class MainActivity extends Activity {
         });
         if(state==null || !restoreWebState(state)) web.loadUrl(startUrl);
     }
-    private String withPerformanceProfile(String value) {
-        Uri uri=Uri.parse(value);
-        if(uri.getQueryParameter("performance")!=null)return value;
-        return uri.buildUpon().appendQueryParameter("performance","lite").build().toString();
-    }
-    private String posterQuery(String value) {
+    private static String withoutPerformance(String value) {
         Uri uri=Uri.parse(value);Uri.Builder builder=uri.buildUpon().clearQuery();
         for(String key:uri.getQueryParameterNames()) if(!key.equals("performance"))
             for(String v:uri.getQueryParameters(key))builder.appendQueryParameter(key,v);
-        return builder.appendQueryParameter("performance","poster").build().getEncodedQuery();
+        return builder.build().toString();
+    }
+    private static String withPerformance(String value,String profile) {
+        return Uri.parse(withoutPerformance(value)).buildUpon().appendQueryParameter("performance",profile).build().toString();
     }
     private void memoryPressure() {
         if(web!=null)web.evaluateJavascript("window.dispatchEvent(new Event('pluggo:memorypressure'))",null);
@@ -123,7 +132,9 @@ public class MainActivity extends Activity {
         return a.getScheme()!=null && a.getScheme().equals(b.getScheme()) && a.getHost()!=null && a.getHost().equals(b.getHost()) && a.getPort()==b.getPort();
     }
     private void load(String url) {
-        startUrl=withPerformanceProfile(url);getPreferences(MODE_PRIVATE).edit().putString("startUrl",startUrl).apply();web.loadUrl(startUrl);web.clearHistory();
+        getIntent().removeExtra(EXTRA_POSTER);
+        getPreferences(MODE_PRIVATE).edit().putString("startUrl",withoutPerformance(url)).apply();
+        startUrl=withPerformance(url,"lite");web.loadUrl(startUrl);web.clearHistory();
     }
     private void connection() {
         EditText address = new EditText(this);
