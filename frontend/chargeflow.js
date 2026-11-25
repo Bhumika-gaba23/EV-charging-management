@@ -1,7 +1,7 @@
 import { summarizeSessions, chargingDuration } from "./session-summary.js?v=20261123-pay1";
 import { performanceProfile } from "./performance-profile.js?v=20261104-summary1";
 import { CustomerApi } from "./customer-api.js?v=20261124-features1";
-import { normalizeIndianPhone, sendOtp, confirmOtp, signOutFirebase, friendlyAuthError, payWithRazorpay, firebaseSignInAge, deleteFirebaseUser } from "./account.js?v=20261123-legal1";
+import { normalizeIndianPhone, sendOtp, confirmOtp, signOutFirebase, friendlyAuthError, payWithRazorpay, closeRazorpay, firebaseSignInAge, deleteFirebaseUser } from "./account.js?v=20261125-pay2";
 import { findGoogleStations } from "./google-stations.js?v=20261104-server9";
 import { greenImpact, BAND_NAMES, bandAt, rateAt, nextOffPeak, BOOKING_MINUTES, bookingSlots, overlaps, istTime, istDay, CITIES, findCity, tripMapsLink } from "./extras.js?v=20261125-delhi1";
 import { placeName, findPlaces, savedPlace, savePlace, currentPosition, locationAllowed } from "./places.js?v=20261125-places3";
@@ -1498,10 +1498,15 @@ function openCheckout(s) {
       try {
         const order = await customerApi.paymentOrder(s.id);
         // Razorpay already has this payment (for example the app closed after paying): no second charge.
-        if (!order.settled) payment = await payWithRazorpay(order, { description: `Charging at ${station.name}` });
+        if (!order.settled) {
+          // The sheet is a modal <dialog> in the browser's top layer, above everything on the page,
+          // so Razorpay's window (added to the page) would open behind it. Close the sheet first.
+          $("#flowDialog").close();
+          payment = await payWithRazorpay(order, { description: `Charging at ${station.name}` });
+        }
       } catch (error) {
-        button.disabled = false;
-        button.removeAttribute("aria-busy");
+        // Bring the checkout back so the driver can try again.
+        openCheckout(state.sessions.find((item) => item.id === s.id) || s);
         toast(error.cancelled ? "Payment cancelled. You can pay whenever you're ready." : error.message);
         return;
       }
@@ -1510,7 +1515,7 @@ function openCheckout(s) {
     if (reply) {
       openSession(state.sessions.find((item) => item.id === s.id));
       toast(online ? "Payment received. Thank you!" : "Checkout complete.");
-    }
+    } else if (!$("#flowDialog").open) openCheckout(state.sessions.find((item) => item.id === s.id) || s);
   };
 }
 function renderAccount() {
@@ -2069,6 +2074,17 @@ $("#chargingAlerts").addEventListener("change", async (event) => {
   toast("Charging alerts are on.");
 });
 $("#openTripPlanner").onclick = openTrip;
+// The phone's Back button (Android app) asks the page first: close the payment window, then an
+// open sheet or menu, then step back a page. Only on Home does the app itself handle Back.
+window.pluggoBack = () => {
+  if (closeRazorpay()) return true;
+  if ($("#flowDialog").open) { $("#flowDialog").close(); return true; }
+  if ($("#vehicleDropdown").open) { $("#vehicleDropdown").open = false; return true; }
+  const [current, sub] = location.hash.slice(1).split("/");
+  if (current === "settings" && sub) { location.hash = "settings"; return true; }
+  if (page !== "home") { location.hash = "home"; return true; }
+  return false;
+};
 // Settings is a short menu; each section opens as its own page with a back arrow (#settings/<section>).
 const SETTINGS_SECTIONS = {
   Account: ["account", "shield", "Phone sign-in and your data"],

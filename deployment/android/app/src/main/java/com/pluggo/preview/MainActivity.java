@@ -95,6 +95,7 @@ public class MainActivity extends Activity {
             }
             @Override public void onPageFinished(WebView view, String url) { shareInsets(); }
             @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                if (openPaymentApp(request.getUrl())) return true;
                 if (!request.isForMainFrame()) return false;
                 Uri target = request.getUrl();
                 if (sameOrigin(target, Uri.parse(startUrl))) return false;
@@ -271,11 +272,41 @@ public class MainActivity extends Activity {
             dialog.dismiss();load(value);
         }));dialog.show();
     }
+    // Back asks the page first (it closes the payment window, a sheet, or goes back a page). Only
+    // when the page has nothing to close does the app go back in history or show its menu.
     @Override public void onBackPressed() {
-        if(web!=null && web.canGoBack()) web.goBack();
-        else new AlertDialog.Builder(this).setTitle("Pluggo").setItems(new String[]{"Connection settings","Reload app","Close"},(d,which)->{
+        if (web == null) { super.onBackPressed(); return; }
+        web.evaluateJavascript("(function(){try{return !!(window.pluggoBack&&window.pluggoBack());}catch(e){return false;}})()", handled -> {
+            if ("true".equals(handled) || web == null) return;
+            if (web.canGoBack()) web.goBack();
+            else showAppMenu();
+        });
+    }
+    private void showAppMenu() {
+        new AlertDialog.Builder(this).setTitle("Pluggo").setItems(new String[]{"Connection settings","Reload app","Close"},(d,which)->{
             if(which==0)connection();else if(which==1)web.reload();else finish();
         }).show();
+    }
+    // UPI payment apps (GPay, PhonePe, Paytm, BHIM…) open from Razorpay through upi:// or intent:// links.
+    private static final java.util.Set<String> PAYMENT_SCHEMES = new java.util.HashSet<>(java.util.Arrays.asList(
+        "upi", "tez", "gpay", "phonepe", "paytmmp", "paytm", "bhim", "credpay", "mobikwik"));
+    private boolean openPaymentApp(Uri target) {
+        String scheme = target.getScheme() == null ? "" : target.getScheme().toLowerCase();
+        try {
+            Intent intent;
+            if ("intent".equals(scheme)) {
+                intent = Intent.parseUri(target.toString(), Intent.URI_INTENT_SCHEME);
+                String inner = intent.getScheme() == null ? "" : intent.getScheme().toLowerCase();
+                if (!PAYMENT_SCHEMES.contains(inner)) return false;
+                intent.addCategory(Intent.CATEGORY_BROWSABLE); intent.setComponent(null); intent.setSelector(null);
+            } else if (PAYMENT_SCHEMES.contains(scheme)) {
+                intent = new Intent(Intent.ACTION_VIEW, target);
+            } else return false;
+            startActivity(intent);
+        } catch (Exception noApp) {
+            runOnUiThread(() -> android.widget.Toast.makeText(this, "No UPI app found for this payment. Try another method.", android.widget.Toast.LENGTH_LONG).show());
+        }
+        return true;
     }
     @Override public void onRequestPermissionsResult(int code,String[] permissions,int[] results) {
         super.onRequestPermissionsResult(code,permissions,results);

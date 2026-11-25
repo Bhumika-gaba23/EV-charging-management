@@ -112,9 +112,18 @@ function loadRazorpay() {
 }
 
 // Opens Razorpay Checkout for a server-created order and resolves with the signed result.
+// The Razorpay window that is open now, so the phone's Back button can close it.
+let openCheckout = null;
+export function closeRazorpay() {
+  if (!openCheckout) return false;
+  try { openCheckout.close(); } catch {}
+  return true;
+}
 export async function payWithRazorpay(order, { description }) {
   await loadRazorpay();
   return new Promise((resolve, reject) => {
+    const done = (fn) => (value) => { openCheckout = null; fn(value); };
+    resolve = done(resolve); reject = done(reject);
     const checkout = new window.Razorpay({
       key: order.keyId,
       amount: order.amount,
@@ -130,6 +139,7 @@ export async function payWithRazorpay(order, { description }) {
     checkout.on("payment.failed", (event) =>
       reject(new Error(event?.error?.description || "Payment failed. No money was taken.")),
     );
+    openCheckout = checkout;
     checkout.open();
   });
 }
