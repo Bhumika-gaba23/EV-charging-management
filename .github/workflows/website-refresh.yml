@@ -1,0 +1,17 @@
+# When a release is published, ask the website to rebuild so its download serves the new APK.
+# The website checks the release itself and redeploys only if the version changed.
+name: website-refresh
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+permissions: {}
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Ask the website to pick up the new release
+        run: |
+          sleep 20  # let the release assets finish attaching
+          curl -fsS --retry 3 --retry-all-errors https://pluggo-app-peach.vercel.app/api/refresh

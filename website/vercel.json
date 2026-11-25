@@ -1,7 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
-  "buildCommand": "mkdir -p download && curl -fL --retry 3 -o download/Pluggo.apk https://github.com/Bhumika-gaba23/EV-charging-management/releases/latest/download/pluggo-phone-test.apk && test $(wc -c < download/Pluggo.apk) -gt 1000000",
+  "buildCommand": "sh build.sh",
   "outputDirectory": ".",
   "cleanUrls": true,
   "headers": [
@@ -43,6 +43,21 @@
           "value": "public, max-age=300, must-revalidate"
         }
       ]
+    },
+    {
+      "source": "/download/version.txt",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store"
+        }
+      ]
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/refresh",
+      "schedule": "0 6 * * *"
     }
   ]
 }
