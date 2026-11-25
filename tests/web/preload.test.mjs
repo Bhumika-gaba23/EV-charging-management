@@ -24,7 +24,7 @@ test('nginx compresses the 3D models and scripts and caches heavy binaries',()=>
 test('the server vehicle catalog points at pictures that exist and carry no baked-in shadow',()=>{
  const catalog=JSON.parse(readFileSync('database/seed/customer_catalog.json','utf8'));
  const images=Object.values(catalog.vehicles).map(v=>v.image);
- assert.equal(images.length,4);
+ assert.equal(images.length,7); // car, scooter, bike, cargo + Pluggo SUV, Hatch, E-Scooter
  for(const image of images){
   assert.match(image,/-poster-clean\.png/,`${image} must be a clean (shadow-free) picture`);
   assert.ok(existsSync('frontend/'+image.split('?')[0]),`${image} must exist`);

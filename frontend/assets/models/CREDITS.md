@@ -77,3 +77,9 @@ reduce draw calls. It represents a generic electric delivery three-wheeler, not 
 specific manufacturer's vehicle. Battery and connector data are fictional demo
 profiles. The poster is rendered from this same model. Three.js geometry utilities
 retain the existing MIT attribution.
+
+## Pluggo SUV, Pluggo Hatch and Pluggo E-Scooter
+
+Original Pluggo designs, built in code for this project (`frontend/pluggo-models.js`), like the
+Pluggo Cargo three-wheeler. They depict vehicle categories, not any manufacturer's product. The
+poster images (`suv-`, `hatch-`, `escooter-poster-clean.png`) are renders of these models.

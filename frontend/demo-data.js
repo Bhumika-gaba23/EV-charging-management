@@ -43,6 +43,10 @@ export const vehicles = {
     connectors: ["Bharat AC-001"],
     image: "assets/models/cargo-poster-clean.png?v=clean1",
   },
+  // Pluggo SUV, Hatch and E-Scooter: original 3D models built in code (pluggo-models.js).
+  suv: {"label": "Electric SUV", "short": "SUV", "name": "Pluggo SUV", "depthName": ["PLUGGO", "SUV"], "index": "05", "capacity": 45, "power": 60, "kmPerKWh": 6.5, "connectors": ["CCS2", "Type 2"], "image": "assets/models/suv-poster-clean.png?v=new1"},
+  hatch: {"label": "Electric hatchback", "short": "Hatchback", "name": "Pluggo Hatch", "depthName": ["PLUGGO", "HATCH"], "index": "06", "capacity": 30, "power": 30, "kmPerKWh": 7.5, "connectors": ["CCS2", "Type 2"], "image": "assets/models/hatch-poster-clean.png?v=new1"},
+  escooter: {"label": "Electric scooter", "short": "E-scooter", "name": "Pluggo E-Scooter", "depthName": ["PLUGGO", "E-SCOOTER"], "index": "07", "capacity": 3.2, "power": 1.5, "kmPerKWh": 33, "connectors": ["Bharat AC-001"], "image": "assets/models/escooter-poster-clean.png?v=new1"},
 };
 // Real models per vehicle type: typical battery (kWh), max charging power (kW) and km per kWh.
 export const vehicleModels = {
@@ -178,6 +182,103 @@ export const vehicleModels = {
       "capacity": 12.4,
       "power": 3.3,
       "kmPerKWh": 12
+    }
+  ],
+  "suv": [
+    {
+      "id": "nexon-ev-45",
+      "name": "Tata Nexon EV 45",
+      "capacity": 45,
+      "power": 60,
+      "kmPerKWh": 6.5
+    },
+    {
+      "id": "xuv400",
+      "name": "Mahindra XUV400",
+      "capacity": 39.4,
+      "power": 50,
+      "kmPerKWh": 6.8
+    },
+    {
+      "id": "be-6",
+      "name": "Mahindra BE 6",
+      "capacity": 79,
+      "power": 175,
+      "kmPerKWh": 6.5
+    },
+    {
+      "id": "zs-ev",
+      "name": "MG ZS EV",
+      "capacity": 50.3,
+      "power": 50,
+      "kmPerKWh": 6.5
+    },
+    {
+      "id": "creta-electric",
+      "name": "Hyundai Creta Electric",
+      "capacity": 51.4,
+      "power": 50,
+      "kmPerKWh": 6.8
+    },
+    {
+      "id": "atto-3",
+      "name": "BYD Atto 3",
+      "capacity": 60.5,
+      "power": 80,
+      "kmPerKWh": 6.2
+    }
+  ],
+  "hatch": [
+    {
+      "id": "tiago-ev-lr",
+      "name": "Tata Tiago EV Long Range",
+      "capacity": 24,
+      "power": 25,
+      "kmPerKWh": 8
+    },
+    {
+      "id": "punch-ev-lr",
+      "name": "Tata Punch EV Long Range",
+      "capacity": 35,
+      "power": 50,
+      "kmPerKWh": 7
+    },
+    {
+      "id": "windsor-ev",
+      "name": "MG Windsor EV",
+      "capacity": 38,
+      "power": 45,
+      "kmPerKWh": 7
+    }
+  ],
+  "escooter": [
+    {
+      "id": "ather-450x",
+      "name": "Ather 450X",
+      "capacity": 2.9,
+      "power": 1.5,
+      "kmPerKWh": 35
+    },
+    {
+      "id": "ola-s1-pro",
+      "name": "Ola S1 Pro",
+      "capacity": 4,
+      "power": 1.5,
+      "kmPerKWh": 35
+    },
+    {
+      "id": "tvs-iqube",
+      "name": "TVS iQube",
+      "capacity": 3.4,
+      "power": 1.5,
+      "kmPerKWh": 32
+    },
+    {
+      "id": "bajaj-chetak",
+      "name": "Bajaj Chetak",
+      "capacity": 3.5,
+      "power": 1.5,
+      "kmPerKWh": 33
     }
   ]
 };

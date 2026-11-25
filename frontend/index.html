@@ -21,7 +21,7 @@
     <link rel="stylesheet" href="app-shell.css?v=20261123-stations1" />
     <link rel="stylesheet" href="features.css?v=20261124-features1" />
     <link rel="preload" href="assets/fonts/inter-variable.woff2" as="font" type="font/woff2" crossorigin />
-    <link rel="stylesheet" href="uber.css?v=20261125-r4" />
+    <link rel="stylesheet" href="uber.css?v=20261125-new1" />
     <script>
       // Apply the saved style and glass level before first paint so the page never flashes the wrong look.
       (function () {
@@ -40,7 +40,7 @@
     </script>
     <!-- Start the 3D downloads now instead of after the app script has run (the big win on phones).
          The import map above must come first, and these URLs must match the imports in chargeflow.js. -->
-    <link rel="modulepreload" href="vehicle-scene.js?v=20261125-preload1" />
+    <link rel="modulepreload" href="vehicle-scene.js?v=20261125-new1" />
     <link rel="modulepreload" href="performance-profile.js?v=20261104-summary1" />
     <link rel="modulepreload" href="vendor/three.module.min.js" />
     <link rel="modulepreload" href="vendor/three.core.min.js" />
@@ -98,7 +98,7 @@
       <section id="page-home" class="page active" aria-label="Home">
         <a href="#stations" class="where-to" id="whereTo"><i data-icon="search"></i><span>Where to charge?</span><span class="where-to-chip"><i data-icon="bolt"></i>Now</span></a>
         <div class="home-hero">
-          <div class="hero-copy home-vehicle-heading"><div><p class="vehicle-picker-caption">Pick your vehicle</p><details id="vehicleDropdown" class="vehicle-dropdown"><summary class="home-vehicle-picker" aria-label="Pick your vehicle" aria-haspopup="menu" aria-controls="vehicleMenu" aria-expanded="false"><span id="selectedVehicleName" aria-live="polite">Tesla Model 3</span><span aria-hidden="true">⌄</span></summary><div id="vehicleMenu" class="vehicle-menu" role="menu" aria-label="Vehicles"><button type="button" role="menuitemradio" aria-checked="true" data-choose-vehicle="car"><i data-icon="car"></i><span><strong>Tesla Model 3</strong><small>Electric car · 40 kWh</small></span><span class="vehicle-option-check" aria-hidden="true">✓</span></button><button type="button" role="menuitemradio" aria-checked="false" data-choose-vehicle="scooter"><i data-icon="scooter"></i><span><strong>Urban Scooter</strong><small>Electric scooter · 3 kWh</small></span><span class="vehicle-option-check" aria-hidden="true">✓</span></button><button type="button" role="menuitemradio" aria-checked="false" data-choose-vehicle="bike"><i data-icon="bike"></i><span><strong>Concept Bike</strong><small>Electric bike · 5 kWh</small></span><span class="vehicle-option-check" aria-hidden="true">✓</span></button><button type="button" role="menuitemradio" aria-checked="false" data-choose-vehicle="cargo"><i data-icon="cargo"></i><span><strong>Pluggo Cargo</strong><small>Delivery three-wheeler · 20 kWh</small></span><span class="vehicle-option-check" aria-hidden="true">✓</span></button></div></details></div><a class="icon-button home-map-shortcut" href="#stations" aria-label="Open nearby station map"><i data-icon="map"></i></a></div>
+          <div class="hero-copy home-vehicle-heading"><div><p class="vehicle-picker-caption">Pick your vehicle</p><details id="vehicleDropdown" class="vehicle-dropdown"><summary class="home-vehicle-picker" aria-label="Pick your vehicle" aria-haspopup="menu" aria-controls="vehicleMenu" aria-expanded="false"><span id="selectedVehicleName" aria-live="polite">Tesla Model 3</span><span aria-hidden="true">⌄</span></summary><div id="vehicleMenu" class="vehicle-menu" role="menu" aria-label="Vehicles"><button type="button" role="menuitemradio" aria-checked="true" data-choose-vehicle="car"><i data-icon="car"></i><span><strong>Tesla Model 3</strong><small>Electric car · 40 kWh</small></span><span class="vehicle-option-check" aria-hidden="true">✓</span></button><button type="button" role="menuitemradio" aria-checked="false" data-choose-vehicle="scooter"><i data-icon="scooter"></i><span><strong>Urban Scooter</strong><small>Electric scooter · 3 kWh</small></span><span class="vehicle-option-check" aria-hidden="true">✓</span></button><button type="button" role="menuitemradio" aria-checked="false" data-choose-vehicle="bike"><i data-icon="bike"></i><span><strong>Concept Bike</strong><small>Electric bike · 5 kWh</small></span><span class="vehicle-option-check" aria-hidden="true">✓</span></button><button type="button" role="menuitemradio" aria-checked="false" data-choose-vehicle="cargo"><i data-icon="cargo"></i><span><strong>Pluggo Cargo</strong><small>Delivery three-wheeler · 20 kWh</small></span><span class="vehicle-option-check" aria-hidden="true">✓</span></button><button type="button" role="menuitemradio" aria-checked="false" data-choose-vehicle="suv"><i data-icon="car"></i><span><strong>Pluggo SUV</strong><small>Electric SUV · 45 kWh</small></span><span class="vehicle-option-check" aria-hidden="true">✓</span></button><button type="button" role="menuitemradio" aria-checked="false" data-choose-vehicle="hatch"><i data-icon="car"></i><span><strong>Pluggo Hatch</strong><small>Electric hatchback · 30 kWh</small></span><span class="vehicle-option-check" aria-hidden="true">✓</span></button><button type="button" role="menuitemradio" aria-checked="false" data-choose-vehicle="escooter"><i data-icon="scooter"></i><span><strong>Pluggo E-Scooter</strong><small>Electric scooter · 3.2 kWh</small></span><span class="vehicle-option-check" aria-hidden="true">✓</span></button></div></details></div><a class="icon-button home-map-shortcut" href="#stations" aria-label="Open nearby station map"><i data-icon="map"></i></a></div>
           <article class="vehicle-wallet" aria-label="Your selected vehicle">
           <div class="vehicle-stage" id="vehicleStage">
             <div class="stage-watermark" id="stageWatermark" aria-hidden="true">
@@ -122,7 +122,7 @@
           <div class="vehicle-pagination" id="vehiclePagination" role="group" aria-label="Swipe to choose a vehicle" tabindex="0" aria-describedby="vehicleSwipeHint">
             <p id="selectedVehicleProfile" class="selected-vehicle-profile visually-hidden">40 kWh · CCS2 / Type 2</p>
             <div id="pluggoMotion" class="pluggo-motion" aria-hidden="true"><svg viewBox="0 0 116 40" fill="none"><path class="pluggo-cable" d="M4 31h15c12 0 8-13 20-13h5"/><g class="pluggo-connector"><path d="M44 10h11a5 5 0 0 1 5 5v6a5 5 0 0 1-5 5H44z"/><path d="M60 13h8m-8 10h8"/></g><path class="pluggo-socket" d="M73 8h5a9 9 0 0 1 9 9v2a9 9 0 0 1-9 9h-5zM73 13v10"/><g class="pluggo-pulse"><path d="m95 10 5 8-5 8m8-16 5 8-5 8"/></g></svg><span>pluggo</span></div>
-            <div class="vehicle-page-dots" role="group" aria-label="Select your vehicle"><button data-vehicle="car" aria-label="Car" aria-pressed="true"><span></span></button><button data-vehicle="scooter" aria-label="Scooter" aria-pressed="false"><span></span></button><button data-vehicle="bike" aria-label="Bike" aria-pressed="false"><span></span></button><button data-vehicle="cargo" aria-label="Cargo" aria-pressed="false"><span></span></button></div>
+            <div class="vehicle-page-dots" role="group" aria-label="Select your vehicle"><button data-vehicle="car" aria-label="Car" aria-pressed="true"><span></span></button><button data-vehicle="scooter" aria-label="Scooter" aria-pressed="false"><span></span></button><button data-vehicle="bike" aria-label="Bike" aria-pressed="false"><span></span></button><button data-vehicle="cargo" aria-label="Cargo" aria-pressed="false"><span></span></button><button data-vehicle="suv" aria-label="SUV" aria-pressed="false"><span></span></button><button data-vehicle="hatch" aria-label="Hatchback" aria-pressed="false"><span></span></button><button data-vehicle="escooter" aria-label="E-scooter" aria-pressed="false"><span></span></button></div>
             <span id="vehicleSwipeHint" class="visually-hidden">Swipe left or right on the vehicle name to switch. Drag the vehicle itself to rotate. You can also select a page dot or use the left and right arrow keys.</span>
           </div>
           </article>
@@ -267,6 +267,6 @@
     >
     <script src="vendor/leaflet.js"></script>
     <script src="i18n.js?v=20261124-uber1"></script>
-    <script src="chargeflow.js?v=20261125-car2" type="module"></script>
+    <script src="chargeflow.js?v=20261125-new1" type="module"></script>
   </body>
 </html>

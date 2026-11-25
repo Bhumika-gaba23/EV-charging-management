@@ -10,7 +10,12 @@ const files = {
   scooter: { url: "assets/models/scooter.glb?v=white-polish-5", length: 3.4 },
   cargo: { url: null, length: 3.6 },
   bike: { url: "assets/models/bike.glb?v=white-polish-5", length: 3.9 },
+  // Original Pluggo designs built in code (pluggo-models.js): no download needed.
+  suv: { url: null, length: 4.8 },
+  hatch: { url: null, length: 4.5 },
+  escooter: { url: null, length: 3.4 },
 };
+const BUILT = { suv: "createSuv", hatch: "createHatch", escooter: "createEScooter" };
 
 export function createShowroom(container, onFailure, onStatus = () => {}) {
   const lite = performanceProfile !== "full";
@@ -375,7 +380,9 @@ export function createShowroom(container, onFailure, onStatus = () => {}) {
     if (!cache.has(id)) {
       const source = id === "cargo"
         ? import("./cargo-model.js?v=20261104-summary1").then(({createCargoVehicle}) => createCargoVehicle())
-        : loader.loadAsync(files[id].url).then(gltf => gltf.scene);
+        : BUILT[id]
+          ? import("./pluggo-models.js?v=20261125-new1").then((models) => models[BUILT[id]]())
+          : loader.loadAsync(files[id].url).then(gltf => gltf.scene);
       cache.set(id, source.then(root => normalize(root, id)).catch((error) => { cache.delete(id); throw error; }));
     }
     return cache.get(id);

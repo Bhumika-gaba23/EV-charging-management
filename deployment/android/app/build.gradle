@@ -6,8 +6,8 @@ android {
         applicationId 'com.pluggo.preview'
         minSdk 26
         targetSdk 34
-        versionCode 24
-        versionName '2.5.3'
+        versionCode 25
+        versionName '2.6.0'
     }
     // Sign with both schemes. minSdk 26 lets the build drop v1 (JAR) signing, and some phone
     // makers' installers (OPPO/ColorOS, Vivo) then reject the APK as "package invalid".

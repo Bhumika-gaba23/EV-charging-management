@@ -16,7 +16,7 @@ import {
   energyLimit as previewEnergyLimit,
   updateSession,
   validSession,
-} from "./demo-data.js?v=20261125-model1";
+} from "./demo-data.js?v=20261125-new1";
 
 document.documentElement.dataset.visibility = document.hidden ? "hidden" : "visible";
 const $ = (s) => document.querySelector(s);
@@ -152,7 +152,7 @@ function vehicleSpec(type, modelId = chosenModels[type]) {
   return m ? { id: m.id, name: m.name, capacity: m.capacity, power: m.power } : { id: "", name: v.name, capacity: v.capacity, power: v.power };
 }
 // Typical efficiency per vehicle type, used for an estimated (not measured) range.
-const KM_PER_KWH = { car: 6.5, scooter: 30, bike: 25, cargo: 7.5 };
+const KM_PER_KWH = { car: 6.5, scooter: 30, bike: 25, cargo: 7.5, suv: 6.5, hatch: 7.5, escooter: 33 };
 function batteryLevel(id) {
   const session = state.sessions.find(item => item.vehicle === id);
   return Math.min(100, Math.max(0, session ? soc(session) : 25));
@@ -1896,7 +1896,7 @@ function useFallback(permanent = true) {
   $("#vehicleFallback").hidden = false;
   $("#vehicleCanvas").hidden = true;
 }
-(performanceProfile === "poster" ? Promise.reject(new Error("Low-memory poster preview")) : import("./vehicle-scene.js?v=20261125-preload1"))
+(performanceProfile === "poster" ? Promise.reject(new Error("Low-memory poster preview")) : import("./vehicle-scene.js?v=20261125-new1"))
   .then(({ createShowroom }) => {
     sceneController = createShowroom(
       $("#vehicleCanvas"),

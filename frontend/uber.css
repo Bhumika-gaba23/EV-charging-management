@@ -494,3 +494,6 @@
 @media (prefers-reduced-motion: reduce) {
   :root[data-ui="uber"] :is(.charge-ring.is-charging::before, .session-bar > span, .garage-battery-bar.is-charging > span) { animation: none !important; }
 }
+/* Seven vehicles: narrower dots that stay clear of the plug animation on the right. */
+html body .vehicle-page-dots { padding-right: 88px; }
+html body .vehicle-page-dots button { width: 36px; min-width: 36px; }
