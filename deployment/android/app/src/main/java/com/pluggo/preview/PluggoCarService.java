@@ -92,6 +92,15 @@ public final class PluggoCarService extends CarAppService {
         return "charging".equals(status) || "paused".equals(status);
     }
 
+    /** "Done by 1:42 pm · 23 min left" from the measured charging speed. */
+    static String finishText(JSONObject s) {
+        double minutes = s.optDouble("minutesLeft", -1);
+        if (minutes < 0) return "Charging";
+        if (minutes < 1) return "Almost done";
+        java.text.DateFormat clock = java.text.DateFormat.getTimeInstance(java.text.DateFormat.SHORT, Locale.ENGLISH);
+        return "Done by " + clock.format(new java.util.Date(System.currentTimeMillis() + Math.round(minutes * 60000))) + " · " + Math.round(minutes) + " min left";
+    }
+
     static String money(double value) { return String.format(Locale.ENGLISH, "₹%.0f", value); }
 
     /** A battery gauge drawn for the car screen: the charge so far, the target mark and the %. */
@@ -185,8 +194,8 @@ public final class PluggoCarService extends CarAppService {
                     .setTitle(st.optString("name"))
                     .addText(distance)
                     .addText((free > 0 ? free + " of " + st.optInt("total") + " plugs free" : "All plugs in use") + " · ₹" + st.optString("rate") + "/kWh")
-                    .setMetadata(place(st, String.valueOf(rows + (s == null ? 1 : 0)), free > 0 ? GREEN : CarColor.DEFAULT))
-                    .setOnClickListener(() -> navigate(st))
+                    .setMetadata(pin(getCarContext(), st, free > 0 ? GREEN : CarColor.DEFAULT))
+                    .setOnClickListener(() -> getScreenManager().push(new StationScreen(getCarContext(), st)))
                     .build());
                 rows++;
             }
@@ -205,15 +214,56 @@ public final class PluggoCarService extends CarAppService {
             return null;
         }
 
+        static Metadata pin(CarContext context, JSONObject st, CarColor color) {
+            return new Metadata.Builder().setPlace(new Place.Builder(CarLocation.create(st.optDouble("lat"), st.optDouble("lng")))
+                .setMarker(new PlaceMarker.Builder().setIcon(icon(context, R.drawable.ic_car_station, null), PlaceMarker.TYPE_ICON).setColor(color).build()).build()).build();
+        }
+
         private static Metadata place(JSONObject st, String label, CarColor color) {
             return new Metadata.Builder().setPlace(new Place.Builder(CarLocation.create(st.optDouble("lat"), st.optDouble("lng")))
                 .setMarker(new PlaceMarker.Builder().setLabel(label).setColor(color).build()).build()).build();
         }
 
-        private void navigate(JSONObject st) {
-            Uri place = Uri.parse("geo:" + st.optDouble("lat") + "," + st.optDouble("lng") + "?q=" + Uri.encode(st.optString("name")));
-            try { getCarContext().startCarApp(new Intent(CarContext.ACTION_NAVIGATE, place)); }
-            catch (Exception error) { CarToast.makeText(getCarContext(), "No navigation app available", CarToast.LENGTH_SHORT).show(); }
+    }
+
+    static void navigate(CarContext context, JSONObject st) {
+        Uri place = Uri.parse("geo:" + st.optDouble("lat") + "," + st.optDouble("lng") + "?q=" + Uri.encode(st.optString("name")));
+        try { context.startCarApp(new Intent(CarContext.ACTION_NAVIGATE, place)); }
+        catch (Exception error) { CarToast.makeText(context, "No navigation app available", CarToast.LENGTH_SHORT).show(); }
+    }
+
+    /** One charger: its plugs (type, power, free or busy), price and distance; Navigate or Charge here. */
+    static final class StationScreen extends LiveScreen {
+        private final JSONObject station;
+        StationScreen(CarContext context, JSONObject station) { super(context); this.station = station; }
+
+        @NonNull @Override public Template onGetTemplate() {
+            CarContext c = getCarContext();
+            int free = station.optInt("free"), total = station.optInt("total");
+            Pane.Builder pane = new Pane.Builder()
+                .setImage(icon(c, R.drawable.ic_car_station, free > 0 ? GREEN : CarColor.DEFAULT))
+                .addRow(new Row.Builder().setTitle(free > 0 ? free + " of " + total + " plugs free for your car" : "All plugs for your car are in use")
+                    .addText(String.format(Locale.ENGLISH, "%s · %.1f km away", station.optString("area"), station.optDouble("km"))).build());
+            JSONArray plugs = station.optJSONArray("plugs");
+            StringBuilder list = new StringBuilder();
+            if (plugs != null) for (int i = 0; i < plugs.length(); i++) {
+                JSONObject plug = plugs.optJSONObject(i);
+                if (plug == null) continue;
+                if (list.length() > 0) list.append("  ·  ");
+                list.append(plug.optString("type")).append(' ').append(plug.optString("power")).append(" kW ")
+                    .append(!plug.optBoolean("fits") ? "(not your car)" : plug.optBoolean("available") ? "free" : "busy");
+            }
+            if (list.length() > 0) pane.addRow(new Row.Builder().setImage(icon(c, R.drawable.ic_car_bolt, null)).setTitle("Plugs").addText(list.toString()).build());
+            pane.addRow(new Row.Builder().setImage(icon(c, R.drawable.ic_car_time, null)).setTitle("₹" + station.optString("rate") + " per kWh")
+                .addText("Off-peak 22:00–06:00 is cheaper").build());
+            pane.addAction(new Action.Builder().setTitle("Navigate").setBackgroundColor(GREEN)
+                .setOnClickListener(() -> navigate(c, station)).build());
+            pane.addAction(new Action.Builder().setTitle("Charge here").setIcon(icon(c, R.drawable.ic_car_bolt, null))
+                .setOnClickListener(() -> {
+                    openPhone(c);
+                    LiveState.command("station:" + station.optString("id"));
+                }).build());
+            return new PaneTemplate.Builder(pane.build()).setTitle(station.optString("name")).setHeaderAction(Action.BACK).build();
         }
     }
 
@@ -232,13 +282,17 @@ public final class PluggoCarService extends CarAppService {
             Pane.Builder pane = new Pane.Builder().setImage(gauge(s))
                 .addRow(new Row.Builder().setImage(icon(c, R.drawable.ic_car_time, live && !paused ? GREEN : AMBER))
                     .setTitle(!live ? "Finished" : paused ? "Paused" : "Charging")
-                    .addText(!live ? s.optString("reason", "Charging stopped") : paused ? "Resume when you're ready" : LiveState.minutesText(s).replace(" · ", "")).build())
+                    .addText(!live ? s.optString("reason", "Charging stopped") + " · pay in Pluggo on your phone" : paused ? "Resume when you're ready" : finishText(s)).build())
                 .addRow(new Row.Builder().setImage(icon(c, R.drawable.ic_car_bolt, null))
                     .setTitle(String.format(Locale.ENGLISH, "%.1f kW · %.2f kWh", s.optDouble("kw"), s.optDouble("kwh")))
                     .addText("Cost so far " + money(s.optDouble("cost"))).build())
                 .addRow(new Row.Builder().setImage(icon(c, R.drawable.ic_car_station, null))
                     .setTitle(s.optString("station") + " · " + s.optString("connector"))
                     .addText(s.optBoolean("carReading") ? "Battery read from your car" : "Stops at " + s.optInt("target") + "%").build());
+            if (!live) {
+                pane.addAction(new Action.Builder().setTitle("Pay " + money(s.optDouble("cost"))).setBackgroundColor(GREEN)
+                    .setOnClickListener(() -> { openPhone(c); LiveState.command("pay"); }).build());
+            }
             if (live) {
                 pane.addAction(new Action.Builder().setTitle(paused ? "Resume" : "Pause")
                     .setIcon(icon(c, paused ? R.drawable.ic_car_play : R.drawable.ic_car_pause, null))

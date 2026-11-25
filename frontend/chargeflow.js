@@ -1970,7 +1970,12 @@ async function chargeCommand(action, id, button = null) {
     pushLive();
   }
 }
-onNativeCommand((action, id) => chargeCommand(action, id));
+onNativeCommand((action, id) => {
+  // From the car screen: "Charge here" opens that charger; "Pay" opens the checkout.
+  if (action.startsWith("station:")) { const st = stationById(action.slice(8)); if (st) { location.hash = "home"; openStation(st); } return; }
+  if (action === "pay") { const s = pendingSession(); if (s) openSession(s); return; }
+  chargeCommand(action, id);
+});
 // The car's own data (Android Auto): fills in "Battery now", and during a charge its battery %
 // goes to the server, which stops exactly at the target, on AC chargers too.
 let carData = null, carSent = { id: "", soc: null }, carSending = false;
@@ -2006,7 +2011,8 @@ function pushLive() {
   const types = vehicles[state.vehicle].connectors;
   const nearby = stations.filter((st) => compatible(st, state.vehicle))
     .sort((a, b) => pinnedFirst(a, b) || distance(a, origin) - distance(b, origin)).slice(0, 6)
-    .map((st) => ({ name: st.name, area: st.area, lat: st.lat, lng: st.lng, rate: rateText(stationRate(st)), km: Math.round(distance(st, origin) * 10) / 10,
+    .map((st) => ({ id: st.id, name: st.name, area: st.area, lat: st.lat, lng: st.lng, rate: rateText(stationRate(st)), km: Math.round(distance(st, origin) * 10) / 10,
+      plugs: st.connectors.map((c) => ({ id: c.id, type: c.type, power: c.power, available: !!c.available, fits: types.includes(c.type) })),
       total: st.connectors.filter((c) => types.includes(c.type)).length,
       free: st.connectors.filter((c) => types.includes(c.type) && c.available).length }));
   shareLive({
