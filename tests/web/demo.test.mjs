@@ -29,14 +29,18 @@ function session(overrides = {}) {
   };
 }
 test("cars and two-wheelers have different compatible stations", () => {
-  assert.equal(stations.filter((s) => compatible(s, "car")).length, 5);
-  assert.equal(stations.filter((s) => compatible(s, "scooter")).length, 4);
-  assert.equal(available(stations[2], "car"), false);
-  assert.equal(available(stations[4], "scooter"), false);
+  // Six stations, including the pinned "Dashboard" demo station, which takes every vehicle.
+  const byId = (id) => stations.find((s) => s.id === id);
+  assert.equal(stations.filter((s) => compatible(s, "car")).length, 6);
+  assert.equal(stations.filter((s) => compatible(s, "scooter")).length, 5);
+  assert.equal(available(byId("IG"), "car"), false);
+  assert.equal(available(byId("SK"), "scooter"), false);
+  assert.ok(byId("DB").pinned && available(byId("DB"), "car") && available(byId("DB"), "scooter"));
 });
 test("distance uses supplied origin, not a hardcoded claimed travel distance", () => {
-  assert.equal(distance(stations[0], stations[0]), 0);
-  assert.ok(distance(stations[0], { lat: 28.6315, lng: 77.2167 }) < 0.4);
+  const cp = stations.find((s) => s.id === "CP");
+  assert.equal(distance(cp, cp), 0);
+  assert.ok(distance(cp, { lat: 28.6315, lng: 77.2167 }) < 0.4);
 });
 test("budget stops an accelerated session without exceeding the cap", () => {
   const s = session({ budget: 50 });

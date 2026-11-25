@@ -16,7 +16,7 @@ import {
   energyLimit as previewEnergyLimit,
   updateSession,
   validSession,
-} from "./demo-data.js?v=20261104-server9";
+} from "./demo-data.js?v=20261125-dash1";
 
 document.documentElement.dataset.visibility = document.hidden ? "hidden" : "visible";
 const $ = (s) => document.querySelector(s);
@@ -265,11 +265,14 @@ function orderedStations() {
           .includes(filters.search.toLowerCase().trim()),
     )
     .sort((a, b) =>
-      filters.sort === "price"
+      pinnedFirst(a, b) ||
+      (filters.sort === "price"
         ? a.rate - b.rate
-        : distance(a, origin) - distance(b, origin),
+        : distance(a, origin) - distance(b, origin)),
     );
 }
+// The demo "Dashboard" station is pinned: it leads the lists wherever the driver is.
+function pinnedFirst(a, b) { return (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0); }
 function card(station) {
   const plugs = station.connectors.filter((c) =>
     vehicles[state.vehicle].connectors.includes(c.type),
@@ -503,7 +506,7 @@ $("#homeStartCharging").onclick = () => {
   if (booked && Date.now() >= booking.starts - HOLD_BEFORE) { openSetup(booked, booked.connectors.find(c => c.id === booking.connector)); return; }
   const nearest = stations
     .filter(s => compatible(s, state.vehicle) && available(s, state.vehicle))
-    .sort((a, b) => distance(a, origin) - distance(b, origin))[0];
+    .sort((a, b) => pinnedFirst(a, b) || distance(a, origin) - distance(b, origin))[0];
   if (nearest) openStation(nearest); else location.hash = "stations";
 };
 function stopPluggoAnimation() {
@@ -547,7 +550,7 @@ function renderVehicle() {
   $("#vehicleFallback").alt = `${v.name} vehicle preview`;
   $("#homeStations").innerHTML = stations
     .filter((s) => compatible(s, state.vehicle))
-    .sort((a, b) => distance(a, origin) - distance(b, origin))
+    .sort((a, b) => pinnedFirst(a, b) || distance(a, origin) - distance(b, origin))
     .filter((s) => available(s, state.vehicle))
     .slice(0, 1)
     .map(homeStation)

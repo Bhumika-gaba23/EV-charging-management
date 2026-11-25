@@ -46,6 +46,22 @@ export const vehicles = {
 };
 export const stations = [
   {
+    // Demo station: pinned to the top of the app's lists, and first on the operator dashboard.
+    id: "DB",
+    name: "Dashboard",
+    area: "Delhi Technical Campus, Greater Noida",
+    lat: 28.4696,
+    lng: 77.4955,
+    rate: 16,
+    pinned: true,
+    amenities: ["Open 24/7", "Live on the operator dashboard", "Parking"],
+    connectors: [
+      { id: "DB-01", type: "CCS2", power: 50, available: true },
+      { id: "DB-02", type: "Type 2", power: 22, available: true },
+      { id: "DB-03", type: "Bharat AC-001", power: 3.3, available: true },
+    ],
+  },
+  {
     id: "CP",
     name: "Central Circle",
     area: "Connaught Place",
