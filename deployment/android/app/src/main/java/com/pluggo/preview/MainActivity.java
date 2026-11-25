@@ -43,6 +43,9 @@ public class MainActivity extends Activity {
     private Boolean permissionAnswer;
     private FrameLayout root;
     private int cutoutTop;
+    // Razorpay opens wallets (MobiKwik…) and netbanking in a pop-up window and waits for it to
+    // report back. This is that window, shown over the app while a payment is in progress.
+    private WebView popup;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -85,6 +88,8 @@ public class MainActivity extends Activity {
         settings.setAllowFileAccess(false);
         settings.setAllowContentAccess(false);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
+        settings.setSupportMultipleWindows(true);
+        settings.setJavaScriptCanOpenWindowsAutomatically(true);
         CookieManager.getInstance().setAcceptCookie(true);
         WebViewAssetLoader loader = new WebViewAssetLoader.Builder()
                 .addPathHandler("/", new WebViewAssetLoader.AssetsPathHandler(this)).build();
@@ -148,6 +153,9 @@ public class MainActivity extends Activity {
                 });
             }
             @Override public void onPermissionRequestCanceled(PermissionRequest request) {if(cameraRequest==request)cameraRequest=null;}
+            @Override public boolean onCreateWindow(WebView view, boolean isDialog, boolean userGesture, android.os.Message resultMsg) {
+                return openPopup(resultMsg);
+            }
         });
         Alerts.createChannel(this);
         installAlertBridge();
@@ -272,10 +280,72 @@ public class MainActivity extends Activity {
             dialog.dismiss();load(value);
         }));dialog.show();
     }
+    // A new window from the page. Razorpay's wallet and bank pages stay in it, over the app, so
+    // the checkout gets the result. Other links (maps, terms) are handed off as before.
+    private boolean openPopup(android.os.Message resultMsg) {
+        closePopup();
+        WebView child = new WebView(this);
+        WebSettings s = child.getSettings();
+        s.setJavaScriptEnabled(true);
+        s.setDomStorageEnabled(true);
+        s.setAllowFileAccess(false);
+        s.setAllowContentAccess(false);
+        s.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
+        CookieManager.getInstance().setAcceptThirdPartyCookies(child, true);
+        child.setBackgroundColor(Color.WHITE);
+        child.setVisibility(View.INVISIBLE);
+        final boolean[] payment = {false};
+        child.setWebViewClient(new WebViewClient() {
+            // Returns true when the window was handed off (and closed) instead of shown.
+            private boolean decide(Uri target) {
+                if (payment[0]) return false;
+                String scheme = target.getScheme() == null ? "" : target.getScheme();
+                if ("about".equals(scheme) || "data".equals(scheme) || "blob".equals(scheme)) return false;
+                String host = target.getHost() == null ? "" : target.getHost().toLowerCase();
+                if (host.equals("razorpay.com") || host.endsWith(".razorpay.com") || host.equals("mobikwik.com") || host.endsWith(".mobikwik.com")) {
+                    payment[0] = true;
+                    child.setVisibility(View.VISIBLE);
+                    return false;
+                }
+                if (web != null && sameOrigin(target, Uri.parse(startUrl))) web.loadUrl(target.toString());
+                else if ("https".equals(scheme) || "http".equals(scheme)) {
+                    try { startActivity(new Intent(Intent.ACTION_VIEW, target)); } catch (Exception ignored) { }
+                }
+                root.post(MainActivity.this::closePopup);
+                return true;
+            }
+            @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                if (openPaymentApp(request.getUrl())) return true;
+                return decide(request.getUrl());
+            }
+            @Override public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
+                if (url != null && decide(Uri.parse(url))) view.stopLoading();
+            }
+        });
+        child.setWebChromeClient(new WebChromeClient() {
+            @Override public void onCloseWindow(WebView window) { closePopup(); }
+        });
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT);
+        params.topMargin = Math.round(cutoutTop * getResources().getDisplayMetrics().density);
+        root.addView(child, params);
+        popup = child;
+        ((WebView.WebViewTransport) resultMsg.obj).setWebView(child);
+        resultMsg.sendToTarget();
+        return true;
+    }
+    private void closePopup() {
+        if (popup == null) return;
+        WebView closing = popup;
+        popup = null;
+        root.removeView(closing);
+        closing.destroy();
+    }
     // Back asks the page first (it closes the payment window, a sheet, or goes back a page). Only
     // when the page has nothing to close does the app go back in history or show its menu.
     @Override public void onBackPressed() {
         if (web == null) { super.onBackPressed(); return; }
+        // In a wallet or bank page: step back there, or close it (Razorpay then offers a retry).
+        if (popup != null) { if (popup.canGoBack()) popup.goBack(); else closePopup(); return; }
         web.evaluateJavascript("(function(){try{return !!(window.pluggoBack&&window.pluggoBack());}catch(e){return false;}})()", handled -> {
             if ("true".equals(handled) || web == null) return;
             if (web.canGoBack()) web.goBack();
@@ -331,5 +401,5 @@ public class MainActivity extends Activity {
             if(web!=null)web.postDelayed(()->reply.postMessage("{\"type\":\"permission\",\"granted\":"+granted+"}"),300);
         }
     }
-    @Override protected void onDestroy() {if(cameraRequest!=null)cameraRequest.deny();if(locationCallback!=null)locationCallback.invoke(locationOrigin,false,false);if(web!=null)web.destroy();super.onDestroy();}
+    @Override protected void onDestroy() {if(cameraRequest!=null)cameraRequest.deny();if(locationCallback!=null)locationCallback.invoke(locationOrigin,false,false);closePopup();if(web!=null)web.destroy();super.onDestroy();}
 }
