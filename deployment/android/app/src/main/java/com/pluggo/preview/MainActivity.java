@@ -193,6 +193,10 @@ public class MainActivity extends Activity {
         String origin = start.getScheme() + "://" + start.getHost() + (start.getPort() == -1 ? "" : ":" + start.getPort());
         WebViewCompat.addWebMessageListener(web, "PluggoNative", Collections.singleton(origin), (view, message, source, mainFrame, reply) -> {
             if (!mainFrame || message.getData() == null) return;
+            try {
+                org.json.JSONObject data = new org.json.JSONObject(message.getData());
+                if ("live".equals(data.optString("type"))) { LiveState.update(this, data, reply); return; }
+            } catch (Exception ignored) { }
             if (!Alerts.handle(this, message.getData())) requestAlertPermission(reply);
         });
     }
@@ -401,5 +405,5 @@ public class MainActivity extends Activity {
             if(web!=null)web.postDelayed(()->reply.postMessage("{\"type\":\"permission\",\"granted\":"+granted+"}"),300);
         }
     }
-    @Override protected void onDestroy() {if(cameraRequest!=null)cameraRequest.deny();if(locationCallback!=null)locationCallback.invoke(locationOrigin,false,false);closePopup();if(web!=null)web.destroy();super.onDestroy();}
+    @Override protected void onDestroy() {if(cameraRequest!=null)cameraRequest.deny();if(locationCallback!=null)locationCallback.invoke(locationOrigin,false,false);closePopup();LiveState.pageClosed();if(web!=null)web.destroy();super.onDestroy();}
 }

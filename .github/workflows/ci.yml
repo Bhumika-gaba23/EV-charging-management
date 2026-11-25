@@ -36,6 +36,8 @@ jobs:
         run: python tests/api/ocpp16_test.py
       - name: Bookings, time-of-use, ratings, reports, wallet, analytics and trip tests
         run: python tests/api/features_test.py
+      - name: Live controls (charger screen, cable, pause)
+        run: python tests/api/live_controls_test.py
 
   web-unit:
     runs-on: ubuntu-latest

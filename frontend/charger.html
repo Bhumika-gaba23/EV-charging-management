@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Pluggo Charger</title>
+<meta name="description" content="The screen of a Pluggo demo charger: its cable, status and the live charge, in sync with the Pluggo app.">
+<style>
+  /* The charger's own display: big, high-contrast, readable from a metre away. */
+  :root { --bg: #000; --panel: #141414; --raised: #222; --line: #2a2a2a; --text: #fff; --muted: #a6a6a6; --go: #1fbf6a; --warn: #f5a524; --stop: #ff5a4e; color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; background: var(--bg); color: var(--text); font: 16px/1.4 "Inter", "Segoe UI", system-ui, sans-serif;
+    display: grid; place-items: center; padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
+  main { width: min(560px, 100%); background: var(--panel); border: 1px solid var(--line); border-radius: 28px; padding: 28px; display: grid; gap: 22px; }
+  header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+  .brand { font-weight: 800; letter-spacing: .14em; font-size: 12px; color: var(--muted); }
+  h1 { margin: 6px 0 0; font-size: 30px; letter-spacing: -.02em; }
+  .meta { color: var(--muted); font-size: 14px; }
+  select { background: var(--raised); color: var(--text); border: 0; border-radius: 12px; padding: 10px 12px; font: inherit; font-weight: 600; }
+  .status { display: flex; align-items: center; gap: 12px; font-size: 22px; font-weight: 700; }
+  .dot { width: 14px; height: 14px; border-radius: 50%; background: var(--muted); flex: none; }
+  .dot.go { background: var(--go); box-shadow: 0 0 0 6px rgba(31,191,106,.18); }
+  .dot.warn { background: var(--warn); }
+  .dot.stop { background: var(--stop); }
+  .hint { color: var(--muted); margin: -12px 0 0; }
+  .battery { display: grid; gap: 10px; }
+  .soc { font-size: 64px; font-weight: 800; letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
+  .soc small { font-size: 20px; color: var(--muted); font-weight: 600; }
+  .bar { height: 14px; background: var(--raised); border-radius: 99px; overflow: hidden; position: relative; }
+  .bar i { position: absolute; inset: 0 auto 0 0; background: var(--go); border-radius: 99px; transition: width .8s ease; }
+  .bar b { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--text); }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .stats div { background: var(--raised); border-radius: 14px; padding: 12px; min-width: 0; }
+  .stats span { display: block; color: var(--muted); font-size: 12px; }
+  .stats strong { font-size: 20px; font-variant-numeric: tabular-nums; }
+  button.cable { border: 0; border-radius: 16px; padding: 18px; font: inherit; font-size: 18px; font-weight: 700; cursor: pointer; background: var(--text); color: var(--bg); }
+  button.cable.unplug { background: var(--raised); color: var(--text); }
+  button:disabled { opacity: .5; cursor: progress; }
+  button:focus-visible, select:focus-visible { outline: 3px solid var(--go); outline-offset: 2px; }
+  .foot { color: var(--muted); font-size: 12px; text-align: center; }
+  [hidden] { display: none !important; }
+  @media (max-width: 420px) { .soc { font-size: 52px; } .stats strong { font-size: 17px; } main { padding: 20px; } }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div>
+      <div class="brand">PLUGGO CHARGER</div>
+      <h1 id="chargerId">DB-01</h1>
+      <div class="meta" id="chargerMeta">Connecting…</div>
+    </div>
+    <label><span class="meta" style="display:block;margin-bottom:6px">Charger</span>
+      <select id="chargerPick" aria-label="Choose charger">
+        <option value="DB-01">DB-01 · CCS2</option><option value="DB-02">DB-02 · Type 2</option><option value="DB-03">DB-03 · Bharat AC</option>
+      </select></label>
+  </header>
+
+  <div class="status"><span class="dot" id="dot"></span><span id="statusText">Connecting…</span></div>
+  <p class="hint" id="hint"></p>
+
+  <section class="battery" id="battery" hidden>
+    <div class="soc" id="soc">0%<small></small></div>
+    <div class="bar" aria-hidden="true"><i id="fill" style="width:0%"></i><b id="targetMark" style="left:80%"></b></div>
+    <div class="meta" id="vehicle"></div>
+    <div class="stats">
+      <div><span>Power</span><strong id="kw">0 kW</strong></div>
+      <div><span>Energy</span><strong id="kwh">0.00 kWh</strong></div>
+      <div><span>Cost</span><strong id="cost">₹0</strong></div>
+    </div>
+  </section>
+
+  <button class="cable" id="cable" type="button">Plug in cable</button>
+  <p class="foot">Demo charger. The Pluggo app, this screen and the operator dashboard share the same live charge.</p>
+</main>
+<script>
+  const params = new URLSearchParams(location.search);
+  let id = (params.get("id") || "DB-01").toUpperCase();
+  const $ = (s) => document.getElementById(s);
+  $("chargerPick").value = [...$("chargerPick").options].some((o) => o.value === id) ? id : $("chargerPick").value;
+  $("chargerPick").onchange = () => { id = $("chargerPick").value; history.replaceState(null, "", `?id=${id}`); view = null; load(); };
+  let view = null, busy = false;
+
+  const TEXT = {
+    available: ["Ready", "", "Plug the cable into your car to begin."],
+    plugged: ["Cable connected", "warn", "Start charging in the Pluggo app."],
+    charging: ["Charging", "go", ""],
+    paused: ["Paused", "warn", "Resume in the Pluggo app or on the car screen."],
+    finished: ["Charge complete", "go", "Unplug the cable. Pay in the Pluggo app."],
+    disabled: ["Out of service", "stop", "Please use another charger."],
+  };
+
+  function render(v) {
+    view = v;
+    $("chargerId").textContent = v.id;
+    $("chargerMeta").textContent = `${v.station} · ${v.type} · ${v.power} kW`;
+    const [label, tone, hint] = TEXT[v.status] || [v.status, "", ""];
+    $("statusText").textContent = label;
+    $("dot").className = `dot ${tone}`;
+    const s = v.session;
+    $("hint").textContent = v.status === "finished" && s?.reason ? `${s.reason}. ${hint}` : hint;
+    $("battery").hidden = !s;
+    if (s) {
+      const soc = Math.max(0, Math.min(100, s.soc));
+      $("soc").innerHTML = `${Math.round(soc)}%<small> → ${s.target}%${s.carReading ? " · from car" : ""}</small>`;
+      $("fill").style.width = `${soc}%`;
+      $("targetMark").style.left = `${s.target}%`;
+      $("vehicle").textContent = s.model;
+      $("kw").textContent = `${Number(s.power).toFixed(1)} kW`;
+      $("kwh").textContent = `${Number(s.energy).toFixed(2)} kWh`;
+      $("cost").textContent = `₹${Number(s.cost).toFixed(0)}`;
+    }
+    $("cable").textContent = v.plugged ? "Unplug cable" : "Plug in cable";
+    $("cable").classList.toggle("unplug", v.plugged);
+    $("cable").disabled = busy || !v.demo || v.status === "disabled";
+  }
+
+  async function load() {
+    try {
+      const reply = await fetch(`/api/customer/chargers/${encodeURIComponent(id)}`, { cache: "no-store" });
+      const data = await reply.json();
+      if (!reply.ok || data.ok === false) throw new Error(data.error || "Charger unavailable");
+      render(data);
+    } catch (error) {
+      $("statusText").textContent = "Offline";
+      $("dot").className = "dot stop";
+      $("hint").textContent = error.message || "Cannot reach Pluggo.";
+    }
+  }
+
+  $("cable").onclick = async () => {
+    if (!view) return;
+    busy = true; $("cable").disabled = true;
+    try {
+      const reply = await fetch(`/api/customer/chargers/${encodeURIComponent(id)}/cable`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ plugged: !view.plugged }) });
+      const data = await reply.json();
+      if (!reply.ok || data.ok === false) throw new Error(data.error || "Could not change the cable");
+      render(data);
+    } catch (error) { $("hint").textContent = error.message; }
+    finally { busy = false; if (view) render(view); }
+  };
+
+  load();
+  setInterval(() => { if (!document.hidden && !busy) load(); }, 1000);
+</script>
+</body>
+</html>

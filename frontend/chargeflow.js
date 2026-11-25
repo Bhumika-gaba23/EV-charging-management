@@ -1,11 +1,11 @@
 import { summarizeSessions, chargingDuration } from "./session-summary.js?v=20261123-pay1";
 import { performanceProfile } from "./performance-profile.js?v=20261104-summary1";
-import { CustomerApi } from "./customer-api.js?v=20261124-features1";
+import { CustomerApi } from "./customer-api.js?v=20261125-live1";
 import { normalizeIndianPhone, sendOtp, confirmOtp, signOutFirebase, friendlyAuthError, payWithRazorpay, closeRazorpay, firebaseSignInAge, deleteFirebaseUser } from "./account.js?v=20261125-pay2";
 import { findGoogleStations } from "./google-stations.js?v=20261104-server9";
 import { greenImpact, BAND_NAMES, bandAt, rateAt, nextOffPeak, BOOKING_MINUTES, bookingSlots, overlaps, istTime, istDay, CITIES, findCity, tripMapsLink } from "./extras.js?v=20261125-delhi1";
 import { placeName, findPlaces, savedPlace, savePlace, currentPosition, locationAllowed } from "./places.js?v=20261125-places3";
-import { alertsSupported, alertsOn, enableAlerts, disableAlerts, notify, syncSchedule } from "./alerts.js?v=20261125-start1";
+import { alertsSupported, alertsOn, enableAlerts, disableAlerts, notify, syncSchedule, onNativeCommand, shareLive } from "./alerts.js?v=20261125-live1";
 import {
   vehicles,
   stations,
@@ -201,6 +201,7 @@ function applyBackend(payload, keepPreferences = true) {
   backendConfig = payload.backend || backendConfig;
   renderAccount();
   if (backendReady) announceChanges(previous);
+  offerPluggedCharger(Array.isArray(payload.state.plugged) ? payload.state.plugged : []);
   scheduleAlerts();
   renderHomeBooking();
   renderSettingsExtras();
@@ -1463,7 +1464,7 @@ function updateSessionDialog() {
       billRow("Total", currency(total(s))) +
       (s.walletUsed > 0 ? billRow("Wallet credit used", `−${currency(s.walletUsed)}`) : "") +
       billRow("Amount paid", currency(paidAmount(s)), "total")
-    : `<div><span>Energy added</span><strong>${s.energy.toFixed(2)}<small> kWh</small></strong></div><div><span>Charging time</span><strong>${Math.floor((s.energy / s.power) * 60)}<small> min</small></strong></div><div><span>Cost</span><strong>${currency(total(s))}</strong></div><p class="charge-context">${s.ended ? s.reason : `${s.power} kW`} · Target ${s.target}%</p>`;
+    : `<div><span>Energy added</span><strong>${s.energy.toFixed(2)}<small> kWh</small></strong></div><div><span>Charging time</span><strong>${Math.floor((s.energy / s.power) * 60)}<small> min</small></strong></div><div><span>Cost</span><strong>${currency(total(s))}</strong></div><p class="charge-context">${s.ended ? s.reason : s.paused ? "Paused" : `${s.power} kW · ${timeLeftText(s)}`} · Target ${s.target}%</p>${statusTimeline(s)}`;
   if (s.settled) {
     const rating = stationById(s.station)?.rating;
     $("#sessionActions").innerHTML =
@@ -1479,9 +1480,11 @@ function updateSessionDialog() {
       `<button class="primary-button dialog-full" id="checkoutButton">Continue to payment ${icon("arrow-up-right")}</button>`;
     $("#checkoutButton").onclick = () => openCheckout(s);
   } else {
-    if (!$("#stopCharge")) {
+    if (!$("#stopCharge") || $("#sessionActions").dataset.paused !== String(!!s.paused)) {
+      $("#sessionActions").dataset.paused = String(!!s.paused);
       $("#sessionActions").innerHTML =
-        `<p class="dialog-subtitle">Charging continues if you leave this page.</p><button class="secondary-button dialog-full" id="stopCharge">${icon("stop")} Stop charging</button>`;
+        `<p class="dialog-subtitle">Charging continues if you leave this page.</p>${localPreview ? "" : `<button class="primary-button dialog-full" id="pauseCharge">${s.paused ? `${icon("bolt")} Resume charging` : "Pause charging"}</button>`}<button class="secondary-button dialog-full" id="stopCharge">${icon("stop")} Stop charging</button>`;
+      if ($("#pauseCharge")) $("#pauseCharge").onclick = () => chargeCommand(s.paused ? "resume" : "pause", s.id, $("#pauseCharge"));
       $("#stopCharge").onclick = async () => {
         if (!localPreview) { const reply=await backendAction($("#stopCharge"),()=>customerApi.stop(s.id)); if(reply) openSession(state.sessions.find(item=>item.id===s.id)); return; }
         updateSession(s);
@@ -1934,6 +1937,64 @@ const sessionDue = (s) => Number.isFinite(s.due) ? s.due : total(s);
 const durationLabel = (minutes) => minutes < 60 ? `${minutes} min` : `${Math.floor(minutes / 60)} h${minutes % 60 ? ` ${minutes % 60}` : ""}`;
 const HOLD_BEFORE = 15 * 60000, HOLD_AFTER = 10 * 60000;
 let synced = false;
+// ----- Live charging: time left, status, pause/resume, and the phone notification + car screen. -----
+const rateSamples = new Map(); // session -> [{t, kwh}] to measure the real charging speed
+function minutesLeft(s) {
+  if (s.ended || s.paused) return null;
+  const left = Math.max(0, energyLimit(s) - s.energy);
+  const samples = rateSamples.get(s.id) || [];
+  const first = samples[0], last = samples[samples.length - 1];
+  // Measured speed (real chargers and the faster-than-real-time demo alike); else the rated power.
+  const perMinute = first && last && last.t - first.t > 4000 && last.kwh > first.kwh ? (last.kwh - first.kwh) / ((last.t - first.t) / 60000) : s.power / 60;
+  return perMinute > 0 ? left / perMinute : null;
+}
+function timeLeftText(s) {
+  const m = minutesLeft(s);
+  return m == null ? "Charging" : m < 1 ? "Almost done" : `${Math.round(m)} min left`;
+}
+function statusTimeline(s) {
+  const steps = ["Plugged in", "Charging", "Target", "Paid"];
+  const at = s.settled ? 4 : s.ended ? 3 : 1;
+  return `<ol class="charge-timeline" aria-label="Charging status">${steps.map((name, i) => `<li class="${i < at ? "done" : i === at ? "now" : ""}">${i === 1 && s.paused ? "Paused" : i === 2 && s.ended && s.reason !== "Charge target reached" ? "Stopped" : name}</li>`).join("")}</ol>`;
+}
+async function chargeCommand(action, id, button = null) {
+  const s = state.sessions.find((item) => item.id === id) || activeSession();
+  if (!s || s.ended) return;
+  if (action === "stop" && $("#stopCharge") && dialogSession === s.id) { $("#stopCharge").click(); return; }
+  const run = { stop: () => customerApi.stop(s.id), pause: () => customerApi.pause(s.id), resume: () => customerApi.resume(s.id) }[action];
+  if (!run || localPreview) return;
+  const reply = await backendAction(button, run);
+  if (reply) {
+    toast(action === "pause" ? "Charging paused." : action === "resume" ? "Charging resumed." : "Charging stopped.");
+    if (dialogSession === s.id && $("#flowDialog").open) openSession(state.sessions.find((item) => item.id === s.id));
+    pushLive();
+  }
+}
+onNativeCommand((action, id) => chargeCommand(action, id));
+function pushLive() {
+  const now = Date.now();
+  for (const s of state.sessions) if (!s.ended && !s.paused) {
+    const list = rateSamples.get(s.id) || [];
+    if (!list.length || list[list.length - 1].kwh !== s.energy) list.push({ t: now, kwh: s.energy });
+    while (list.length > 2 && now - list[1].t > 30000) list.shift();
+    rateSamples.set(s.id, list);
+  }
+  const s = activeSession() || state.sessions.find((item) => item.ended && !item.settled && now - item.ended < 30 * 60000);
+  const station = s && stationById(s.station);
+  const types = vehicles[state.vehicle].connectors;
+  const nearby = stations.filter((st) => compatible(st, state.vehicle))
+    .sort((a, b) => pinnedFirst(a, b) || distance(a, origin) - distance(b, origin)).slice(0, 6)
+    .map((st) => ({ name: st.name, area: st.area, lat: st.lat, lng: st.lng, rate: rateText(stationRate(st)), km: Math.round(distance(st, origin) * 10) / 10,
+      total: st.connectors.filter((c) => types.includes(c.type)).length,
+      free: st.connectors.filter((c) => types.includes(c.type) && c.available).length }));
+  shareLive({
+    stations: nearby,
+    session: s ? { id: s.id, status: s.paused ? "paused" : s.ended ? "finished" : "charging", soc: soc(s), target: s.target, kw: s.ended || s.paused ? 0 : s.power,
+      kwh: s.energy, cost: total(s), minutesLeft: minutesLeft(s) ?? -1, station: station?.name || "", connector: s.connector,
+      model: s.model || vehicles[s.vehicle]?.name || "", carReading: s.carSoc != null, reason: s.reason || "" } : null,
+  });
+}
+if (window.PluggoNative) setInterval(() => { try { pushLive(); } catch {} }, 2000);
 // Charging started / stopped: shown in the phone's notification tray, and on screen when Pluggo is open.
 const announcedStarts = new Set();
 async function askForAlertsOnce() {
@@ -1946,6 +2007,25 @@ async function announceStart(s) {
   announcedStarts.add(s.id);
   await askForAlertsOnce();
   notify(`charge-${s.id}`, "Charging started", `${s.model || vehicles[s.vehicle]?.name || "Your vehicle"} at ${stationById(s.station)?.name || "the station"} · ${s.connector}. Battery ${Math.round(soc(s))}%, stopping at ${s.target}%.`);
+}
+// The charger talks to the app: when a cable is plugged into a free charger, offer to start there.
+const offeredPlugs = new Set();
+function offerPluggedCharger(plugged) {
+  for (const id of [...offeredPlugs]) if (!plugged.includes(id)) offeredPlugs.delete(id);
+  if (activeSession() || pendingSession() || $("#flowDialog").open) return;
+  for (const id of plugged) {
+    if (offeredPlugs.has(id)) continue;
+    const station = stations.find((st) => st.connectors.some((c) => c.id === id));
+    const connector = station?.connectors.find((c) => c.id === id);
+    if (!station || !connector) continue;
+    offeredPlugs.add(id);
+    const fits = vehicles[state.vehicle].connectors.includes(connector.type);
+    notify(`plug-${id}`, "Car plugged in", `${station.name} · ${id} (${connector.type}). Open Pluggo to start charging.`);
+    showDialog("CHARGER CONNECTED",
+      `<div class="receipt-symbol">${icon("bolt")}</div><h2 id="dialogTitle">Your car is plugged in.</h2><p class="dialog-subtitle">${escapeText(station.name)} · ${id} · ${connector.type} ${connector.power} kW</p>${fits ? "" : notice(`This ${connector.type} plug does not fit your ${vehicles[state.vehicle].short.toLowerCase()}. Choose your vehicle first.`)}<button class="primary-button dialog-full" id="startPlugged" ${fits ? "" : "disabled"}>Start charging ${icon("arrow-up-right")}</button>`);
+    $("#startPlugged").onclick = () => openSetup(station, connector);
+    return;
+  }
 }
 function stopTitle(s) {
   if (s.reason === "Charge target reached") return `Charged to ${Math.round(soc(s))}%`;

@@ -4077,3 +4077,8 @@ body {background:#0b0b0b;}
 .select-field { margin: 20px 0 0; }
 .select-field label { display: block; font-size: 11px; margin-bottom: 10px; }
 .select-field select { width: 100%; min-height: 46px; padding: 0 14px; border-radius: 10px; border: 1px solid currentColor; background: transparent; color: inherit; font: inherit; font-weight: 600; }
+/* Live charge: where the charge is now (plugged in, charging or paused, target, paid). */
+.charge-timeline { list-style: none; display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 14px 0 0; padding: 0; width: 100%; }
+.charge-timeline li { font-size: 11px; font-weight: 600; text-align: center; padding-top: 10px; border-top: 3px solid currentColor; opacity: .35; }
+.charge-timeline li.done { opacity: .75; }
+.charge-timeline li.now { opacity: 1; }

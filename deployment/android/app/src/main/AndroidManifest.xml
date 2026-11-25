@@ -10,5 +10,15 @@
             <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
         </activity>
         <receiver android:name=".AlertReceiver" android:exported="false" />
+        <receiver android:name=".LiveState$Receiver" android:exported="false" />
+        <!-- Pluggo on the car's screen: Android Auto (and Android Automotive) charging app. -->
+        <service android:name=".PluggoCarService" android:exported="true">
+            <intent-filter>
+                <action android:name="androidx.car.app.CarAppService" />
+                <category android:name="androidx.car.app.category.CHARGING" />
+            </intent-filter>
+        </service>
+        <meta-data android:name="com.google.android.gms.car.application" android:resource="@xml/automotive_app_desc" />
+        <meta-data android:name="androidx.car.app.minCarApiLevel" android:value="1" />
     </application>
 </manifest>

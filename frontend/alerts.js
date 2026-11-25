@@ -15,12 +15,27 @@ const send = (message) => native()?.postMessage(JSON.stringify(message));
 export const alertsSupported = () => !!native() || "Notification" in window;
 export const alertsOn = () => wanted && (!!native() || ("Notification" in window && Notification.permission === "granted"));
 
+// Messages from the app: permission answers, and button presses from the charging notification
+// or the car screen ({type: "command", action: "stop" | "pause" | "resume", session}).
+let permissionWaiter = null, commandHandler = null;
+function listen() {
+  const bridge = native();
+  if (!bridge || bridge.onmessage) return;
+  bridge.onmessage = (event) => {
+    let reply; try { reply = JSON.parse(event.data); } catch { return; }
+    if (reply.type === "permission") permissionWaiter?.(!!reply.granted);
+    else if (reply.type === "command") commandHandler?.(reply.action, reply.session);
+  };
+}
+export function onNativeCommand(handler) { commandHandler = handler; listen(); }
+// The live charge and nearby chargers, for the phone's charging notification and the car screen.
+export function shareLive(payload) { if (native()) { listen(); send({ type: "live", ...payload }); } }
 function nativePermission() {
+  listen();
   return new Promise((resolve) => {
-    const bridge = native();
-    const done = (granted) => { bridge.onmessage = null; clearTimeout(timer); resolve(granted); };
+    const done = (granted) => { permissionWaiter = null; clearTimeout(timer); resolve(granted); };
     const timer = setTimeout(() => done(false), 60000);
-    bridge.onmessage = (event) => { try { const reply = JSON.parse(event.data); if (reply.type === "permission") done(!!reply.granted); } catch {} };
+    permissionWaiter = done;
     send({ type: "permission" });
   });
 }
