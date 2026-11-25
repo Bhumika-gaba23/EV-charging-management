@@ -164,9 +164,12 @@ public final class PluggoCarService extends CarAppService {
                 boolean paused = "paused".equals(s.optString("status"));
                 String title = active(s) ? ((paused ? "Paused · " : "Charging · ") + Math.round(s.optDouble("soc")) + "% → " + s.optInt("target") + "%")
                                          : "Charge finished · " + Math.round(s.optDouble("soc")) + "%";
+                // Map rows must carry a distance: the distance to the station this charge is at.
+                SpannableString details = new SpannableString("  " + String.format(Locale.ENGLISH, "%s · %.1f kW · %s", s.optString("model"), s.optDouble("kw"), money(s.optDouble("cost")))
+                    + (active(s) && !paused ? LiveState.minutesText(s) : ""));
+                details.setSpan(DistanceSpan.create(Distance.create(at == null ? 0 : at.optDouble("km"), Distance.UNIT_KILOMETERS)), 0, 1, Spanned.SPAN_INCLUSIVE_INCLUSIVE);
                 Row.Builder row = new Row.Builder().setTitle(title)
-                    .addText(String.format(Locale.ENGLISH, "%s · %.1f kW · %s", s.optString("model"), s.optDouble("kw"), money(s.optDouble("cost")))
-                        + (active(s) && !paused ? LiveState.minutesText(s) : ""))
+                    .addText(details)
                     .setOnClickListener(() -> getScreenManager().push(new ChargingScreen(getCarContext())));
                 if (at != null) row.setMetadata(place(at, "⚡", paused ? AMBER : GREEN));
                 list.addItem(row.build());
