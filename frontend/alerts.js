@@ -17,7 +17,7 @@ export const alertsOn = () => wanted && (!!native() || ("Notification" in window
 
 // Messages from the app: permission answers, and button presses from the charging notification
 // or the car screen ({type: "command", action: "stop" | "pause" | "resume", session}).
-let permissionWaiter = null, commandHandler = null;
+let permissionWaiter = null, commandHandler = null, carHandler = null;
 function listen() {
   const bridge = native();
   if (!bridge || bridge.onmessage) return;
@@ -25,9 +25,12 @@ function listen() {
     let reply; try { reply = JSON.parse(event.data); } catch { return; }
     if (reply.type === "permission") permissionWaiter?.(!!reply.granted);
     else if (reply.type === "command") commandHandler?.(reply.action, reply.session);
+    else if (reply.type === "car") carHandler?.(reply);
   };
 }
 export function onNativeCommand(handler) { commandHandler = handler; listen(); }
+// The car's own battery %, range and ports, while the phone is connected to Android Auto.
+export function onCarData(handler) { carHandler = handler; listen(); }
 // The live charge and nearby chargers, for the phone's charging notification and the car screen.
 export function shareLive(payload) { if (native()) { listen(); send({ type: "live", ...payload }); } }
 function nativePermission() {

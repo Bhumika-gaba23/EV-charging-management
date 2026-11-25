@@ -65,13 +65,22 @@ final class Alerts {
         createChannel(context);
         Intent open = new Intent(context, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
         PendingIntent tap = PendingIntent.getActivity(context, tag.hashCode(), open, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
-        Notification notification = new Notification.Builder(context, CHANNEL)
+        // On Android Auto the same alert pops up on the car screen; tapping it opens Pluggo there.
+        androidx.car.app.notification.CarAppExtender car = new androidx.car.app.notification.CarAppExtender.Builder()
+            .setContentTitle(title).setContentText(body).setSmallIcon(R.drawable.ic_notification)
+            .setImportance(NotificationManager.IMPORTANCE_HIGH)
+            .setContentIntent(androidx.car.app.notification.CarPendingIntent.getCarApp(context, tag.hashCode(),
+                new Intent(Intent.ACTION_VIEW).setComponent(new android.content.ComponentName(context, PluggoCarService.class)), 0))
+            .build();
+        Notification notification = new androidx.core.app.NotificationCompat.Builder(context, CHANNEL)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(title)
             .setContentText(body)
-            .setStyle(new Notification.BigTextStyle().bigText(body))
+            .setStyle(new androidx.core.app.NotificationCompat.BigTextStyle().bigText(body))
+            .setPriority(androidx.core.app.NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
             .setContentIntent(tap)
+            .extend(car)
             .build();
         context.getSystemService(NotificationManager.class).notify(tag, 0, notification);
     }

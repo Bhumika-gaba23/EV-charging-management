@@ -23,6 +23,7 @@ export class CustomerApi {
   state() { return this.request("state"); }
   preferences(value) { return this.request("preferences",{method:"PUT",body:value}); }
   start(value,key) { return this.request("sessions",{method:"POST",body:value,key}); }
+  carBattery(id, soc) { return this.request(`sessions/${encodeURIComponent(id)}/battery`,{method:"POST",body:{soc}}); }
   pause(id) { return this.request(`sessions/${encodeURIComponent(id)}/pause`,{method:"POST",body:{}}); }
   resume(id) { return this.request(`sessions/${encodeURIComponent(id)}/resume`,{method:"POST",body:{}}); }
   stop(id) { return this.request(`sessions/${encodeURIComponent(id)}/stop`,{method:"POST",body:{}}); }

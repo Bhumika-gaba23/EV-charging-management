@@ -35,11 +35,59 @@ final class LiveState {
     static synchronized JSONArray stations() { return stations; }
     static boolean pageOpen() { return page != null; }
 
+    // ----- The car's own data (Android Auto): battery %, range, low warning, ports, model. -----
+    private static JSONObject car;
+    private static boolean warnedLow;
+    static synchronized JSONObject car() { return car; }
+
+    static void carUpdate(Context context, JSONObject reading) {
+        JSONObject copy;
+        try { copy = new JSONObject(reading.toString()); } catch (Exception error) { return; }
+        synchronized (LiveState.class) { car = copy; }
+        sendCar();
+        // Low battery: point the driver at the nearest charger, once per low spell.
+        boolean low = copy.optBoolean("low") || (!copy.isNull("battery") && copy.optDouble("battery", 100) <= 15);
+        if (low && !warnedLow) {
+            warnedLow = true;
+            JSONObject nearest = stations().optJSONObject(0);
+            Alerts.show(context, "car-low", "Battery low · " + Math.round(copy.optDouble("battery", 0)) + "%",
+                nearest == null ? "Open Pluggo to find a charger." : "Nearest charger: " + nearest.optString("name") + ", " + nearest.optString("km") + " km. " + nearest.optInt("free") + " plugs free.");
+        } else if (!low) warnedLow = false;
+        for (Runnable listener : listeners) main.post(listener);
+    }
+
+    static void carDisconnected() {
+        synchronized (LiveState.class) { car = null; }
+        sendCar();
+        for (Runnable listener : listeners) main.post(listener);
+    }
+
+    private static void sendCar() {
+        JavaScriptReplyProxy target = page;
+        if (target == null) return;
+        JSONObject current = car();
+        try {
+            JSONObject message = current == null ? new JSONObject().put("connected", false) : new JSONObject(current.toString());
+            message.put("type", "car");
+            main.post(() -> { try { target.postMessage(message.toString()); } catch (Exception ignored) { } });
+        } catch (Exception ignored) { }
+    }
+
     static void addListener(Runnable listener) { listeners.add(listener); }
     static void removeListener(Runnable listener) { listeners.remove(listener); }
 
     /** A "live" message from the page. */
+    private static String lastStatus = "", lastId = "";
+
     static void update(Context context, JSONObject message, JavaScriptReplyProxy reply) {
+        JSONObject next = message.optJSONObject("session");
+        String id = next == null ? "" : next.optString("id"), status = next == null ? "" : next.optString("status");
+        if (id.equals(lastId) && !status.equals(lastStatus)) {
+            String where = next.optString("station") + " · " + next.optString("connector");
+            if ("paused".equals(status)) Alerts.show(context, "charge-" + id, "Charging paused", where + ". Battery " + Math.round(next.optDouble("soc")) + "%. Resume when you're ready.");
+            else if ("charging".equals(status) && "paused".equals(lastStatus)) Alerts.show(context, "charge-" + id, "Charging resumed", where + ". Stopping at " + next.optInt("target") + "%.");
+        }
+        lastId = id; lastStatus = status;
         synchronized (LiveState.class) {
             page = reply;
             session = message.optJSONObject("session");
@@ -47,6 +95,7 @@ final class LiveState {
             if (list != null) stations = list;
         }
         showNotification(context.getApplicationContext());
+        if (car() != null) sendCar(); // keep the page (also a freshly opened one) up to date
         for (Runnable listener : listeners) main.post(listener);
     }
 
@@ -86,18 +135,29 @@ final class LiveState {
             + String.format(java.util.Locale.ENGLISH, "%.1f kW · %.2f kWh · ₹%.0f", s.optDouble("kw", 0), s.optDouble("kwh", 0), s.optDouble("cost", 0))
             + (paused ? "" : minutesText(s));
         Intent open = new Intent(context, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-        Notification notification = new Notification.Builder(context, CHANNEL)
+        PendingIntent toggle = action(context, paused ? "resume" : "pause", 41), stop = action(context, "stop", 42);
+        // The same live charge in the car's notification list, with the same buttons.
+        androidx.car.app.notification.CarAppExtender car = new androidx.car.app.notification.CarAppExtender.Builder()
+            .setContentTitle(title).setContentText(body).setSmallIcon(R.drawable.ic_notification)
+            .setImportance(NotificationManager.IMPORTANCE_LOW)
+            .setContentIntent(androidx.car.app.notification.CarPendingIntent.getCarApp(context, 43,
+                new Intent(Intent.ACTION_VIEW).setComponent(new android.content.ComponentName(context, PluggoCarService.class)), 0))
+            .addAction(paused ? R.drawable.ic_car_play : R.drawable.ic_car_pause, paused ? "Resume" : "Pause", toggle)
+            .addAction(R.drawable.ic_car_stop, "Stop", stop)
+            .build();
+        Notification notification = new androidx.core.app.NotificationCompat.Builder(context, CHANNEL)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(title)
             .setContentText(body)
-            .setStyle(new Notification.BigTextStyle().bigText(body))
+            .setStyle(new androidx.core.app.NotificationCompat.BigTextStyle().bigText(body))
             .setProgress(100, Math.max(0, Math.min(100, soc)), false)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setCategory(Notification.CATEGORY_PROGRESS)
             .setContentIntent(PendingIntent.getActivity(context, 40, open, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT))
-            .addAction(new Notification.Action.Builder(null, paused ? "Resume" : "Pause", action(context, paused ? "resume" : "pause", 41)).build())
-            .addAction(new Notification.Action.Builder(null, "Stop charging", action(context, "stop", 42)).build())
+            .addAction(paused ? R.drawable.ic_car_play : R.drawable.ic_car_pause, paused ? "Resume" : "Pause", toggle)
+            .addAction(R.drawable.ic_car_stop, "Stop charging", stop)
+            .extend(car)
             .build();
         manager.notify(TAG, 1, notification);
     }

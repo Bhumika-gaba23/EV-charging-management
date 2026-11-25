@@ -292,6 +292,11 @@ public:
  void pause(const std::string& owner,const std::string& id,bool on){advance();auto s=owned(owner,id);if(s.ended)throw ApiError(409,"This charge has already ended");
   if(real(s.connector))throw ApiError(409,"This charger does not support pausing yet. Stop and start again instead.");
   if(mode!="meter")throw ApiError(409,"Pausing needs the charging simulator");if(s.paused==on)return;s.paused=on;persist(s);}
+ // The battery % the driver's own car reports (Android Auto). Like a DC charger's reading, it
+ // decides when the target is reached; the budget still caps the energy.
+ void carBattery(const std::string& owner,const std::string& id,double soc){advance();auto s=owned(owner,id);if(s.ended)return;
+  if(soc<0||soc>100)throw ApiError(400,"Battery must be 0–100%");if(s.carSoc<0)s.limit=s.budget/s.rate;s.carSoc=soc;
+  if(s.carSoc>=s.target){s.ended=nowMs();s.paused=false;s.reason="Charge target reached";}persist(s);}
  void action(const std::string& owner,const std::string& id,bool checkout,const Input* payment=nullptr) {advance();auto s=owned(owner,id);
   if(checkout){if(!s.ended)throw ApiError(409,"Stop charging before checkout");if(s.settled)return;const auto due=amountDue(s);
    // Charges under ₹1 are below Razorpay's minimum order and settle without a payment.
@@ -537,6 +542,7 @@ void registerCustomerApi(crow::SimpleApp& app){initIntegrations();publicDirector
   try{const auto in=crow::json::load(r.body);if(!in||!in.has("plugged")||(in["plugged"].t()!=crow::json::type::True&&in["plugged"].t()!=crow::json::type::False))throw ApiError(400,"Send {\"plugged\": true or false}");
    store->begin();try{store->plug(id,in["plugged"].b());store->commit();}catch(...){store->rollback();throw;}return response(store->chargerView(id));}
   catch(const ApiError& e){return failure(e.what(),e.status);}});
+ CROW_ROUTE(app,"/api/customer/sessions/<string>/battery").methods(crow::HTTPMethod::POST)([](const crow::request& r,const std::string& id){return customer(r,false,[&](const std::string& owner){const auto in=body(r);store->carBattery(owner,id,number(in,"soc",-1));return store->snapshot(owner);});});
  CROW_ROUTE(app,"/api/customer/sessions/<string>/pause").methods(crow::HTTPMethod::POST)([](const crow::request& r,const std::string& id){return customer(r,false,[&](const std::string& owner){store->pause(owner,id,true);return store->snapshot(owner);});});
  CROW_ROUTE(app,"/api/customer/sessions/<string>/resume").methods(crow::HTTPMethod::POST)([](const crow::request& r,const std::string& id){return customer(r,false,[&](const std::string& owner){store->pause(owner,id,false);return store->snapshot(owner);});});
  CROW_ROUTE(app,"/api/customer/sessions/<string>/stop").methods(crow::HTTPMethod::POST)([](const crow::request& r,const std::string& id){return customer(r,false,[&](const std::string& owner){store->action(owner,id,false);return store->snapshot(owner);});});

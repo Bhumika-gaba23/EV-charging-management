@@ -1,11 +1,11 @@
 import { summarizeSessions, chargingDuration } from "./session-summary.js?v=20261123-pay1";
 import { performanceProfile } from "./performance-profile.js?v=20261104-summary1";
-import { CustomerApi } from "./customer-api.js?v=20261125-live1";
+import { CustomerApi } from "./customer-api.js?v=20261125-car1";
 import { normalizeIndianPhone, sendOtp, confirmOtp, signOutFirebase, friendlyAuthError, payWithRazorpay, closeRazorpay, firebaseSignInAge, deleteFirebaseUser } from "./account.js?v=20261125-pay2";
 import { findGoogleStations } from "./google-stations.js?v=20261104-server9";
 import { greenImpact, BAND_NAMES, bandAt, rateAt, nextOffPeak, BOOKING_MINUTES, bookingSlots, overlaps, istTime, istDay, CITIES, findCity, tripMapsLink } from "./extras.js?v=20261125-delhi1";
 import { placeName, findPlaces, savedPlace, savePlace, currentPosition, locationAllowed } from "./places.js?v=20261125-places3";
-import { alertsSupported, alertsOn, enableAlerts, disableAlerts, notify, syncSchedule, onNativeCommand, shareLive } from "./alerts.js?v=20261125-live1";
+import { alertsSupported, alertsOn, enableAlerts, disableAlerts, notify, syncSchedule, onNativeCommand, shareLive, onCarData } from "./alerts.js?v=20261125-car1";
 import {
   vehicles,
   stations,
@@ -1346,7 +1346,7 @@ function openSetup(station, connector) {
   }
   showDialog(
     "YOUR CHARGE, YOUR WAY",
-    `<h2 id="dialogTitle">A little more ready.</h2><p class="dialog-subtitle">${station.name} · ${connector.id} · ${v.label}</p><form id="chargePlan"><div class="select-field"><label for="vehicleModel">Your ${v.short.toLowerCase()}</label><select id="vehicleModel" class="field-select"><option value="">${escapeText(v.name)} · ${v.capacity} kWh</option>${(v.models || []).map((m) => `<option value="${m.id}" ${m.id === vehicleSpec(state.vehicle).id ? "selected" : ""}>${escapeText(m.name)} · ${m.capacity} kWh</option>`).join("")}</select></div><div class="slider-field"><label for="batteryNow">Battery now <output id="batteryOutput">${batteryNow}%</output></label><input id="batteryNow" type="range" min="0" max="95" step="1" value="${batteryNow}"></div><p class="dialog-subtitle">Read it from your ${v.short.toLowerCase()}'s screen.${connector.type === "CCS2" ? " This DC fast charger also reads your car's battery and stops exactly at your target." : ""}</p><div class="slider-field"><label for="chargeTarget">Charge target <output id="targetOutput">${prefs.target}%</output></label><input id="chargeTarget" type="range" min="30" max="100" step="5" value="${prefs.target}"></div><div class="slider-field"><label for="chargeBudget">Budget cap <output id="budgetOutput">₹${prefs.budget}</output></label><input id="chargeBudget" type="range" min="50" max="1000" step="50" value="${prefs.budget}"></div><p class="dialog-subtitle">Stops at your target or budget, whichever comes first.</p><div class="bill-summary" id="chargeEstimate"></div><div id="chargeTip"></div><button type="submit" class="primary-button dialog-full">Start charging ${icon("bolt")}</button></form>`,
+    `<h2 id="dialogTitle">A little more ready.</h2><p class="dialog-subtitle">${station.name} · ${connector.id} · ${v.label}</p><form id="chargePlan"><div class="select-field"><label for="vehicleModel">Your ${v.short.toLowerCase()}</label><select id="vehicleModel" class="field-select"><option value="">${escapeText(v.name)} · ${v.capacity} kWh</option>${(v.models || []).map((m) => `<option value="${m.id}" ${m.id === vehicleSpec(state.vehicle).id ? "selected" : ""}>${escapeText(m.name)} · ${m.capacity} kWh</option>`).join("")}</select></div><div class="slider-field"><label for="batteryNow">Battery now <output id="batteryOutput">${carData ? Math.min(95, Math.round(carData.battery)) : batteryNow}%</output></label><input id="batteryNow" type="range" min="0" max="95" step="1" value="${carData ? Math.min(95, Math.round(carData.battery)) : batteryNow}"></div><p class="dialog-subtitle"><span id="batterySource">${carData ? `Read from your car${carData.rangeKm != null ? ` · ${Math.round(carData.rangeKm)} km range` : ""}.` : `Read it from your ${v.short.toLowerCase()}'s screen.`}</span>${connector.type === "CCS2" ? " This DC fast charger also reads your car's battery and stops exactly at your target." : ""}</p><div class="slider-field"><label for="chargeTarget">Charge target <output id="targetOutput">${prefs.target}%</output></label><input id="chargeTarget" type="range" min="30" max="100" step="5" value="${prefs.target}"></div><div class="slider-field"><label for="chargeBudget">Budget cap <output id="budgetOutput">₹${prefs.budget}</output></label><input id="chargeBudget" type="range" min="50" max="1000" step="50" value="${prefs.budget}"></div><p class="dialog-subtitle">Stops at your target or budget, whichever comes first.</p><div class="bill-summary" id="chargeEstimate"></div><div id="chargeTip"></div><button type="submit" class="primary-button dialog-full">Start charging ${icon("bolt")}</button></form>`,
   );
   function estimate() {
     const spec = vehicleSpec(state.vehicle, $("#vehicleModel").value),
@@ -1379,7 +1379,7 @@ function openSetup(station, connector) {
   }
   $("#chargeTarget").oninput = estimate;
   $("#chargeBudget").oninput = estimate;
-  $("#batteryNow").oninput = estimate;
+  $("#batteryNow").oninput = (event) => { if (event.isTrusted) $("#batteryNow").dataset.touched = "1"; estimate(); };
   $("#vehicleModel").onchange = estimate;
   estimate();
   const startKey = crypto.randomUUID();
@@ -1971,6 +1971,28 @@ async function chargeCommand(action, id, button = null) {
   }
 }
 onNativeCommand((action, id) => chargeCommand(action, id));
+// The car's own data (Android Auto): fills in "Battery now", and during a charge its battery %
+// goes to the server, which stops exactly at the target, on AC chargers too.
+let carData = null, carSent = { id: "", soc: null }, carSending = false;
+onCarData(async (reading) => {
+  const first = !carData && reading.connected;
+  carData = reading.connected && reading.battery != null ? reading : null;
+  if (first && carData) toast(`Connected to your car: battery ${Math.round(carData.battery)}%${carData.rangeKm != null ? `, ${Math.round(carData.rangeKm)} km range` : ""}.`);
+  if (carData && $("#batteryNow") && !$("#batteryNow").dataset.touched) {
+    $("#batteryNow").value = Math.min(95, Math.round(carData.battery));
+    $("#batteryNow").dispatchEvent(new Event("input"));
+    if ($("#batterySource")) $("#batterySource").textContent = `Read from your car${carData.rangeKm != null ? ` · ${Math.round(carData.rangeKm)} km range` : ""}.`;
+  }
+  const s = activeSession();
+  if (!carData || !s || localPreview || carSending || (carSent.id === s.id && carSent.soc === carData.battery)) return;
+  carSending = true;
+  try {
+    const payload = await customerApi.carBattery(s.id, carData.battery);
+    carSent = { id: s.id, soc: carData.battery };
+    applyBackend(payload);
+    if (dialogSession === s.id && $("#flowDialog").open) updateSessionDialog();
+  } catch {} finally { carSending = false; }
+});
 function pushLive() {
   const now = Date.now();
   for (const s of state.sessions) if (!s.ended && !s.paused) {
