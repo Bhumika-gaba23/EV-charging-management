@@ -19,7 +19,9 @@ module.exports = async (req, res) => {
     const latest = await latestTag();
     const servedReply = await fetch(`https://${req.headers.host}/download/version.txt`, { cache: "no-store" });
     const served = servedReply.ok ? (await servedReply.text()).trim() : "";
-    if (served === latest) return res.status(200).json({ status: "up to date", version: latest });
+    // ?test=1 checks the token can reach the project, without redeploying.
+    const testing = new URL(req.url, "https://x").searchParams.has("test");
+    if (served === latest && !testing) return res.status(200).json({ status: "up to date", version: latest });
 
     const token = process.env.REDEPLOY_TOKEN, team = process.env.VERCEL_TEAM_ID, project = process.env.VERCEL_PROJECT;
     if (!token || !team || !project) throw new Error("REDEPLOY_TOKEN, VERCEL_TEAM_ID or VERCEL_PROJECT is not set");
@@ -29,6 +31,7 @@ module.exports = async (req, res) => {
     if (!list.ok) throw new Error(`could not list deployments (${list.status})`);
     const [current] = (await list.json()).deployments || [];
     if (!current) throw new Error("no production deployment to rebuild");
+    if (testing) return res.status(200).json({ status: "token works", served, latest, current: current.state });
     if (current.state !== "READY") return res.status(202).json({ status: "build already running", served, latest });
 
     const deploy = await fetch(`${API}/v13/deployments?teamId=${team}`, {
