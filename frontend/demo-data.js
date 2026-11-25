@@ -44,6 +44,145 @@ export const vehicles = {
     image: "assets/models/cargo-poster-clean.png?v=clean1",
   },
 };
+// Real models per vehicle type: typical battery (kWh), max charging power (kW) and km per kWh.
+export const vehicleModels = {
+  "car": [
+    {
+      "id": "nexon-ev-45",
+      "name": "Tata Nexon EV 45",
+      "capacity": 45,
+      "power": 60,
+      "kmPerKWh": 6.5
+    },
+    {
+      "id": "punch-ev-lr",
+      "name": "Tata Punch EV Long Range",
+      "capacity": 35,
+      "power": 50,
+      "kmPerKWh": 7
+    },
+    {
+      "id": "tiago-ev-lr",
+      "name": "Tata Tiago EV Long Range",
+      "capacity": 24,
+      "power": 25,
+      "kmPerKWh": 8
+    },
+    {
+      "id": "xuv400",
+      "name": "Mahindra XUV400",
+      "capacity": 39.4,
+      "power": 50,
+      "kmPerKWh": 6.8
+    },
+    {
+      "id": "be-6",
+      "name": "Mahindra BE 6",
+      "capacity": 79,
+      "power": 175,
+      "kmPerKWh": 6.5
+    },
+    {
+      "id": "zs-ev",
+      "name": "MG ZS EV",
+      "capacity": 50.3,
+      "power": 50,
+      "kmPerKWh": 6.5
+    },
+    {
+      "id": "windsor-ev",
+      "name": "MG Windsor EV",
+      "capacity": 38,
+      "power": 45,
+      "kmPerKWh": 7
+    },
+    {
+      "id": "creta-electric",
+      "name": "Hyundai Creta Electric",
+      "capacity": 51.4,
+      "power": 50,
+      "kmPerKWh": 6.8
+    },
+    {
+      "id": "atto-3",
+      "name": "BYD Atto 3",
+      "capacity": 60.5,
+      "power": 80,
+      "kmPerKWh": 6.2
+    }
+  ],
+  "scooter": [
+    {
+      "id": "ather-450x",
+      "name": "Ather 450X",
+      "capacity": 2.9,
+      "power": 1.5,
+      "kmPerKWh": 35
+    },
+    {
+      "id": "ola-s1-pro",
+      "name": "Ola S1 Pro",
+      "capacity": 4,
+      "power": 1.5,
+      "kmPerKWh": 35
+    },
+    {
+      "id": "tvs-iqube",
+      "name": "TVS iQube",
+      "capacity": 3.4,
+      "power": 1.5,
+      "kmPerKWh": 32
+    },
+    {
+      "id": "bajaj-chetak",
+      "name": "Bajaj Chetak",
+      "capacity": 3.5,
+      "power": 1.5,
+      "kmPerKWh": 33
+    }
+  ],
+  "bike": [
+    {
+      "id": "revolt-rv400",
+      "name": "Revolt RV400",
+      "capacity": 3.24,
+      "power": 3,
+      "kmPerKWh": 40
+    },
+    {
+      "id": "oben-rorr",
+      "name": "Oben Rorr",
+      "capacity": 4.4,
+      "power": 3,
+      "kmPerKWh": 40
+    },
+    {
+      "id": "ultraviolette-f77",
+      "name": "Ultraviolette F77",
+      "capacity": 7.1,
+      "power": 3,
+      "kmPerKWh": 30
+    }
+  ],
+  "cargo": [
+    {
+      "id": "treo-zor",
+      "name": "Mahindra Treo Zor",
+      "capacity": 7.4,
+      "power": 3.3,
+      "kmPerKWh": 12
+    },
+    {
+      "id": "euler-hiload",
+      "name": "Euler HiLoad EV",
+      "capacity": 12.4,
+      "power": 3.3,
+      "kmPerKWh": 12
+    }
+  ]
+};
+for (const [type, list] of Object.entries(vehicleModels)) vehicles[type].models = list;
+
 export const stations = [
   {
     // Demo station: pinned to the top of the app's lists, and first on the operator dashboard.
@@ -146,7 +285,7 @@ export function distance(station, origin) {
 }
 export function energyLimit(session) {
   return Math.min(
-    ((session.target - 25) / 100) * vehicles[session.vehicle].capacity,
+    ((session.target - (session.startSoc ?? 25)) / 100) * (session.capacity || vehicles[session.vehicle].capacity),
     session.budget / stationById(session.station).rate,
   );
 }
@@ -191,7 +330,9 @@ export function validSession(s) {
     Number.isFinite(s.budget) &&
     s.budget >= 50 &&
     s.budget <= 1000 &&
-    s.power === Math.min(connector.power, vehicle.power) &&
+    (s.startSoc === undefined || (Number.isFinite(s.startSoc) && s.startSoc >= 0 && s.startSoc <= 95)) &&
+    (s.capacity === undefined || (Number.isFinite(s.capacity) && s.capacity > 0 && s.capacity <= 200)) &&
+    Number.isFinite(s.power) && s.power > 0 && s.power <= connector.power &&
     Number.isFinite(s.energy) &&
     s.energy >= 0 &&
     s.energy <= energyLimit(s) + 0.00001 &&

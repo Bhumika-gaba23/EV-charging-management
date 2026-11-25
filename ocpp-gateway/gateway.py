@@ -5,7 +5,7 @@ HTTP Basic credentials (OCPP 1.6 Security Profile 1/2: TLS is terminated by the 
 message is validated against the official OCPP 1.6 JSON schemas by the `ocpp` library.
 
 Customer sessions stay owned by the C++ server; the gateway only drives the hardware:
-  app start  -> RemoteStartTransaction -> StartTransaction -> MeterValues -> server energy
+  app start  -> RemoteStartTransaction -> StartTransaction -> MeterValues -> server energy (and the car's SoC on DC chargers)
   server end (target, budget or user stop) -> RemoteStopTransaction -> StopTransaction
   driver stops at the charger -> StopTransaction -> session ends in the app
 Connector status (StatusNotification, online/offline) is reported to the server, which only
@@ -35,7 +35,7 @@ import zlib
 
 from ocpp.routing import after, on
 from ocpp.v16 import ChargePoint as OcppChargePoint, call, call_result
-from ocpp.v16.enums import Action, AuthorizationStatus, RegistrationStatus, RemoteStartStopStatus
+from ocpp.v16.enums import Action, AuthorizationStatus, ConfigurationStatus, RegistrationStatus, RemoteStartStopStatus
 from websockets.asyncio.client import connect
 from websockets.asyncio.server import serve
 from websockets.exceptions import ConnectionClosed
@@ -47,6 +47,7 @@ KEY = os.getenv('CHARGEFLOW_SIMULATOR_KEY', 'local-simulator-key')
 PORT = int(os.getenv('PLUGGO_OCPP_PORT', '9016'))
 START_TIMEOUT = float(os.getenv('PLUGGO_OCPP_START_TIMEOUT', '90'))  # seconds to plug in after RemoteStart
 ENERGY = 'Energy.Active.Import.Register'
+SOC = 'SoC'  # the car's battery %, which DC chargers receive from the car over CCS2
 
 
 def now():
@@ -86,6 +87,22 @@ def transaction_id(session_id):
 
 def id_tag(session_id):
     return re.sub(r'[^A-Za-z0-9]', '', session_id)[:20].upper()
+
+
+def soc_percent(meter_values):
+    """Latest SoC reading (the car's own battery %) from OCPP MeterValue entries, or None."""
+    reading = None
+    for entry in meter_values or []:
+        for sample in entry.get('sampled_value', []):
+            if sample.get('measurand') != SOC:
+                continue
+            try:
+                value = float(sample['value'])
+            except (KeyError, ValueError):
+                continue
+            if 0 <= value <= 100:
+                reading = value
+    return reading
 
 
 def energy_wh(meter_values):
@@ -165,13 +182,20 @@ class ChargePoint(OcppChargePoint):
 
     @after(Action.boot_notification)
     async def configure(self, **_):
-        # Ask for an energy reading every 10 s, so a stop leaves at most a few Wh unbilled.
-        for key, value in (('MeterValueSampleInterval', '10'), ('MeterValuesSampledData', ENERGY)):
+        # Ask for an energy reading every 10 s, so a stop leaves at most a few Wh unbilled, and the car's
+        # SoC with it. AC chargers never get SoC from the car and may refuse it: then energy alone.
+        async def setting(key, value):
             try:
                 result = await self.call(call.ChangeConfiguration(key=key, value=value))
-                LOG.info('%s %s=%s: %s', self.state.cp_id, key, value, getattr(result, 'status', 'no reply'))
+                status = getattr(result, 'status', 'no reply')
+                LOG.info('%s %s=%s: %s', self.state.cp_id, key, value, status)
+                return status == ConfigurationStatus.accepted
             except Exception as error:
                 LOG.warning('%s could not set %s: %s', self.state.cp_id, key, error)
+                return False
+        await setting('MeterValueSampleInterval', '10')
+        if not await setting('MeterValuesSampledData', f'{ENERGY},{SOC}'):
+            await setting('MeterValuesSampledData', ENERGY)
 
     @on(Action.heartbeat)
     async def on_heartbeat(self, **_):
@@ -205,7 +229,7 @@ class ChargePoint(OcppChargePoint):
     async def on_meter(self, connector_id, meter_value, transaction_id=None, **_):
         reading = energy_wh(meter_value)
         if transaction_id is not None and reading is not None:
-            await self.gateway.meter(self.state, transaction_id, reading, connector_id)
+            await self.gateway.meter(self.state, transaction_id, reading, connector_id, soc_percent(meter_value))
         return call_result.MeterValues()
 
     @on(Action.stop_transaction)
@@ -287,7 +311,7 @@ class Gateway:
         state.transactions[tx] = recovered
         return recovered
 
-    async def meter(self, state, tx_id, reading_wh, connector_id):
+    async def meter(self, state, tx_id, reading_wh, connector_id, soc=None):
         tx = self.transaction(state, tx_id)
         if tx is None:
             return
@@ -295,8 +319,11 @@ class Gateway:
             tx.meter_start = reading_wh - tx.energy_kwh * 1000
         tx.energy_kwh = max(tx.energy_kwh, (reading_wh - tx.meter_start) / 1000)
         pluggo = state.config['connectors'][tx.connector_id]
-        await self.server.send('TransactionEvent', {'eventType': 'Updated', 'sessionId': tx.session, 'connector': pluggo,
-                                                    'energyKWh': tx.energy_kwh, 'transactionInfo': {'transactionId': str(tx_id)}})
+        event = {'eventType': 'Updated', 'sessionId': tx.session, 'connector': pluggo,
+                 'energyKWh': tx.energy_kwh, 'transactionInfo': {'transactionId': str(tx_id)}}
+        if soc is not None:
+            event['soc'] = soc  # the server stops the charge when the car reaches the driver's target
+        await self.server.send('TransactionEvent', event)
 
     async def stopped(self, state, tx_id, meter_stop_wh, reason):
         tx = self.transaction(state, tx_id)

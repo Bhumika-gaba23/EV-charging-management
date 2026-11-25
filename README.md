@@ -51,6 +51,11 @@ The previous operator dashboard remains at `/operator.html`.
 - **Ratings and fault reports:** drivers rate stations after charging and report broken or blocked
   chargers. Operators resolve reports and can add wallet credit.
 - **Wallet:** operator credit pays for the next charges automatically at checkout.
+- **Your car and battery now:** drivers pick their model (Tata Nexon EV, MG ZS EV, Ather 450X and
+  others, with typical battery sizes) and enter the battery % from the car's screen. The energy to
+  the target is (target − battery now) × battery size, capped by the budget.
+- **Started and stopped alerts:** a notification when charging starts and when it stops (target,
+  budget, or stopped by the driver). The app asks once for permission on the first charge.
 - **Green impact:** CO₂, petrol and money saved compared with a similar petrol vehicle.
 - **Operator analytics:** revenue, energy, utilisation by hour, per-station figures and tariff bands.
 
@@ -110,7 +115,10 @@ these flows with local stand-ins for both services.
 Physical OCPP 1.6J chargers connect to `wss://<host>/ocpp/<charge-point-id>` with a password.
 The `ocpp-gateway/` service starts them from the app (RemoteStart), bills from their meter
 (MeterValues, every 10 s), stops them at the target or budget (RemoteStop), and ends the
-session if the driver unplugs. Offline or faulted connectors cannot be booked, and the
+session if the driver unplugs. DC chargers also pass on the car's own battery reading (the `SoC`
+measurand, which the car sends over CCS2); from the first reading the server stops the charge when
+the car reports the driver's target, so the stop is exact. AC chargers do not get SoC from the
+car, so they stop on energy. Offline or faulted connectors cannot be booked, and the
 simulator leaves real connectors alone. Set `PLUGGO_OCPP_CHARGERS`; see
 [connecting real chargers](docs/ocpp-chargers.md). `tests/api/ocpp16_test.py` covers the flow
 against a schema-validating emulated charger.

@@ -76,11 +76,13 @@ class Charger(ChargePoint):
         self.tx = reply.transaction_id
         await self.status('Charging')
 
-    async def deliver(self, wh):
+    async def deliver(self, wh, soc=None):
         self.meter += wh
+        samples = [{'value': str(self.meter), 'measurand': 'Energy.Active.Import.Register', 'unit': 'Wh'}]
+        if soc is not None:  # DC chargers pass on the car's battery % (CCS2)
+            samples.append({'value': str(soc), 'measurand': 'SoC', 'unit': 'Percent', 'location': 'EV'})
         await self.call(call.MeterValues(connector_id=1, transaction_id=self.tx, meter_value=[{
-            'timestamp': '2026-11-23T10:01:00Z',
-            'sampledValue': [{'value': str(self.meter), 'measurand': 'Energy.Active.Import.Register', 'unit': 'Wh'}]}]))
+            'timestamp': '2026-11-23T10:01:00Z', 'sampledValue': samples}]))
 
     async def finish(self, extra_wh, reason):
         self.meter += extra_wh
@@ -143,7 +145,7 @@ async def scenario(customer):
         boot = await charger.call(call.BootNotification(charge_point_model='Wallbox 7kW', charge_point_vendor='TestVendor'))
         assert boot.status == 'Accepted' and boot.interval == 60
         await until(lambda: charger.config.get('MeterValueSampleInterval') == '10', message='meter interval configured')
-        assert charger.config['MeterValuesSampledData'] == 'Energy.Active.Import.Register'
+        assert charger.config['MeterValuesSampledData'] == 'Energy.Active.Import.Register,SoC'
         await charger.status('Available')
         await until(lambda: connector_available(customer), message='connector available')
         assert (await charger.call(call.Authorize(id_tag='RANDOMRFID'))).id_tag_info['status'] == 'Invalid', 'free RFID charging refused'
@@ -175,6 +177,30 @@ async def scenario(customer):
         await until(lambda: session(customer, sid)['ended'], message='charger-side stop ends the session')
         ended = session(customer, sid)
         assert ended['reason'] == 'Cable unplugged at the charger' and abs(ended['energy'] - 1.0) < 1e-6, ended
+        assert customer.call(f'sessions/{sid}/checkout', 'POST', {})[0] == 200
+
+        # 2b. The car's own battery reading (SoC) stops the charge exactly at the driver's target.
+        await until(lambda: connector_available(customer), message='available before SoC test')
+        assert customer.call('sessions', 'POST', {**PLAN, 'startSoc': 78, 'target': 80}, 'ocpp-low')[0] == 400, 'target must be above battery now'
+        assert customer.call('sessions', 'POST', {**PLAN, 'model': 'no-such-car'}, 'ocpp-model')[0] == 400, 'unknown model'
+        assert customer.call('sessions', 'POST', {**PLAN, 'startSoc': 120}, 'ocpp-range')[0] == 400, 'battery out of range'
+        code, started = customer.call('sessions', 'POST', {**PLAN, 'model': 'nexon-ev-45', 'startSoc': 40, 'target': 80}, 'ocpp-soc')
+        assert code == 200, started
+        sid = started['sessionId']
+        live = session(customer, sid)
+        assert live['startSoc'] == 40 and live['model'] == 'Tata Nexon EV 45' and live['capacity'] == 45, live
+        await until(lambda: charger.tx, message='SoC transaction')
+        stops = sum(e[0] == 'RemoteStop' for e in charger.events)
+        await charger.deliver(5000, soc=55)
+        await until(lambda: session(customer, sid)['carSoc'] == 55, message='car SoC reported')
+        live = session(customer, sid)
+        assert not live['ended'] and live['currentSoc'] == 55, live
+        await charger.deliver(8000, soc=80)
+        await until(lambda: session(customer, sid)['ended'], message='target reached by car SoC')
+        done = session(customer, sid)
+        assert done['reason'] == 'Charge target reached' and done['currentSoc'] == 80, done
+        await until(lambda: sum(e[0] == 'RemoteStop' for e in charger.events) > stops, message='RemoteStop at target')
+        await until(lambda: charger.tx is None, message='charger finished after RemoteStop')
         assert customer.call(f'sessions/{sid}/checkout', 'POST', {})[0] == 200
 
         # 3. The charger refuses RemoteStart: the session ends without charge.

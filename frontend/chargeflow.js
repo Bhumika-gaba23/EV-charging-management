@@ -5,7 +5,7 @@ import { normalizeIndianPhone, sendOtp, confirmOtp, signOutFirebase, friendlyAut
 import { findGoogleStations } from "./google-stations.js?v=20261104-server9";
 import { greenImpact, BAND_NAMES, bandAt, rateAt, nextOffPeak, BOOKING_MINUTES, bookingSlots, overlaps, istTime, istDay, CITIES, findCity, tripMapsLink } from "./extras.js?v=20261125-delhi1";
 import { placeName, findPlaces, savedPlace, savePlace, currentPosition, locationAllowed } from "./places.js?v=20261125-places3";
-import { alertsSupported, alertsOn, enableAlerts, disableAlerts, notify, syncSchedule } from "./alerts.js?v=20261124-features1";
+import { alertsSupported, alertsOn, enableAlerts, disableAlerts, notify, syncSchedule } from "./alerts.js?v=20261125-start1";
 import {
   vehicles,
   stations,
@@ -16,7 +16,7 @@ import {
   energyLimit as previewEnergyLimit,
   updateSession,
   validSession,
-} from "./demo-data.js?v=20261125-dash1";
+} from "./demo-data.js?v=20261125-model1";
 
 document.documentElement.dataset.visibility = document.hidden ? "hidden" : "visible";
 const $ = (s) => document.querySelector(s);
@@ -141,6 +141,16 @@ try {
   for (const key of Object.keys(prefs)) if (PREF_OPTIONS[key].includes(Number(saved[key]))) prefs[key] = Number(saved[key]);
 } catch {}
 function savePrefs() { try { localStorage.setItem("pluggo.prefs", JSON.stringify(prefs)); } catch {} }
+// The driver's exact model per vehicle type, and the battery % they last entered.
+const readStored = (key, fallback) => { try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; } };
+const chosenModels = readStored("pluggo.models", {});
+let batteryNow = Number(readStored("pluggo.batteryNow", 25));
+if (!Number.isFinite(batteryNow) || batteryNow < 0 || batteryNow > 95) batteryNow = 25;
+// The chosen model's battery and charging power, or the vehicle type's own profile.
+function vehicleSpec(type, modelId = chosenModels[type]) {
+  const v = vehicles[type], m = (v.models || []).find((item) => item.id === modelId);
+  return m ? { id: m.id, name: m.name, capacity: m.capacity, power: m.power } : { id: "", name: v.name, capacity: v.capacity, power: v.power };
+}
 // Typical efficiency per vehicle type, used for an estimated (not measured) range.
 const KM_PER_KWH = { car: 6.5, scooter: 30, bike: 25, cargo: 7.5 };
 function batteryLevel(id) {
@@ -152,7 +162,7 @@ const activeSession = () => state.sessions.find((s) => !s.ended);
 const pendingSession = () => state.sessions.find((s) => s.ended && !s.settled);
 const total = (s) => s.backendOwned ? s.cost : s.energy * stationById(s.station).rate;
 const energyLimit = (s) => s.backendOwned ? s.limit : previewEnergyLimit(s);
-const soc = (s) => s.backendOwned ? s.currentSoc : 25 + (s.energy / vehicles[s.vehicle].capacity) * 100;
+const soc = (s) => s.backendOwned ? s.currentSoc : Math.min(100, (s.startSoc ?? 25) + (s.energy / (s.capacity || vehicles[s.vehicle].capacity)) * 100);
 function save() {
   try { localStorage.setItem(storageKey, JSON.stringify({...state,sessions:localPreview ? state.sessions : []})); }
   catch { storageOkay = false; }
@@ -1335,17 +1345,22 @@ function openSetup(station, connector) {
   }
   showDialog(
     "YOUR CHARGE, YOUR WAY",
-    `<h2 id="dialogTitle">A little more ready.</h2><p class="dialog-subtitle">${station.name} · ${connector.id} · ${v.label}<br>Starting from 25% battery.</p><form id="chargePlan"><div class="slider-field"><label for="chargeTarget">Charge target <output id="targetOutput">${prefs.target}%</output></label><input id="chargeTarget" type="range" min="30" max="100" step="5" value="${prefs.target}"></div><div class="slider-field"><label for="chargeBudget">Budget cap <output id="budgetOutput">₹${prefs.budget}</output></label><input id="chargeBudget" type="range" min="50" max="1000" step="50" value="${prefs.budget}"></div><p class="dialog-subtitle">Stops at your target or budget, whichever comes first.</p><div class="bill-summary" id="chargeEstimate"></div><div id="chargeTip"></div><button type="submit" class="primary-button dialog-full">Start charging ${icon("bolt")}</button></form>`,
+    `<h2 id="dialogTitle">A little more ready.</h2><p class="dialog-subtitle">${station.name} · ${connector.id} · ${v.label}</p><form id="chargePlan"><div class="select-field"><label for="vehicleModel">Your ${v.short.toLowerCase()}</label><select id="vehicleModel" class="field-select"><option value="">${escapeText(v.name)} · ${v.capacity} kWh</option>${(v.models || []).map((m) => `<option value="${m.id}" ${m.id === vehicleSpec(state.vehicle).id ? "selected" : ""}>${escapeText(m.name)} · ${m.capacity} kWh</option>`).join("")}</select></div><div class="slider-field"><label for="batteryNow">Battery now <output id="batteryOutput">${batteryNow}%</output></label><input id="batteryNow" type="range" min="0" max="95" step="1" value="${batteryNow}"></div><p class="dialog-subtitle">Read it from your ${v.short.toLowerCase()}'s screen.${connector.type === "CCS2" ? " This DC fast charger also reads your car's battery and stops exactly at your target." : ""}</p><div class="slider-field"><label for="chargeTarget">Charge target <output id="targetOutput">${prefs.target}%</output></label><input id="chargeTarget" type="range" min="30" max="100" step="5" value="${prefs.target}"></div><div class="slider-field"><label for="chargeBudget">Budget cap <output id="budgetOutput">₹${prefs.budget}</output></label><input id="chargeBudget" type="range" min="50" max="1000" step="50" value="${prefs.budget}"></div><p class="dialog-subtitle">Stops at your target or budget, whichever comes first.</p><div class="bill-summary" id="chargeEstimate"></div><div id="chargeTip"></div><button type="submit" class="primary-button dialog-full">Start charging ${icon("bolt")}</button></form>`,
   );
   function estimate() {
+    const spec = vehicleSpec(state.vehicle, $("#vehicleModel").value),
+      start = Number($("#batteryNow").value);
+    // The target has to be above the battery now.
+    if (Number($("#chargeTarget").value) < start + 5) $("#chargeTarget").value = Math.min(100, Math.ceil((start + 5) / 5) * 5);
     const target = Number($("#chargeTarget").value),
       budget = Number($("#chargeBudget").value),
-      power = Math.min(v.power, connector.power),
+      power = Math.min(spec.power, connector.power),
       rate = stationRate(station);
-    const energy = Math.min(
-      ((target - 25) / 100) * v.capacity,
+    const energy = Math.max(0, Math.min(
+      ((target - start) / 100) * spec.capacity,
       budget / rate,
-    );
+    ));
+    $("#batteryOutput").textContent = `${start}%`;
     $("#targetOutput").textContent = `${target}%`;
     $("#budgetOutput").textContent = `₹${budget}`;
     $("#chargeEstimate").innerHTML =
@@ -1363,6 +1378,8 @@ function openSetup(station, connector) {
   }
   $("#chargeTarget").oninput = estimate;
   $("#chargeBudget").oninput = estimate;
+  $("#batteryNow").oninput = estimate;
+  $("#vehicleModel").onchange = estimate;
   estimate();
   const startKey = crypto.randomUUID();
   $("#chargePlan").onsubmit = async (event) => {
@@ -1375,9 +1392,13 @@ function openSetup(station, connector) {
       openSignIn(() => openSetup(station, stationById(station.id).connectors.find(c => c.id === connector.id) || connector));
       return;
     }
+    const spec = vehicleSpec(state.vehicle, $("#vehicleModel").value), start = Number($("#batteryNow").value);
+    chosenModels[state.vehicle] = spec.id; batteryNow = start;
+    try { localStorage.setItem("pluggo.models", JSON.stringify(chosenModels)); localStorage.setItem("pluggo.batteryNow", String(start)); } catch {}
+    if (Number($("#chargeTarget").value) < start + 5) { toast("Set a charge target at least 5% above your battery now."); return; }
     if (!localPreview) {
-      const reply = await backendAction($("#dialogActions button"), () => customerApi.start({station:station.id,connector:connector.id,vehicle:state.vehicle,target:Number($("#chargeTarget").value),budget:Number($("#chargeBudget").value)},startKey));
-      if (reply) openSession(state.sessions.find(session => session.id === reply.sessionId));
+      const reply = await backendAction($("#dialogActions button"), () => customerApi.start({station:station.id,connector:connector.id,vehicle:state.vehicle,model:spec.id,startSoc:start,target:Number($("#chargeTarget").value),budget:Number($("#chargeBudget").value)},startKey));
+      if (reply) { const started = state.sessions.find(session => session.id === reply.sessionId); announceStart(started); openSession(started); }
       return;
     }
     const started = Date.now();
@@ -1389,7 +1410,10 @@ function openSetup(station, connector) {
       started,
       target: Number($("#chargeTarget").value),
       budget: Number($("#chargeBudget").value),
-      power: Math.min(v.power, connector.power),
+      startSoc: start,
+      capacity: spec.capacity,
+      model: spec.name,
+      power: Math.min(spec.power, connector.power),
       energy: 0,
       ended: null,
       settled: false,
@@ -1398,6 +1422,7 @@ function openSetup(station, connector) {
     state.sessions.unshift(session);
     save();
     renderSessions();
+    announceStart(session);
     openSession(session);
   };
 }
@@ -1416,7 +1441,7 @@ function openSession(session) {
       : ended
         ? "CHARGE COMPLETE"
         : "LIVE SESSION",
-    `<h2 id="dialogTitle">${station.name}</h2><p class="dialog-subtitle">${session.connector} · ${vehicles[session.vehicle].label}</p>${!session.settled ? `<img class="session-vehicle-preview" src="${vehicles[session.vehicle].image}" alt="${vehicles[session.vehicle].name}">` : ""}${session.settled ? `<div class="receipt-hero"><div class="receipt-symbol">${icon("check")}</div><h3>${paidAmount(session) > 0 ? "Payment received" : "Checkout complete"}</h3><div class="receipt-amount"><small>AMOUNT PAID</small><strong>${currency(paidAmount(session))}</strong></div><p>${session.receipt?.paymentId ? `Paid via Razorpay · ${session.receipt.paymentId}` : "No payment was needed for this charge."}${refundedAmount(session) > 0 ? ` · ${currency(refundedAmount(session))} refunded to your original payment method` : ""}</p></div>` : ""}<div class="charge-ring" id="chargeRing" ${session.settled ? "hidden" : ""}><div>${icon(session.settled ? "check" : ended ? "receipt" : "bolt")}<strong id="liveSoc">${soc(session).toFixed(0)}%</strong><small>BATTERY</small></div></div><div class="bill-summary" id="sessionSummary"></div>${session.settled ? `<details class="receipt-details"><summary>Session details</summary>${billRow("Charging power used", `${session.power} kW`)}${billRow("Completed", session.reason)}<p class="receipt-id">${session.receipt?.id || session.id}<br>${new Intl.DateTimeFormat("en-IN", {dateStyle:"medium",timeStyle:"short",timeZone:"Asia/Kolkata"}).format(new Date(session.started))} IST<br>Pluggo charging receipt</p></details>` : ""}<div id="sessionActions"></div>`,
+    `<h2 id="dialogTitle">${station.name}</h2><p class="dialog-subtitle">${session.connector} · ${escapeText(session.model || vehicles[session.vehicle].label)}${session.carSoc != null ? " · battery read from your car" : ""}</p>${!session.settled ? `<img class="session-vehicle-preview" src="${vehicles[session.vehicle].image}" alt="${vehicles[session.vehicle].name}">` : ""}${session.settled ? `<div class="receipt-hero"><div class="receipt-symbol">${icon("check")}</div><h3>${paidAmount(session) > 0 ? "Payment received" : "Checkout complete"}</h3><div class="receipt-amount"><small>AMOUNT PAID</small><strong>${currency(paidAmount(session))}</strong></div><p>${session.receipt?.paymentId ? `Paid via Razorpay · ${session.receipt.paymentId}` : "No payment was needed for this charge."}${refundedAmount(session) > 0 ? ` · ${currency(refundedAmount(session))} refunded to your original payment method` : ""}</p></div>` : ""}<div class="charge-ring" id="chargeRing" ${session.settled ? "hidden" : ""}><div>${icon(session.settled ? "check" : ended ? "receipt" : "bolt")}<strong id="liveSoc">${soc(session).toFixed(0)}%</strong><small>BATTERY</small></div></div><div class="bill-summary" id="sessionSummary"></div>${session.settled ? `<details class="receipt-details"><summary>Session details</summary>${billRow("Charging power used", `${session.power} kW`)}${billRow("Completed", session.reason)}<p class="receipt-id">${session.receipt?.id || session.id}<br>${new Intl.DateTimeFormat("en-IN", {dateStyle:"medium",timeStyle:"short",timeZone:"Asia/Kolkata"}).format(new Date(session.started))} IST<br>Pluggo charging receipt</p></details>` : ""}<div id="sessionActions"></div>`,
   );
   dialogSession = session.id;
   updateSessionDialog();
@@ -1909,6 +1934,24 @@ const sessionDue = (s) => Number.isFinite(s.due) ? s.due : total(s);
 const durationLabel = (minutes) => minutes < 60 ? `${minutes} min` : `${Math.floor(minutes / 60)} h${minutes % 60 ? ` ${minutes % 60}` : ""}`;
 const HOLD_BEFORE = 15 * 60000, HOLD_AFTER = 10 * 60000;
 let synced = false;
+// Charging started / stopped: shown in the phone's notification tray, and on screen when Pluggo is open.
+const announcedStarts = new Set();
+async function askForAlertsOnce() {
+  if (!alertsSupported() || alertsOn() || readStored("pluggo.alertsAsked", false)) return;
+  try { localStorage.setItem("pluggo.alertsAsked", "true"); } catch {}
+  if (await enableAlerts()) toast("Charging alerts are on. Turn them off in Settings.");
+}
+async function announceStart(s) {
+  if (!s || announcedStarts.has(s.id)) return;
+  announcedStarts.add(s.id);
+  await askForAlertsOnce();
+  notify(`charge-${s.id}`, "Charging started", `${s.model || vehicles[s.vehicle]?.name || "Your vehicle"} at ${stationById(s.station)?.name || "the station"} · ${s.connector}. Battery ${Math.round(soc(s))}%, stopping at ${s.target}%.`);
+}
+function stopTitle(s) {
+  if (s.reason === "Charge target reached") return `Charged to ${Math.round(soc(s))}%`;
+  if (s.reason === "Budget limit reached") return "Budget reached, charging stopped";
+  return "Charging stopped";
+}
 // Tells the driver about things that changed on the server: a finished charge, an expired booking,
 // a resolved report or new wallet credit. A system notification when Pluggo is in the background.
 function announceChanges(previous) {
@@ -1916,7 +1959,13 @@ function announceChanges(previous) {
   const tell = (tag, title, message) => { if (document.hidden) notify(tag, title, message); else toast(message); };
   for (const s of state.sessions) {
     const before = previous.sessions.find((p) => p.id === s.id);
-    if (before && !before.ended && s.ended) tell(`charge-${s.id}`, "Charging complete", `${s.energy.toFixed(2)} kWh added at ${stationById(s.station)?.name || "the station"}. ${currency(sessionDue(s))} to pay.`);
+    if (before && !before.ended && s.ended) {
+      const message = `${s.reason || "Charging stopped"}. ${s.energy.toFixed(2)} kWh added at ${stationById(s.station)?.name || "the station"}. ${currency(sessionDue(s))} to pay.`;
+      notify(`charge-${s.id}`, stopTitle(s), message);
+      if (!document.hidden) toast(message);
+    }
+    // Started from another device, or before this sync.
+    if (!before && !s.ended && Date.now() - s.started < 120000) announceStart(s);
   }
   for (const b of bookings) {
     if (previous.bookings.find((p) => p.id === b.id)?.status === "booked" && b.status === "no-show")
