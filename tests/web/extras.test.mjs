@@ -58,6 +58,8 @@ test("green impact compares with a similar petrol vehicle", () => {
 
 test("trip destinations and route link", () => {
   assert.equal(findCity("jaipur").name, "Jaipur");
+  assert.equal(findCity("delhi").name, "Delhi");
+  assert.equal(findCity("New Delhi").name, "New Delhi");
   assert.equal(findCity("Bengal").name, "Bengaluru");
   assert.equal(findCity("Ja"), undefined);
   const link = new URL(tripMapsLink({ lat: 28.6, lng: 77.2 }, { lat: 26.9, lng: 75.8 }, [{ lat: 28, lng: 76.9 }, { lat: 27.5, lng: 76.4 }]));
