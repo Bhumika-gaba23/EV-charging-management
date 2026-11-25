@@ -3,6 +3,8 @@
 A modular console demonstration of range safety, deadline-based charging,
 budget caps, dynamic queuing, solar/grid allocation, and emergency overrides.
 
+**Website and download:** https://pluggo-app-peach.vercel.app (source in `website/`, deployed with `vercel deploy --prod` from that folder).
+
 ## Pluggo customer web app
 
 Pluggo is the main customer browser app. Home widgets, station availability,
@@ -54,8 +56,8 @@ The previous operator dashboard remains at `/operator.html`.
 ## Android test APK and hosting package
 
 [Download the latest Android APK](https://github.com/Bhumika-gaba23/EV-charging-management/releases/latest/download/pluggo-phone-test.apk)
-— version 1.6-render-connected (Android 8.0+).
-[Release notes and SHA-256 checksum](https://github.com/Bhumika-gaba23/EV-charging-management/releases/tag/v1.6.0).
+— version 2.4.0 (Android 8.0+).
+[Release notes and SHA-256 checksum](https://github.com/Bhumika-gaba23/EV-charging-management/releases/tag/v2.4.0).
 
 
 The latest customer website UI includes clear 20px glass, a pill navbar, sharper
