@@ -108,8 +108,11 @@ async function signOut() {
 switchNumber.addEventListener("click", signOut);
 signOutButton.addEventListener("click", signOut);
 
+// A refused request while the dashboard is open means the sign-in expired or was revoked.
+// While the sign-in screen is already showing, the dashboard's background refreshes are
+// refused every few seconds; they must not reset the screen while a code is being typed.
 window.addEventListener("operator-auth-required", (event) => {
-  if (config) showGate(event.detail?.error || "Sign in again to continue.");
+  if (config && gate.hidden) showGate(event.detail?.error || "Sign in again to continue.");
 });
 
 async function start() {
